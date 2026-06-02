@@ -64,7 +64,7 @@ def upgrade() -> None:
     # Matches the to_tsvector expression used in EventSearchService._fts_clause
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_event_fts
+        CREATE INDEX IF NOT EXISTS idx_event_fts
         ON events
         USING GIN (
             to_tsvector(
@@ -81,7 +81,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_event_fts")
+    op.execute("DROP INDEX IF EXISTS idx_event_fts")
 
     op.drop_index("idx_event_tenant_event_chain_id", table_name="events")
     op.drop_index("idx_event_tenant_process_tree_id", table_name="events")
