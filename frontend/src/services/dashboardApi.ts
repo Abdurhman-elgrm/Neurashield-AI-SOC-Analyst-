@@ -18,21 +18,29 @@ interface TimeRangeParams {
 // ─── Dashboard summary (KPI metrics) ─────────────────────────────────────────
 
 export async function getDashboardSummary(params: TimeRangeParams): Promise<DashboardSummary> {
-  const { data } = await apiClient.get<APIResponse<DashboardSummary>>(
-    "/dashboard/summary",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<DashboardSummary>>(
+      "/dashboard/summary",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? PLACEHOLDER_SUMMARY;
+  } catch {
+    return PLACEHOLDER_SUMMARY;
+  }
 }
 
 // ─── Ingestion rate time-series ───────────────────────────────────────────────
 
 export async function getIngestionRate(params: TimeRangeParams): Promise<IngestionRateSeries> {
-  const { data } = await apiClient.get<APIResponse<IngestionRateSeries>>(
-    "/dashboard/ingestion-rate",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<IngestionRateSeries>>(
+      "/dashboard/ingestion-rate",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? buildPlaceholderIngestionSeries(30);
+  } catch {
+    return buildPlaceholderIngestionSeries(30);
+  }
 }
 
 // ─── Live alerts feed ─────────────────────────────────────────────────────────
@@ -45,59 +53,79 @@ export interface AlertsFeedParams {
 }
 
 export async function getAlertsFeed(params: AlertsFeedParams): Promise<LiveAlert[]> {
-  const { data } = await apiClient.get<APIResponse<LiveAlert[]>>(
-    "/alerts",
-    {
-      params: {
-        time_range: params.timeRange,
-        limit: params.limit ?? 100,
-        sort: "-created_at",
-        ...(params.severity && { severity: params.severity }),
-        ...(params.status && { status: params.status }),
-      },
-    }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<LiveAlert[]>>(
+      "/alerts",
+      {
+        params: {
+          time_range: params.timeRange,
+          limit: params.limit ?? 100,
+          sort: "-created_at",
+          ...(params.severity && { severity: params.severity }),
+          ...(params.status && { status: params.status }),
+        },
+      }
+    );
+    return data.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 // ─── Detection health ─────────────────────────────────────────────────────────
 
 export async function getDetectionHealth(params: TimeRangeParams): Promise<DetectionHealthData> {
-  const { data } = await apiClient.get<APIResponse<DetectionHealthData>>(
-    "/dashboard/detection-health",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<DetectionHealthData>>(
+      "/dashboard/detection-health",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? PLACEHOLDER_DETECTION_HEALTH;
+  } catch {
+    return PLACEHOLDER_DETECTION_HEALTH;
+  }
 }
 
 // ─── MITRE ATT&CK coverage ────────────────────────────────────────────────────
 
 export async function getMitreCoverage(params: TimeRangeParams): Promise<MitreCoverageData> {
-  const { data } = await apiClient.get<APIResponse<MitreCoverageData>>(
-    "/dashboard/mitre-coverage",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<MitreCoverageData>>(
+      "/dashboard/mitre-coverage",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? PLACEHOLDER_MITRE_COVERAGE;
+  } catch {
+    return PLACEHOLDER_MITRE_COVERAGE;
+  }
 }
 
 // ─── Correlation activity ─────────────────────────────────────────────────────
 
 export async function getCorrelationActivity(params: TimeRangeParams): Promise<CorrelationActivityData> {
-  const { data } = await apiClient.get<APIResponse<CorrelationActivityData>>(
-    "/dashboard/correlation-activity",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<CorrelationActivityData>>(
+      "/dashboard/correlation-activity",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? PLACEHOLDER_CORRELATION;
+  } catch {
+    return PLACEHOLDER_CORRELATION;
+  }
 }
 
 // ─── AI operations ────────────────────────────────────────────────────────────
 
 export async function getAIOperations(params: TimeRangeParams): Promise<AIOperationsData> {
-  const { data } = await apiClient.get<APIResponse<AIOperationsData>>(
-    "/dashboard/ai-operations",
-    { params: { time_range: params.timeRange } }
-  );
-  return data.data!;
+  try {
+    const { data } = await apiClient.get<APIResponse<AIOperationsData>>(
+      "/dashboard/ai-operations",
+      { params: { time_range: params.timeRange } }
+    );
+    return data.data ?? PLACEHOLDER_AI_OPS;
+  } catch {
+    return PLACEHOLDER_AI_OPS;
+  }
 }
 
 // ─── Placeholder data (used while backend endpoints are built) ─────────────────
