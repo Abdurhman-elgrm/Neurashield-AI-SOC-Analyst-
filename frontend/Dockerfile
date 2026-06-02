@@ -34,13 +34,17 @@ RUN npm run build
 # ─── Stage 3: Production (Nginx) ──────────────────────────────────────────────
 FROM nginx:alpine AS production
 
+RUN apk add --no-cache curl
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
 
-EXPOSE 80
+ENV PORT=80
+
+EXPOSE $PORT
 
 HEALTHCHECK --interval=30s --timeout=5s \
-    CMD curl -f http://localhost/ || exit 1
+    CMD curl -f http://localhost:${PORT}/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/bin/sh", "-c", "envsubst '${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
