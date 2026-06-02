@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "soc-saas-backend"
+version = "2.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "redis[hiredis]>=5.2.0",
+    "argon2-cffi>=23.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "structlog>=24.4.0",
+    "python-multipart>=0.0.12",
+    "httpx>=0.28.0",
+    "email-validator>=2.2.0",
+    "orjson>=3.10.0",
+    "python-ulid>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "anyio>=4.7.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-python-jose>=3.3.4",
+    "httpx>=0.28.0",
+    "asgi-lifespan>=2.1.0",
+    "factory-boy>=3.3.1",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "ANN"]
+ignore = ["ANN101", "ANN102", "ANN401", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["error", "ignore::DeprecationWarning"]
+
+# Run only correlation unit tests (no DB/Redis required):
+#   python -m pytest tests/correlation/ --override-ini="python_files=test_*.py" -p no:cacheprovider --ignore=tests/conftest.py
+# Run full suite (requires running infrastructure):
+#   python -m pytest tests/
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*", "migrations/*"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

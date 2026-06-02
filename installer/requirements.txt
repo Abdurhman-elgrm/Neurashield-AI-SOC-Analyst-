@@ -1,0 +1,17 @@
+# SOC Analyst Agent v2 — runtime dependencies
+# Install with: pip install -r requirements.txt
+
+# HTTP client
+requests>=2.31.0,<3.0
+
+# Cryptography (non-Windows credential fallback + Fernet)
+cryptography>=41.0.0,<43.0
+
+# Windows service support (Windows only)
+pywin32>=306; sys_platform == "win32"
+
+# ── Test / development only ───────────────────────────────────────────────────
+# These are NOT installed by the bootstrap script (tests only)
+pytest>=8.0.0
+pytest-mock>=3.12.0
+responses>=0.25.0

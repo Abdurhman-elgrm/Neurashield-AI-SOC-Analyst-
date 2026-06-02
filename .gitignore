@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Node / Frontend
+node_modules/
+dist/
+.cache/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Alembic
+backend/migrations/versions/__pycache__/
+
+# Secrets
+*.pem
+*.key
+secrets/
