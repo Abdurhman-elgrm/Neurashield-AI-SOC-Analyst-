@@ -29,7 +29,7 @@ export function LogoIcon({
 
 export function LogoFull({ size = 44, className = '' }: LogoProps) {
   return (
-    <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <LogoIcon size={size} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span style={{
@@ -64,7 +64,7 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
 
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
-    <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <LogoIcon size={44} />
       <span style={{
         fontFamily: "'Orbitron', sans-serif",
