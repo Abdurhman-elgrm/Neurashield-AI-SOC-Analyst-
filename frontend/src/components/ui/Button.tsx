@@ -16,36 +16,43 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          "bg-blue-600 text-white",
-          "border border-blue-500/20",
-          "hover:bg-blue-500",
-          "hover:shadow-[0_0_18px_rgba(59,130,246,0.22)]",
+          "bg-[#0f2744]",
+          "text-[#93C5FD]",
+          "border border-blue-500/25",
+          "hover:bg-[#162f52]",
+          "hover:border-blue-400/40",
+          "hover:text-[#BAD6FB]",
+          "hover:shadow-[0_0_12px_rgba(59,130,246,0.15)]",
         ].join(" "),
 
         secondary: [
-          "bg-[#111111] text-[#B8C0CC]",
+          "bg-transparent",
+          "text-[#8B95A7]",
           "border border-white/[0.08]",
-          "hover:bg-[#161616] hover:text-[#F5F7FA]",
-          "hover:border-white/[0.13]",
+          "hover:bg-white/[0.03]",
+          "hover:text-[#D1D9E0]",
+          "hover:border-white/[0.14]",
         ].join(" "),
 
         ghost: [
-          "bg-transparent text-[#8B95A7]",
+          "bg-transparent text-[#5C6373]",
           "border border-transparent",
-          "hover:bg-white/[0.04] hover:text-[#F5F7FA]",
+          "hover:bg-white/[0.03]",
+          "hover:text-[#B8C0CC]",
         ].join(" "),
 
         danger: [
-          "bg-red-500/10 text-red-300",
+          "bg-transparent text-[#F87171]",
           "border border-red-500/20",
-          "hover:bg-red-500/[0.16] hover:border-red-500/30",
+          "hover:bg-red-500/[0.08]",
+          "hover:border-red-500/30",
         ].join(" "),
 
         outline: [
-          "bg-transparent text-[#B8C0CC]",
+          "bg-transparent text-[#8B95A7]",
           "border border-white/[0.09]",
-          "hover:text-[#F5F7FA] hover:border-white/[0.17]",
-          "hover:bg-white/[0.03]",
+          "hover:text-[#D1D9E0]",
+          "hover:border-white/[0.16]",
         ].join(" "),
 
         link: [
