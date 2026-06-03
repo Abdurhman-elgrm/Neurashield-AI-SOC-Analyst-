@@ -9,8 +9,8 @@ export function LogoIcon({ size = 44, className = '' }: { size?: number; classNa
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 44 44"
+      height={size * (48 / 44)}
+      viewBox="0 0 44 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -38,7 +38,7 @@ export function LogoIcon({ size = 44, className = '' }: { size?: number; classNa
         cy="22"
         r="16"
         stroke="white"
-        strokeWidth="1"
+        strokeWidth="1.8"
         fill="none"
         opacity="0.9"
         filter="url(#ring-glow)"
@@ -47,7 +47,7 @@ export function LogoIcon({ size = 44, className = '' }: { size?: number; classNa
       {/* Top dot */}
       <circle
         cx="22"
-        cy="6"
+        cy="2"
         r="1.8"
         fill="white"
         filter="url(#dot-glow)"
@@ -56,7 +56,7 @@ export function LogoIcon({ size = 44, className = '' }: { size?: number; classNa
       {/* Bottom dot */}
       <circle
         cx="22"
-        cy="38"
+        cy="42"
         r="1.8"
         fill="white"
         filter="url(#dot-glow)"
@@ -93,8 +93,8 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
           style={{
             fontFamily: "'Inter', system-ui, sans-serif",
             fontSize: 15,
-            fontWeight: 300,
-            letterSpacing: '0.35em',
+            fontWeight: 700,
+            letterSpacing: '0.28em',
             color: '#FFFFFF',
             textTransform: 'uppercase' as const,
             lineHeight: 1,
@@ -133,8 +133,8 @@ export function LogoCompact({ className = '' }: { className?: string }) {
         style={{
           fontFamily: "'Inter', system-ui, sans-serif",
           fontSize: 13,
-          fontWeight: 300,
-          letterSpacing: '0.3em',
+          fontWeight: 700,
+          letterSpacing: '0.28em',
           color: '#FFFFFF',
           textTransform: 'uppercase' as const,
         }}
