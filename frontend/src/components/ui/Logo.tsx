@@ -1,3 +1,7 @@
+// Shield logo — metallic N-mark inside a geometric shield
+// viewBox 0 0 48 56  (natural shield proportions, portrait)
+// width = size × (48/56),  height = size
+
 interface LogoProps {
   size?: number
   showText?: boolean
@@ -5,116 +9,124 @@ interface LogoProps {
   className?: string
 }
 
-// ─── Geometry ─────────────────────────────────────────────────────────────────
-// viewBox  : 0 0 180 112   (full — with beams)
-// Ring     : cx=90 cy=56 r=38
-// Ring edges: x=52 (left)  x=128 (right)
-// Beams    : 38px each side  — same length as ring radius
-//            left  x=14→52   right x=128→166
-// Dots     : cy=5 (top)  cy=107 (bottom)  — 13px outside ring edge
-// compact  : clips viewBox to "34 0 112 112" → nearly-square for sidebar
+const SHIELD = "M24,1.5 L45,9 L45,32 Q45,46 24,54.5 Q3,46 3,32 L3,9 Z"
+const FACE   = "M24,5.5 L41,12.5 L41,31.5 Q41,43 24,50.5 Q7,43 7,31.5 L7,12.5 Z"
+const N_PATH = "M14.5,17 L19,17 L19,33.5 L29,17 L33.5,17 L33.5,41 L29,41 L29,24.5 L19,41 L14.5,41 Z"
 
 export function LogoIcon({
   size = 44,
-  compact = false,
   className = '',
 }: {
   size?: number
-  compact?: boolean
   className?: string
 }) {
-  const vb    = compact ? '34 0 112 112' : '0 0 180 112'
-  const ratio = compact ? 1.0 : (180 / 112)
-  const w = size * ratio
-
+  const w = size * (48 / 56)
   return (
     <svg
       width={w}
       height={size}
-      viewBox={vb}
+      viewBox="0 0 48 56"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
       <defs>
-        {/* Wide atmospheric — stays near ring, centre stays dark */}
-        <filter id="lg-halo" x="-35%" y="-35%" width="170%" height="170%">
-          <feGaussianBlur stdDeviation="6" result="b"/>
+        {/* Shield frame — side-bevel illusion via left→right gradient */}
+        <linearGradient id="sh-frame" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#060E18"/>
+          <stop offset="25%"  stopColor="#122030"/>
+          <stop offset="50%"  stopColor="#1E3A56"/>
+          <stop offset="75%"  stopColor="#122030"/>
+          <stop offset="100%" stopColor="#060E18"/>
+        </linearGradient>
+
+        {/* Shield face — lit from top-centre */}
+        <radialGradient id="sh-face" cx="50%" cy="22%" r="72%">
+          <stop offset="0%"   stopColor="#1E3E60"/>
+          <stop offset="45%"  stopColor="#112233"/>
+          <stop offset="100%" stopColor="#070E1A"/>
+        </radialGradient>
+
+        {/* Top-edge bevel: bright silver-blue strip */}
+        <linearGradient id="sh-bevel-top" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#6AAED8" stopOpacity="0.95"/>
+          <stop offset="100%" stopColor="#6AAED8" stopOpacity="0"/>
+        </linearGradient>
+
+        {/* Left-edge bevel highlight */}
+        <linearGradient id="sh-bevel-l" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#5090BC" stopOpacity="0.7"/>
+          <stop offset="100%" stopColor="#5090BC" stopOpacity="0"/>
+        </linearGradient>
+
+        {/* Top hotspot — concentrated light reflection */}
+        <radialGradient id="sh-hot" cx="50%" cy="0%" r="55%">
+          <stop offset="0%"   stopColor="#B0D8F4" stopOpacity="0.55"/>
+          <stop offset="100%" stopColor="#B0D8F4" stopOpacity="0"/>
+        </radialGradient>
+
+        {/* N mark — steel-blue top to deep blue bottom */}
+        <linearGradient id="sh-n" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#93C5FD"/>
+          <stop offset="40%"  stopColor="#60A5FA"/>
+          <stop offset="100%" stopColor="#1D4ED8"/>
+        </linearGradient>
+
+        {/* N glow — subtle blue haze behind the mark */}
+        <filter id="sh-nglow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="1.8" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        {/* Medium glow */}
-        <filter id="lg-glow" x="-18%" y="-18%" width="136%" height="136%">
-          <feGaussianBlur stdDeviation="2.8" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        {/* Tight edge-hug */}
-        <filter id="lg-edge" x="-10%" y="-10%" width="120%" height="120%">
-          <feGaussianBlur stdDeviation="1.0" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        {/* Dot bloom */}
-        <filter id="lg-dot" x="-250%" y="-250%" width="600%" height="600%">
-          <feGaussianBlur stdDeviation="2.0" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        {/* Beam haze — blur only (pure spread behind the 1px line) */}
-        <filter id="lg-beam" x="-5%" y="-400%" width="110%" height="900%">
-          <feGaussianBlur stdDeviation="1.4"/>
         </filter>
 
-        {/* ── Beam gradients (38px length = ring radius) ── */}
-        {/* Left:  transparent at x=14  →  bright at x=52 (ring edge) */}
-        <linearGradient id="lg-bl" x1="14" y1="0" x2="52" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="white" stopOpacity="0"/>
-          <stop offset="100%" stopColor="white" stopOpacity="0.75"/>
-        </linearGradient>
-        {/* Right: bright at x=128 (ring edge)  →  transparent at x=166 */}
-        <linearGradient id="lg-br" x1="128" y1="0" x2="166" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="white" stopOpacity="0.75"/>
-          <stop offset="100%" stopColor="white" stopOpacity="0"/>
-        </linearGradient>
+        {/* Shield outer ambient glow */}
+        <filter id="sh-outer" x="-25%" y="-20%" width="150%" height="140%">
+          <feGaussianBlur stdDeviation="2.5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
 
-      {/* ── LEFT BEAM ─────────────────────────────────────────────── */}
-      {/* soft spread */}
-      <rect x="14" y="52.5" width="38" height="7"
-        fill="url(#lg-bl)" opacity="0.22" filter="url(#lg-beam)"/>
-      {/* 1 px bright line */}
-      <rect x="14" y="55.3" width="38" height="1.4"
-        fill="url(#lg-bl)" opacity="0.85"/>
+      {/* ── OUTER AMBIENT GLOW ────────────────────────────────────── */}
+      <path d={SHIELD}
+        fill="none" stroke="#1E5A8A" strokeWidth="4"
+        opacity="0.35" filter="url(#sh-outer)"/>
 
-      {/* ── RIGHT BEAM ────────────────────────────────────────────── */}
-      <rect x="128" y="52.5" width="38" height="7"
-        fill="url(#lg-br)" opacity="0.22" filter="url(#lg-beam)"/>
-      <rect x="128" y="55.3" width="38" height="1.4"
-        fill="url(#lg-br)" opacity="0.85"/>
+      {/* ── SHIELD FRAME (outer – inner gap = bevel) ──────────────── */}
+      <path d={SHIELD} fill="url(#sh-frame)"/>
 
-      {/* ── RING ──────────────────────────────────────────────────── */}
-      {/* Layer 1 — wide atmospheric halo (thin stroke: blur can't reach centre) */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="9" fill="none"
-        opacity="0.07" filter="url(#lg-halo)"/>
-      {/* Layer 2 — medium glow */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="4" fill="none"
-        opacity="0.22" filter="url(#lg-glow)"/>
-      {/* Layer 3 — tight edge glow */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="2" fill="none"
-        opacity="0.55" filter="url(#lg-edge)"/>
-      {/* Layer 4 — crisp core line */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="1.2" fill="none"
-        opacity="1"/>
+      {/* Top-edge bevel highlight */}
+      <path d="M24,1.5 L45,9 L41,11 L24,4.5 L7,11 L3,9 Z"
+        fill="url(#sh-bevel-top)"/>
 
-      {/* ── DOTS ──────────────────────────────────────────────────── */}
-      {/* Top dot — 13 px above ring edge */}
-      <circle cx="90" cy="5"   r="2.2" fill="white" filter="url(#lg-dot)"/>
-      {/* Bottom dot — 13 px below ring edge */}
-      <circle cx="90" cy="107" r="2.2" fill="white" filter="url(#lg-dot)"/>
+      {/* Left-edge bevel highlight */}
+      <path d="M3,9 L7,11 L7,31 L3,32 Z"
+        fill="url(#sh-bevel-l)"/>
 
-      {/* Centre mark — barely perceptible */}
-      <circle cx="90" cy="56" r="1.0" fill="white" opacity="0.28"/>
+      {/* ── SHIELD FACE ───────────────────────────────────────────── */}
+      <path d={FACE} fill="url(#sh-face)"/>
+
+      {/* Face top hotspot */}
+      <path d={FACE} fill="url(#sh-hot)"/>
+
+      {/* Subtle inner-edge dark ring for depth */}
+      <path d={FACE}
+        fill="none" stroke="#000A14" strokeWidth="1.2" opacity="0.5"/>
+
+      {/* ── N LETTERMARK ─────────────────────────────────────────── */}
+      <path d={N_PATH} fill="url(#sh-n)" filter="url(#sh-nglow)"/>
+
+      {/* N top-edge highlights (brightest part of each vertical stroke) */}
+      <rect x="14.5" y="17" width="4.5" height="2.5"
+        fill="rgba(190,225,255,0.55)" rx="0.5"/>
+      <rect x="29" y="17" width="4.5" height="2.5"
+        fill="rgba(190,225,255,0.55)" rx="0.5"/>
+
+      {/* ── SHIELD OUTER EDGE LINE ────────────────────────────────── */}
+      <path d={SHIELD}
+        stroke="#2A5F90" strokeWidth="0.7" fill="none" opacity="0.8"/>
+
+      {/* Very bright top-tip glint */}
+      <circle cx="24" cy="3.5" r="1.2"
+        fill="rgba(180,225,255,0.7)" filter="url(#sh-nglow)"/>
     </svg>
   )
 }
@@ -157,7 +169,7 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <LogoIcon size={56} compact />
+      <LogoIcon size={44} />
       <span style={{
         fontFamily: "'Orbitron', sans-serif",
         fontSize: 13,
