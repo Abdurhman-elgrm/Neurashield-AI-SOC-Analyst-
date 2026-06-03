@@ -69,6 +69,11 @@ class Investigation(Base, TimestampMixin):
         String(20), nullable=False, default=InvestigationStatus.NEW.value, index=True
     )
 
+    # ── Manual investigation fields ───────────────────────────────────────────
+    title:      Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source:     Mapped[str | None] = mapped_column(String(32),  nullable=True, default="auto")
+    created_by: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     # ── Phase 3.4 analyst workspace fields ────────────────────────────────────
     assigned_to: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True

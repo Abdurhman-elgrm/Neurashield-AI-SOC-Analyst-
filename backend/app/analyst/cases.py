@@ -29,8 +29,17 @@ from app.analyst.schemas import (
     VerdictCreate,
 )
 from app.analyst.verdicts import VerdictService
+from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: F401 – used in type stubs
 
 logger = structlog.get_logger(__name__)
+
+# Severity → threat_score mapping
+_SEVERITY_SCORE: dict[str, int] = {
+    "critical": 90,
+    "high":     70,
+    "medium":   45,
+    "low":      20,
+}
 
 
 class CaseService:
@@ -187,6 +196,55 @@ class CaseService:
             tenant_id=str(tenant_id),
         )
         return primary
+
+    @staticmethod
+    async def create_manual(
+        db: AsyncSession,
+        tenant_id: UUID,
+        created_by: UUID,
+        title: str,
+        description: str | None,
+        severity: str,
+        assigned_to: str | None,
+        alert_ids: list[str],
+    ) -> Investigation:
+        """Manually open a new investigation case."""
+        from uuid import uuid4
+        group_id = str(uuid4())
+        score = _SEVERITY_SCORE.get(severity, 45)
+
+        investigation = Investigation(
+            tenant_id=tenant_id,
+            investigation_group_id=group_id,
+            title=title,
+            source="manual",
+            created_by=created_by,
+            executive_summary=title,
+            technical_summary=description or "",
+            threat_score=score,
+            confidence="low",
+            tp_probability=0.0,
+            fp_probability=1.0,
+            status="new",
+            assigned_to=UUID(assigned_to) if assigned_to else None,
+            attack_progression=[],
+            recommended_actions=[],
+            # store linked alert IDs in context JSON for reference
+            context_json={"alert_ids": alert_ids, "severity": severity} if alert_ids else {"severity": severity},
+        )
+        db.add(investigation)
+        await db.commit()
+        await db.refresh(investigation)
+        logger.info(
+            "manual_investigation_created",
+            investigation_id=str(investigation.id),
+            group_id=group_id,
+            title=title,
+            severity=severity,
+            analyst_id=str(created_by),
+            tenant_id=str(tenant_id),
+        )
+        return investigation
 
     @staticmethod
     async def list_investigations(

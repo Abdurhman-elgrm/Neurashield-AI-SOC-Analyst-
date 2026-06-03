@@ -4,8 +4,10 @@ import { formatDistanceToNowStrict, format } from "date-fns";
 import {
   Shield, Monitor, User, Globe, Brain, Link2, Clock, Tag,
   AlertTriangle, CheckCircle, XCircle, BarChart2, Send,
-  ExternalLink, ChevronRight,
+  ExternalLink, ChevronRight, FolderSearch,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { promoteAlert } from "@/features/investigations/api/investigationsApi";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge, SeverityBadge } from "@/components/ui/Badge";
@@ -123,8 +125,17 @@ function InvestigationSection({
   alertId: string;
   correlationId?: string;
 }) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const qc        = useQueryClient();
   const { data: ctx, isLoading } = useAlertContext(alertId);
+
+  const promote = useMutation({
+    mutationFn: () => promoteAlert(alertId),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["investigations"] });
+      navigate(`/investigations/${res.investigation_id}`);
+    },
+  });
 
   if (isLoading) return <SkeletonText lines={6} />;
 
@@ -157,12 +168,31 @@ function InvestigationSection({
           Part of correlation group <span className="font-mono text-accent">{correlationId}</span>
         </div>
       ) : (
-        <EmptyState
-          icon={<Link2 className="w-5 h-5" />}
-          title="No investigation linked"
-          description="This alert hasn't been correlated yet."
-          className="py-6"
-        />
+        <div>
+          <EmptyState
+            icon={<Link2 className="w-5 h-5" />}
+            title="No investigation linked"
+            description="This alert hasn't been correlated yet."
+            className="py-4"
+          />
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={() => promote.mutate()}
+              disabled={promote.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors"
+              style={{
+                background: "#0f2744",
+                border: "1px solid rgba(59,130,246,0.35)",
+                color: "#93C5FD",
+                cursor: promote.isPending ? "not-allowed" : "pointer",
+                opacity: promote.isPending ? 0.6 : 1,
+              }}
+            >
+              <FolderSearch className="w-3.5 h-3.5" />
+              {promote.isPending ? "Promoting…" : "Promote to Investigation"}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Related alerts */}

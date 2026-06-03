@@ -352,8 +352,18 @@ class InvestigationListItem(BaseModel):
     verdict:                str | None
     assigned_to:            UUID | None
     executive_summary:      str
+    title:                  str | None = None
+    source:                 str | None = "auto"
     created_at:             datetime
     updated_at:             datetime
+
+
+class InvestigationCreate(BaseModel):
+    title:       str
+    description: str | None = None
+    severity:    str = "medium"   # critical | high | medium | low
+    assigned_to: str | None = None
+    alert_ids:   list[str] = []
 
 
 class InvestigationDetail(InvestigationListItem):

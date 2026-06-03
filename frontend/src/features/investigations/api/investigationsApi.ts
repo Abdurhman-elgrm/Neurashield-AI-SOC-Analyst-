@@ -144,6 +144,73 @@ export async function getInvestigationActivity(id: string): Promise<AnalystActiv
   return data.data!;
 }
 
+// ─── Investigation list ───────────────────────────────────────────────────────
+
+export interface InvestigationListItem {
+  investigation_id: string
+  tenant_id: string
+  investigation_group_id: string
+  threat_score: number
+  confidence: string
+  tp_probability: number
+  fp_probability: number
+  status: string
+  verdict: string | null
+  assigned_to: string | null
+  executive_summary: string
+  title: string | null
+  source: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InvestigationListResponse {
+  data: InvestigationListItem[]
+  next_cursor: string | null
+  has_more: boolean
+  total: number
+}
+
+export async function listInvestigations(params?: {
+  status?: string
+  limit?: number
+  cursor?: string
+}): Promise<InvestigationListResponse> {
+  const { data } = await apiClient.get<InvestigationListResponse>("/investigations", { params })
+  return data
+}
+
+// ─── Manual create ────────────────────────────────────────────────────────────
+
+export interface InvestigationCreate {
+  title: string
+  description?: string
+  severity: "critical" | "high" | "medium" | "low"
+  assigned_to?: string
+  alert_ids?: string[]
+}
+
+export async function createInvestigation(
+  payload: InvestigationCreate
+): Promise<InvestigationListItem> {
+  const { data } = await apiClient.post<APIResponse<InvestigationListItem>>(
+    "/investigations",
+    payload
+  )
+  return data.data!
+}
+
+// ─── Promote alert ────────────────────────────────────────────────────────────
+
+export async function promoteAlert(
+  alertId: string
+): Promise<{ investigation_id: string }> {
+  const { data } = await apiClient.post<APIResponse<{ investigation_id: string }>>(
+    `/alerts/${alertId}/promote`
+  )
+  return data.data!
+}
+
 // ─── Placeholder data ─────────────────────────────────────────────────────────
 
 export const PLACEHOLDER_TIMELINE: TimelineEvent[] = [];

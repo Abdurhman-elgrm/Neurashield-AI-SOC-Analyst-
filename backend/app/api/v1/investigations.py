@@ -44,6 +44,7 @@ from app.analyst.schemas import (
     EvidenceCreate,
     GraphFilter,
     HuntQuery,
+    InvestigationCreate,
     InvestigationDetail,
     InvestigationFilterParams,
     InvestigationListItem,
@@ -77,6 +78,54 @@ from app.analyst.cases import CaseService
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/investigations", tags=["investigations"])
+
+
+# ─── Create (manual) ─────────────────────────────────────────────────────────
+
+@router.post("", response_model=APIResponse[InvestigationDetail])
+async def create_investigation(
+    body: InvestigationCreate,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_MANAGE)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[InvestigationDetail]:
+    """Manually create a new investigation case."""
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+
+    investigation = await CaseService.create_manual(
+        db=db,
+        tenant_id=m.tenant_id,
+        created_by=m.user_id,
+        title=body.title,
+        description=body.description,
+        severity=body.severity,
+        assigned_to=body.assigned_to,
+        alert_ids=body.alert_ids,
+    )
+
+    detail = InvestigationDetail(
+        investigation_id=str(investigation.id),
+        tenant_id=str(investigation.tenant_id),
+        investigation_group_id=investigation.investigation_group_id,
+        threat_score=investigation.threat_score,
+        confidence=investigation.confidence,
+        tp_probability=investigation.tp_probability,
+        fp_probability=investigation.fp_probability,
+        status=investigation.status,
+        verdict=investigation.verdict,
+        assigned_to=investigation.assigned_to,
+        executive_summary=investigation.executive_summary,
+        title=investigation.title,
+        source=investigation.source,
+        created_at=investigation.created_at,
+        updated_at=investigation.updated_at,
+        technical_summary=investigation.technical_summary,
+        attack_progression=investigation.attack_progression,
+        recommended_actions=investigation.recommended_actions,
+        note_count=0,
+        evidence_count=0,
+    )
+    return APIResponse.ok(detail)
 
 
 # ─── List / detail ────────────────────────────────────────────────────────────

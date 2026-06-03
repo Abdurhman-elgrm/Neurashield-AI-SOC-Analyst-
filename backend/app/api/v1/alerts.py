@@ -95,3 +95,35 @@ async def delete_alert(
     )
     await db.commit()
     return APIResponse.ok(EmptyResponse())
+
+
+# ─── Promote alert to investigation ──────────────────────────────────────────
+
+@router.post("/{alert_id}/promote", response_model=APIResponse[dict])
+async def promote_to_investigation(
+    alert_id: UUID,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_MANAGE)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[dict]:
+    """Promote an alert into a new manual investigation."""
+    from app.models.tenant_member import TenantMember
+    from app.analyst.cases import CaseService
+    from fastapi import HTTPException
+
+    m: TenantMember = member  # type: ignore[assignment]
+
+    alert = await AlertService.get_alert(db, m.tenant_id, alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    investigation = await CaseService.create_manual(
+        db=db,
+        tenant_id=m.tenant_id,
+        created_by=m.user_id,
+        title=f"Investigation: {alert.title}",
+        description=f"Promoted from alert {alert_id}",
+        severity=alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity),
+        assigned_to=None,
+        alert_ids=[str(alert_id)],
+    )
+    return APIResponse.ok({"investigation_id": str(investigation.id)})
