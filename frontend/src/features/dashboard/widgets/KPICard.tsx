@@ -76,7 +76,7 @@ export interface KPICardProps {
 
 const VARIANT_STYLES: Record<NonNullable<KPICardProps["colorVariant"]>, string> = {
   default:  "border-border",
-  accent:   "border-neural-600/30",
+  accent:   "border-primary-600/30",
   critical: "border-severity-critical/40",
   high:     "border-severity-high/30",
   medium:   "border-severity-medium/30",
@@ -85,7 +85,7 @@ const VARIANT_STYLES: Record<NonNullable<KPICardProps["colorVariant"]>, string> 
 
 const VARIANT_GLOW: Record<NonNullable<KPICardProps["colorVariant"]>, string> = {
   default:  "",
-  accent:   "0 0 20px rgba(139,92,246,0.12)",
+  accent:   "0 0 20px rgba(59,130,246,0.12)",
   critical: "0 0 20px rgba(248,113,113,0.12)",
   high:     "0 0 16px rgba(251,146,60,0.1)",
   medium:   "",
@@ -94,7 +94,7 @@ const VARIANT_GLOW: Record<NonNullable<KPICardProps["colorVariant"]>, string> = 
 
 const VARIANT_ICON_BG: Record<NonNullable<KPICardProps["colorVariant"]>, string> = {
   default:  "bg-bg-subtle text-text-muted",
-  accent:   "bg-neural-600/15 text-neural-400",
+  accent:   "bg-primary-600/15 text-primary-400",
   critical: "bg-severity-critical/10 text-severity-critical",
   high:     "bg-severity-high/10 text-severity-high",
   medium:   "bg-severity-medium/10 text-severity-medium",

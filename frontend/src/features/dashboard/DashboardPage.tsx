@@ -26,8 +26,8 @@ function TimeRangeSelector({
     <div
       className="flex items-center gap-0.5 rounded-lg p-0.5"
       style={{
-        background: "rgba(14,14,28,0.8)",
-        border: "1px solid rgba(139,92,246,0.15)",
+        background: "rgba(10,10,10,0.8)",
+        border: "1px solid rgba(59,130,246,0.15)",
       }}
     >
       {TIME_RANGES.map((range) => (
@@ -43,8 +43,8 @@ function TimeRangeSelector({
           style={
             value === range
               ? {
-                  background: "linear-gradient(135deg, #7C3AED, #6366F1)",
-                  boxShadow: "0 0 12px rgba(139,92,246,0.4)",
+                  background: "linear-gradient(135deg, #2563EB, #3B82F6)",
+                  boxShadow: "0 0 12px rgba(59,130,246,0.4)",
                 }
               : undefined
           }

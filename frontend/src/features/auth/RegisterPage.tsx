@@ -60,13 +60,13 @@ export function RegisterPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4 bg-grid"
-      style={{ background: "#04040A" }}
+      style={{ background: "#000000" }}
     >
       {/* Ambient glow blobs */}
       <div
         className="fixed top-0 left-1/4 w-[500px] h-[500px] rounded-full pointer-events-none"
         style={{
-          background: "radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)",
           filter: "blur(40px)",
         }}
       />
@@ -93,9 +93,9 @@ export function RegisterPage() {
         <div
           className="rounded-2xl p-7 border"
           style={{
-            background: "rgba(8,8,16,0.9)",
-            borderColor: "rgba(139,92,246,0.2)",
-            boxShadow: "0 0 40px rgba(139,92,246,0.1), inset 0 1px 0 rgba(255,255,255,0.04)",
+            background: "rgba(13,13,13,0.9)",
+            borderColor: "rgba(59,130,246,0.2)",
+            boxShadow: "0 0 40px rgba(59,130,246,0.1), inset 0 1px 0 rgba(255,255,255,0.04)",
             backdropFilter: "blur(12px)",
           }}
         >
@@ -210,7 +210,7 @@ export function RegisterPage() {
 
         <p className="text-center text-sm text-text-muted mt-5">
           Already have an account?{" "}
-          <Link to="/login" className="text-neural-400 hover:text-neural-500 transition-colors font-medium">
+          <Link to="/login" className="text-primary-400 hover:text-primary-500 transition-colors font-medium">
             Sign in
           </Link>
         </p>

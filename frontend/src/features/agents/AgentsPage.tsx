@@ -22,8 +22,8 @@ export function AgentsPage() {
       <div
         className="rounded-2xl p-12 flex flex-col items-center justify-center text-center border"
         style={{
-          background: "rgba(8,8,16,0.6)",
-          borderColor: "rgba(139,92,246,0.15)",
+          background: "rgba(0,0,0,0.6)",
+          borderColor: "rgba(59,130,246,0.15)",
           borderStyle: "dashed",
         }}
       >

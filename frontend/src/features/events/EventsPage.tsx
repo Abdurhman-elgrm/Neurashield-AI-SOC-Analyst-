@@ -11,14 +11,14 @@ export function EventsPage() {
       <div
         className="rounded-2xl p-12 flex flex-col items-center justify-center text-center border"
         style={{
-          background: "rgba(8,8,16,0.6)",
+          background: "rgba(0,0,0,0.6)",
           borderColor: "rgba(6,182,212,0.15)",
           borderStyle: "dashed",
         }}
       >
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)" }}
+          style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(56,189,248,0.2)" }}
         >
           <Database className="w-6 h-6 text-cyber-400" />
         </div>

@@ -21,12 +21,12 @@ export function LogoIcon({ size = 36, className = "" }: LogoIconProps) {
     >
       <defs>
         <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#8B5CF6" />
-          <stop offset="100%" stopColor="#06B6D4" />
+          <stop offset="0%" stopColor="#3B82F6" />
+          <stop offset="100%" stopColor="#38BDF8" />
         </linearGradient>
         <linearGradient id="node-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#A78BFA" />
-          <stop offset="100%" stopColor="#22D3EE" />
+          <stop offset="0%" stopColor="#60A5FA" />
+          <stop offset="100%" stopColor="#38BDF8" />
         </linearGradient>
         <filter id="glow">
           <feGaussianBlur stdDeviation="1" result="coloredBlur" />
@@ -49,17 +49,17 @@ export function LogoIcon({ size = 36, className = "" }: LogoIconProps) {
 
       {/* Neural network nodes */}
       <circle cx="20" cy="14" r="2.5" fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="13" cy="22" r="2" fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="27" cy="22" r="2" fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="20" cy="29" r="2" fill="url(#node-grad)" filter="url(#glow)" />
+      <circle cx="13" cy="22" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
+      <circle cx="27" cy="22" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
+      <circle cx="20" cy="29" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
 
       {/* Neural network connections */}
-      <line x1="20" y1="14" x2="13" y2="22" stroke="#8B5CF6" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="20" y1="14" x2="27" y2="22" stroke="#8B5CF6" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="13" y1="22" x2="20" y2="29" stroke="#06B6D4" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="27" y1="22" x2="20" y2="29" stroke="#06B6D4" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="13" y1="22" x2="27" y2="22" stroke="#8B5CF6" strokeWidth="0.5" strokeOpacity="0.4" />
-      <line x1="20" y1="14" x2="20" y2="29" stroke="#22D3EE" strokeWidth="0.5" strokeOpacity="0.3" />
+      <line x1="20" y1="14" x2="13" y2="22" stroke="#3B82F6" strokeWidth="0.8" strokeOpacity="0.7" />
+      <line x1="20" y1="14" x2="27" y2="22" stroke="#3B82F6" strokeWidth="0.8" strokeOpacity="0.7" />
+      <line x1="13" y1="22" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.8" strokeOpacity="0.7" />
+      <line x1="27" y1="22" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.8" strokeOpacity="0.7" />
+      <line x1="13" y1="22" x2="27" y2="22" stroke="#3B82F6" strokeWidth="0.5" strokeOpacity="0.4" />
+      <line x1="20" y1="14" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.5" strokeOpacity="0.3" />
     </svg>
   );
 }
@@ -76,7 +76,7 @@ export function LogoFull({ size = 36, showSubtitle = false, className = "" }: Lo
           style={{ fontSize: `${Math.round(textScale * 17)}px`, lineHeight: 1.1 }}
         >
           <span className="text-white">NEURA</span>
-          <span style={{ color: "#22D3EE" }}>SHIELD</span>
+          <span style={{ color: "#60A5FA" }}>SHIELD</span>
         </div>
         {showSubtitle && (
           <span

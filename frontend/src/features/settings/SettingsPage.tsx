@@ -24,9 +24,9 @@ export function SettingsPage() {
           >
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center mb-3"
-              style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)" }}
+              style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
             >
-              <s.icon className="w-5 h-5 text-neural-400" />
+              <s.icon className="w-5 h-5 text-primary-400" />
             </div>
             <p className="font-display font-semibold text-text-primary mb-1">{s.title}</p>
             <p className="text-xs text-text-muted leading-relaxed">{s.desc}</p>

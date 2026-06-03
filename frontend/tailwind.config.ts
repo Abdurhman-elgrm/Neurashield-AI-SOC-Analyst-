@@ -9,62 +9,79 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Design tokens → CSS variables
-        "bg-base":     "var(--bg-base)",
-        "bg-surface":  "var(--bg-surface)",
-        "bg-elevated": "var(--bg-elevated)",
-        "bg-subtle":   "var(--bg-subtle)",
-        "bg-overlay":  "var(--bg-overlay)",
+        // Pure black backgrounds
+        bg: {
+          base:     "#000000",
+          surface:  "#0A0A0A",
+          elevated: "#111111",
+          card:     "#0D0D0D",
+          input:    "#0A0A0A",
+          sidebar:  "#050505",
+          subtle:   "#111111",
+          overlay:  "rgba(13,13,13,0.8)",
+        },
 
-        border:          "var(--border)",
-        "border-strong": "var(--border-strong)",
-        "border-subtle": "var(--border-subtle)",
-        "border-active": "var(--border-active)",
-        "border-cyan":   "var(--border-cyan)",
+        // Electric Blue primary
+        primary: {
+          300: "#93C5FD",
+          400: "#60A5FA",
+          500: "#3B82F6",
+          600: "#2563EB",
+          700: "#1D4ED8",
+        },
 
-        "text-primary":   "var(--text-primary)",
-        "text-secondary": "var(--text-secondary)",
-        "text-muted":     "var(--text-muted)",
+        // Borders
+        border: {
+          DEFAULT: "#1C1C1C",
+          hover:   "#2A2A2A",
+          active:  "rgba(96,165,250,0.4)",
+          strong:  "#2A2A2A",
+          subtle:  "rgba(255,255,255,0.05)",
+          cyan:    "rgba(56,189,248,0.2)",
+        },
 
-        accent:       "var(--accent)",
-        "accent-hover": "var(--accent-hover)",
+        // Text
+        text: {
+          primary:   "#F9FAFB",
+          secondary: "#9CA3AF",
+          muted:     "#4B5563",
+          disabled:  "#374151",
+        },
 
+        // Legacy accent aliases (maps to blue)
+        accent:         "#3B82F6",
+        "accent-hover": "#2563EB",
+
+        // Severity
         severity: {
-          critical: "var(--severity-critical)",
-          high:     "var(--severity-high)",
-          medium:   "var(--severity-medium)",
-          low:      "var(--severity-low)",
-          info:     "var(--severity-info)",
+          critical: "#FCA5A5",
+          high:     "#FDB07A",
+          medium:   "#FCD34D",
+          low:      "#6EE7B7",
+          info:     "#93C5FD",
         },
 
+        // Status
         status: {
-          online:   "var(--status-online)",
-          offline:  "var(--status-offline)",
-          degraded: "var(--status-degraded)",
-          unknown:  "var(--status-unknown)",
+          online:   "#10B981",
+          offline:  "#4B5563",
+          degraded: "#F59E0B",
+          unknown:  "#4B5563",
         },
 
-        // Neural Purple
-        neural: {
-          400: "#A78BFA",
-          500: "#8B5CF6",
-          600: "#7C3AED",
-          900: "#1E1040",
-        },
-
-        // Cyber Cyan
+        // Ice blue (replaces cyan)
         cyber: {
-          400: "#22D3EE",
-          500: "#06B6D4",
-          900: "#0C2A30",
+          400: "#38BDF8",
+          500: "#0EA5E9",
+          900: "#082032",
         },
 
-        // Base blacks
+        // Pure blacks (base scale)
         base: {
-          950: "#04040A",
-          900: "#080810",
-          800: "#0E0E1C",
-          700: "#161628",
+          950: "#000000",
+          900: "#0A0A0A",
+          800: "#111111",
+          700: "#1A1A1A",
         },
       },
 
@@ -116,14 +133,18 @@ const config: Config = {
       },
 
       boxShadow: {
-        card:            "0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.4)",
-        elevated:        "0 4px 12px rgba(0,0,0,0.5)",
-        panel:           "0 8px 32px rgba(0,0,0,0.6)",
-        "glow-purple":   "0 0 20px rgba(139,92,246,0.3)",
-        "glow-cyan":     "0 0 20px rgba(6,182,212,0.3)",
-        "glow-danger":   "0 0 20px rgba(248,113,113,0.3)",
-        "glow-accent":   "0 0 12px rgba(139,92,246,0.2)",
-        "glow-critical": "0 0 12px rgba(248,113,113,0.2)",
+        card:            "0 1px 3px rgba(0,0,0,0.5)",
+        elevated:        "0 4px 12px rgba(0,0,0,0.6)",
+        panel:           "0 8px 32px rgba(0,0,0,0.7)",
+        glow:            "0 0 20px rgba(96,165,250,0.15)",
+        "glow-sm":       "0 0 10px rgba(96,165,250,0.1)",
+        "glow-blue":     "0 0 20px rgba(59,130,246,0.3)",
+        "glow-cyan":     "0 0 20px rgba(56,189,248,0.3)",
+        "glow-danger":   "0 0 20px rgba(239,68,68,0.3)",
+        "glow-accent":   "0 0 12px rgba(59,130,246,0.2)",
+        "glow-critical": "0 0 12px rgba(239,68,68,0.2)",
+        // Legacy alias
+        "glow-purple":   "0 0 20px rgba(59,130,246,0.3)",
       },
     },
   },

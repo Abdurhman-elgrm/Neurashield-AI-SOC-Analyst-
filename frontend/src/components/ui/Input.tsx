@@ -33,7 +33,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               "w-full bg-bg-elevated border border-border rounded px-3 py-2",
               "text-sm text-text-primary placeholder:text-text-muted",
-              "focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30",
+              "focus:outline-none focus:border-primary-500/50 focus:ring-1 focus:ring-primary-500/20",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               "transition-colors duration-150",
               leftIcon && "pl-8",
@@ -77,7 +77,7 @@ export function SearchInput({
         className={cn(
           "w-full bg-bg-elevated border border-border rounded px-3 py-1.5 pl-8",
           "text-sm text-text-primary placeholder:text-text-muted",
-          "focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30",
+          "focus:outline-none focus:border-primary-500/50 focus:ring-1 focus:ring-primary-500/20",
           "transition-colors duration-150",
           className
         )}

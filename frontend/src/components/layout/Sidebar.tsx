@@ -42,31 +42,31 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "Investigate",
     items: [
-      { label: "Events",          icon: Database,   to: "/events" },
-      { label: "Threat Hunt",     icon: Crosshair,  to: "/hunt" },
-      { label: "Detection Rules", icon: BookOpen,   to: "/rules" },
+      { label: "Events",          icon: Database,  to: "/events" },
+      { label: "Threat Hunt",     icon: Crosshair, to: "/hunt" },
+      { label: "Detection Rules", icon: BookOpen,  to: "/rules" },
     ],
   },
   {
     title: "AI & Response",
     items: [
-      { label: "AI Copilot",      icon: Brain,   to: "/copilot" },
-      { label: "Agents",          icon: Server,  to: "/agents" },
+      { label: "AI Copilot", icon: Brain,  to: "/copilot" },
+      { label: "Agents",     icon: Server, to: "/agents" },
     ],
   },
   {
     title: "Platform",
     items: [
-      { label: "Settings",        icon: Settings, to: "/settings" },
+      { label: "Settings", icon: Settings, to: "/settings" },
     ],
   },
 ];
 
 export function Sidebar() {
-  const collapsed   = useUIStore((s) => s.sidebarCollapsed);
-  const toggle      = useUIStore((s) => s.toggleSidebar);
-  const user        = useAuthStore((s) => s.user);
-  const clearAuth   = useAuthStore((s) => s.clearAuth);
+  const collapsed = useUIStore((s) => s.sidebarCollapsed);
+  const toggle    = useUIStore((s) => s.toggleSidebar);
+  const user      = useAuthStore((s) => s.user);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
 
   const initials = user?.full_name
     ? user.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -78,12 +78,12 @@ export function Sidebar() {
         "relative flex-shrink-0 flex flex-col h-full border-r transition-all duration-200",
         collapsed ? "w-16" : "w-60"
       )}
-      style={{ background: "#06060F", borderColor: "rgba(139,92,246,0.12)" }}
+      style={{ background: "#050505", borderColor: "#1C1C1C" }}
     >
       {/* Logo */}
       <div
         className="flex items-center h-14 px-3 flex-shrink-0 border-b"
-        style={{ borderColor: "rgba(139,92,246,0.12)" }}
+        style={{ borderColor: "#1C1C1C" }}
       >
         {collapsed ? (
           <div className="flex items-center justify-center w-full">
@@ -108,13 +108,15 @@ export function Sidebar() {
         {NAV_SECTIONS.map((section) => (
           <div key={section.title}>
             {!collapsed && (
-              <p className="px-3 mb-1.5 text-2xs font-semibold uppercase tracking-widest"
-                style={{ color: "rgba(139,92,246,0.5)" }}>
+              <p
+                className="px-3 mb-1.5 text-2xs font-semibold uppercase tracking-widest"
+                style={{ color: "rgba(96,165,250,0.4)" }}
+              >
                 {section.title}
               </p>
             )}
             {collapsed && (
-              <div className="my-2 h-px mx-2" style={{ background: "rgba(139,92,246,0.1)" }} />
+              <div className="my-2 h-px mx-2" style={{ background: "#1C1C1C" }} />
             )}
             <ul className="space-y-0.5">
               {section.items.map((item) => (
@@ -127,7 +129,7 @@ export function Sidebar() {
                           cn(
                             "flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all duration-150",
                             isActive
-                              ? "bg-neural-600/20 text-neural-400"
+                              ? "bg-primary-600/20 text-primary-400"
                               : "text-text-muted hover:text-text-primary hover:bg-white/[0.04]"
                           )
                         }
@@ -135,8 +137,9 @@ export function Sidebar() {
                       >
                         {({ isActive }) => (
                           <item.icon
-                            className={cn("w-[18px] h-[18px] flex-shrink-0",
-                              isActive && "drop-shadow-[0_0_6px_rgba(139,92,246,0.7)]"
+                            className={cn(
+                              "w-[18px] h-[18px] flex-shrink-0",
+                              isActive && "drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]"
                             )}
                           />
                         )}
@@ -150,7 +153,7 @@ export function Sidebar() {
                           "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
                           "border-l-2",
                           isActive
-                            ? "bg-neural-600/15 border-neural-500 text-neural-400"
+                            ? "bg-primary-600/15 border-primary-500 text-primary-400"
                             : "border-transparent text-text-muted hover:text-text-primary hover:bg-white/[0.03]"
                         )
                       }
@@ -158,8 +161,9 @@ export function Sidebar() {
                       {({ isActive }) => (
                         <>
                           <item.icon
-                            className={cn("w-4 h-4 flex-shrink-0",
-                              isActive && "drop-shadow-[0_0_6px_rgba(139,92,246,0.7)]"
+                            className={cn(
+                              "w-4 h-4 flex-shrink-0",
+                              isActive && "drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]"
                             )}
                           />
                           <span>{item.label}</span>
@@ -177,16 +181,13 @@ export function Sidebar() {
       {/* Footer — user info + logout */}
       <div
         className="p-2 border-t flex-shrink-0"
-        style={{ borderColor: "rgba(139,92,246,0.12)" }}
+        style={{ borderColor: "#1C1C1C" }}
       >
         {collapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #7C3AED, #06B6D4)",
-                color: "white",
-              }}
+              style={{ background: "linear-gradient(135deg, #2563EB, #38BDF8)", color: "white" }}
             >
               {initials}
             </div>
@@ -202,10 +203,7 @@ export function Sidebar() {
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] group transition-colors">
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #7C3AED, #06B6D4)",
-                color: "white",
-              }}
+              style={{ background: "linear-gradient(135deg, #2563EB, #38BDF8)", color: "white" }}
             >
               {initials}
             </div>
@@ -219,7 +217,7 @@ export function Sidebar() {
             </div>
             <button
               onClick={clearAuth}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded text-text-muted hover:text-danger transition-all"
+              className="opacity-0 group-hover:opacity-100 p-1 rounded text-text-muted hover:text-critical transition-all"
               title="Sign out"
             >
               <LogOut className="w-3.5 h-3.5" />

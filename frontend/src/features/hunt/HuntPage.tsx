@@ -11,16 +11,16 @@ export function HuntPage() {
       <div
         className="rounded-2xl p-12 flex flex-col items-center justify-center text-center border"
         style={{
-          background: "rgba(8,8,16,0.6)",
-          borderColor: "rgba(139,92,246,0.15)",
+          background: "rgba(0,0,0,0.6)",
+          borderColor: "rgba(59,130,246,0.15)",
           borderStyle: "dashed",
         }}
       >
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)" }}
+          style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}
         >
-          <Crosshair className="w-6 h-6 text-neural-400" />
+          <Crosshair className="w-6 h-6 text-primary-400" />
         </div>
         <h2 className="font-display text-lg font-semibold text-text-primary mb-2">
           Hunt Sessions Coming Soon
@@ -29,7 +29,7 @@ export function HuntPage() {
           Build and execute hunting queries against your event data. Search for indicators
           of compromise, anomalous behaviors, and threat patterns.
         </p>
-        <div className="flex items-center gap-2 text-xs text-neural-400">
+        <div className="flex items-center gap-2 text-xs text-primary-400">
           <Sparkles className="w-3.5 h-3.5" />
           <span>AI-assisted hunting queries powered by NEURASHIELD</span>
         </div>
