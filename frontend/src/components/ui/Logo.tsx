@@ -121,13 +121,16 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
       <LogoIcon size={size} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={{
-          fontFamily: "'Inter', system-ui, sans-serif",
-          fontSize: 15,
+          fontFamily: "'Orbitron', sans-serif",
+          fontSize: 14,
           fontWeight: 700,
-          letterSpacing: '0.28em',
-          color: '#FFFFFF',
+          letterSpacing: '0.22em',
           textTransform: 'uppercase' as const,
           lineHeight: 1,
+          background: 'linear-gradient(180deg, #E2E8F0 0%, #94A3B8 45%, #334155 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
         }}>
           NEURASHIELD
         </span>
@@ -152,12 +155,16 @@ export function LogoCompact({ className = '' }: { className?: string }) {
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <LogoIcon size={32} />
       <span style={{
-        fontFamily: "'Inter', system-ui, sans-serif",
-        fontSize: 13,
+        fontFamily: "'Orbitron', sans-serif",
+        fontSize: 14,
         fontWeight: 700,
-        letterSpacing: '0.28em',
-        color: '#FFFFFF',
+        letterSpacing: '0.22em',
         textTransform: 'uppercase' as const,
+        lineHeight: 1,
+        background: 'linear-gradient(180deg, #E2E8F0 0%, #94A3B8 45%, #334155 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
       }}>
         NEURASHIELD
       </span>
