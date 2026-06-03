@@ -10,14 +10,25 @@ interface LogoProps {
 // beam zones: left 0→52, right 128→180
 // dots: top cy=5, bottom cy=107
 
-export function LogoIcon({ size = 44, className = '' }: { size?: number; className?: string }) {
-  // size controls HEIGHT — width scales from the wide viewBox ratio
-  const w = size * (180 / 112)
+export function LogoIcon({
+  size = 44,
+  compact = false,
+  className = '',
+}: {
+  size?: number
+  compact?: boolean
+  className?: string
+}) {
+  // compact=true crops the long beams → nearly-square, fits sidebar
+  // compact=false shows the full wide composition with beams
+  const vb   = compact ? '34 0 112 112' : '0 0 180 112'
+  const ratio = compact ? (112 / 112)   : (180 / 112)
+  const w = size * ratio
   return (
     <svg
       width={w}
       height={size}
-      viewBox="0 0 180 112"
+      viewBox={vb}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -154,10 +165,10 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <LogoIcon size={62} />
+      <LogoIcon size={54} compact />
       <span style={{
         fontFamily: "'Orbitron', sans-serif",
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: 800,
         letterSpacing: '0.16em',
         textTransform: 'uppercase' as const,
