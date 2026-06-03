@@ -141,7 +141,7 @@ export function Sidebar() {
     }}>
 
       {/* Logo */}
-      <div style={{ padding: "16px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
         <LogoCompact />
       </div>
 

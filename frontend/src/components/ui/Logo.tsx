@@ -11,11 +11,12 @@ interface LogoProps {
 // dots: top cy=5, bottom cy=107
 
 export function LogoIcon({ size = 44, className = '' }: { size?: number; className?: string }) {
-  const h = size * (112 / 180)
+  // size controls HEIGHT — width scales from the wide viewBox ratio
+  const w = size * (180 / 112)
   return (
     <svg
-      width={size}
-      height={h}
+      width={w}
+      height={size}
       viewBox="0 0 180 112"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -153,12 +154,12 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <LogoIcon size={42} />
+      <LogoIcon size={46} />
       <span style={{
         fontFamily: "'Orbitron', sans-serif",
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: 800,
-        letterSpacing: '0.22em',
+        letterSpacing: '0.20em',
         textTransform: 'uppercase' as const,
         lineHeight: 1,
         background: 'linear-gradient(180deg, #E2E8F0 0%, #94A3B8 45%, #334155 100%)',
