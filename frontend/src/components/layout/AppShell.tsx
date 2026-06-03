@@ -7,13 +7,31 @@ import { KeyboardShortcuts } from "@/hooks/useKeyboard";
 
 export function AppShell() {
   return (
-    <div className="flex h-screen bg-bg-base overflow-hidden">
+    <div style={{ display: "flex", height: "100vh", background: "#000000", overflow: "hidden" }}>
+      {/* Fixed sidebar */}
       <Sidebar />
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      {/* Main column — offset by sidebar width */}
+      <div style={{
+        flex: 1,
+        marginLeft: 220,
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
+        overflow: "hidden",
+      }}>
+        {/* Fixed-height topbar */}
         <TopBar />
 
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* Scrollable page area */}
+        <main
+          className="page-in"
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "20px 24px",
+          }}
+        >
           <Outlet />
         </main>
       </div>

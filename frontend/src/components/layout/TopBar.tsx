@@ -1,4 +1,5 @@
-import { ChevronDown, Command, Wifi, WifiOff, LogOut, User, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronDown, Search, LogOut, User, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -12,62 +13,94 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/Dropdown";
-import { cn } from "@/lib/utils";
 
-// ─── ConnectionStatus ─────────────────────────────────────────────────────────
+// ─── Clock ────────────────────────────────────────────────────────────────────
+
+function Clock() {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span style={{
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: 12,
+      color: "#5C6373",
+      letterSpacing: "0.05em",
+    }}>
+      {time.toLocaleTimeString("en-GB")}
+    </span>
+  );
+}
+
+// ─── Connection status ────────────────────────────────────────────────────────
 
 function ConnectionStatus() {
   const state = useRealtimeStore((s) => s.connectionState);
-
   const isLive = state === "connected";
   const isConnecting = state === "connecting" || state === "reconnecting";
+  const color = isLive ? "#10B981" : isConnecting ? "#F59E0B" : "#5C6373";
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 text-xs",
-        isLive ? "text-status-online" : isConnecting ? "text-severity-medium" : "text-text-muted"
-      )}
-    >
+    <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color }}>
       {isLive ? (
-        <Wifi className="w-3.5 h-3.5" />
+        <span className="dot-live" />
       ) : (
-        <WifiOff className="w-3.5 h-3.5" />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
       )}
-      <span className="hidden sm:inline">
-        {isLive ? "Live" : isConnecting ? "Connecting…" : "Offline"}
-      </span>
+      <span>{isLive ? "Live" : isConnecting ? "Connecting…" : "Offline"}</span>
     </div>
   );
 }
 
-// ─── UserMenu ─────────────────────────────────────────────────────────────────
+// ─── User menu ────────────────────────────────────────────────────────────────
 
 function UserMenu() {
-  const user = useAuthStore((s) => s.user);
+  const user      = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
 
-  const initial = user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "U";
+  const initial     = user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "U";
   const displayName = user?.full_name || user?.email || "User";
 
-  const handleLogout = () => {
-    clearAuth();
-    navigate("/login");
-  };
+  const handleLogout = () => { clearAuth(); navigate("/login"); };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors rounded px-1.5 py-1 hover:bg-bg-subtle">
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg, #2563EB, #38BDF8)" }}
-          >
+        <button style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 12,
+          color: "#8B95A7",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          borderRadius: 6,
+          padding: "3px 6px",
+          transition: "all 120ms",
+        }}>
+          <div style={{
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(135deg, #2563EB, #38BDF8)",
+            color: "#fff",
+            fontSize: 10,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}>
             {initial}
           </div>
-          <span className="hidden md:inline max-w-[120px] truncate">{displayName}</span>
-          <ChevronDown className="w-3.5 h-3.5 text-text-muted" />
+          <span style={{ maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {displayName}
+          </span>
+          <ChevronDown size={12} style={{ opacity: 0.5 }} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[200px]">
@@ -98,46 +131,97 @@ function UserMenu() {
   );
 }
 
+// ─── Tenant selector ──────────────────────────────────────────────────────────
+
+function TenantSelector() {
+  const activeTenant = useTenantStore((s) => s.activeTenant);
+  if (!activeTenant) return <span style={{ fontSize: 12, color: "#5C6373" }}>No tenant</span>;
+  return (
+    <button style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      fontSize: 13,
+      fontWeight: 600,
+      color: "#F5F7FA",
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: 0,
+    }}>
+      {activeTenant.name}
+      <ChevronDown size={12} style={{ color: "#5C6373" }} />
+    </button>
+  );
+}
+
 // ─── TopBar ───────────────────────────────────────────────────────────────────
 
 export function TopBar() {
-  const activeTenant = useTenantStore((s) => s.activeTenant);
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
 
   return (
-    <header className="h-14 flex items-center justify-between px-6 border-b border-border bg-bg-surface flex-shrink-0">
-      {/* Left: tenant context */}
-      <div className="flex items-center gap-3">
-        {activeTenant ? (
-          <button className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
-            <span className="font-medium text-text-primary">{activeTenant.name}</span>
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <span className="text-sm text-text-muted">No tenant selected</span>
-        )}
-      </div>
+    <header style={{
+      height: 50,
+      background: "#0A0A0A",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      display: "flex",
+      alignItems: "center",
+      padding: "0 20px",
+      gap: 16,
+      flexShrink: 0,
+    }}>
+      {/* Tenant selector */}
+      <TenantSelector />
 
-      {/* Right: command trigger + status + notifications + user */}
-      <div className="flex items-center gap-2">
-        {/* Cmd+K trigger */}
+      {/* Right side */}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+
+        {/* Clock */}
+        <Clock />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+
+        {/* Command palette trigger */}
         <button
           onClick={openCommandPalette}
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border text-xs text-text-muted hover:text-text-primary hover:bg-bg-subtle transition-colors"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "3px 8px",
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            color: "#5C6373",
+            fontSize: 11,
+            cursor: "pointer",
+            transition: "all 120ms",
+          }}
           aria-label="Open command palette"
         >
-          <Command className="w-3 h-3" />
+          <Search size={11} />
           <span>Search</span>
-          <kbd className="ml-1 px-1 py-0.5 rounded bg-bg-subtle border border-border font-mono text-2xs">
-            ⌘K
-          </kbd>
+          <kbd style={{ fontSize: 9, opacity: 0.6, fontFamily: "monospace" }}>⌘K</kbd>
         </button>
 
-        <div className="w-px h-5 bg-border" />
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+
+        {/* Connection status */}
         <ConnectionStatus />
-        <div className="w-px h-5 bg-border" />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+
+        {/* Notification bell */}
         <NotificationBell />
-        <div className="w-px h-5 bg-border" />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+
+        {/* User menu */}
         <UserMenu />
       </div>
     </header>

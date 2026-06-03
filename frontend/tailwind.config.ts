@@ -9,19 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Pure black backgrounds
+        // ── Pure black backgrounds ──
         bg: {
           base:     "#000000",
           surface:  "#0A0A0A",
           elevated: "#111111",
           card:     "#0D0D0D",
-          input:    "#0A0A0A",
+          input:    "#080808",
           sidebar:  "#050505",
           subtle:   "#111111",
           overlay:  "rgba(13,13,13,0.8)",
+          hover:    "rgba(255,255,255,0.025)",
+          selected: "rgba(59,130,246,0.06)",
         },
 
-        // Electric Blue primary
+        // ── Electric Blue primary ──
+        blue: {
+          300: "#93C5FD",
+          400: "#60A5FA",
+          500: "#3B82F6",
+          600: "#2563EB",
+          700: "#1D4ED8",
+        },
+
+        // ── Primary alias (backward compat) ──
         primary: {
           300: "#93C5FD",
           400: "#60A5FA",
@@ -30,29 +41,45 @@ const config: Config = {
           700: "#1D4ED8",
         },
 
-        // Borders
+        // ── Borders ──
         border: {
-          DEFAULT: "#1C1C1C",
-          hover:   "#2A2A2A",
-          active:  "rgba(96,165,250,0.4)",
-          strong:  "#2A2A2A",
-          subtle:  "rgba(255,255,255,0.05)",
+          DEFAULT: "rgba(255,255,255,0.06)",
+          card:    "rgba(255,255,255,0.07)",
+          subtle:  "rgba(255,255,255,0.04)",
+          strong:  "rgba(255,255,255,0.12)",
+          active:  "rgba(59,130,246,0.5)",
+          focus:   "rgba(59,130,246,0.6)",
+          hover:   "rgba(255,255,255,0.12)",
           cyan:    "rgba(56,189,248,0.2)",
         },
 
-        // Text
-        text: {
-          primary:   "#F9FAFB",
-          secondary: "#9CA3AF",
-          muted:     "#4B5563",
-          disabled:  "#374151",
+        // ── New text scale ──
+        tx: {
+          1: "#F5F7FA",
+          2: "#B8C0CC",
+          3: "#8B95A7",
+          4: "#5C6373",
+          5: "#3A4150",
         },
 
-        // Legacy accent aliases (maps to blue)
-        accent:         "#3B82F6",
-        "accent-hover": "#2563EB",
+        // ── Text (backward compat) ──
+        text: {
+          primary:   "#F5F7FA",
+          secondary: "#B8C0CC",
+          muted:     "#5C6373",
+          disabled:  "#3A4150",
+        },
 
-        // Severity
+        // ── New severity (pure colors) ──
+        sev: {
+          critical: "#EF4444",
+          high:     "#F97316",
+          medium:   "#F59E0B",
+          low:      "#3B82F6",
+          info:     "#6B7280",
+        },
+
+        // ── Severity (backward compat — text variants) ──
         severity: {
           critical: "#FCA5A5",
           high:     "#FDB07A",
@@ -61,7 +88,7 @@ const config: Config = {
           info:     "#93C5FD",
         },
 
-        // Status
+        // ── Status ──
         status: {
           online:   "#10B981",
           offline:  "#4B5563",
@@ -69,14 +96,18 @@ const config: Config = {
           unknown:  "#4B5563",
         },
 
-        // Ice blue (replaces cyan)
+        // ── Legacy accent aliases ──
+        accent:         "#3B82F6",
+        "accent-hover": "#2563EB",
+
+        // ── Ice blue (replaces cyan) ──
         cyber: {
           400: "#38BDF8",
           500: "#0EA5E9",
           900: "#082032",
         },
 
-        // Pure blacks (base scale)
+        // ── Pure blacks ──
         base: {
           950: "#000000",
           900: "#0A0A0A",
@@ -120,30 +151,31 @@ const config: Config = {
         "neural-pulse":   "neural-pulse 3s ease-in-out infinite",
         "float":          "float 4s ease-in-out infinite",
         "pulse-dot":      "pulse-dot 2s infinite",
+        shimmer:          "shimmer 1.6s infinite",
       },
 
       keyframes: {
         fadeIn:        { from: { opacity: "0" }, to: { opacity: "1" } },
         slideInRight:  { from: { transform: "translateX(100%)", opacity: "0" }, to: { transform: "translateX(0)", opacity: "1" } },
-        slideOutRight: { from: { transform: "translateX(0)", opacity: "1" },    to: { transform: "translateX(100%)", opacity: "0" } },
+        slideOutRight: { from: { transform: "translateX(0)", opacity: "1" }, to: { transform: "translateX(100%)", opacity: "0" } },
         pulseSubtle:   { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.6" } },
         "neural-pulse":{ "0%, 100%": { opacity: "0.6", transform: "scale(1)" }, "50%": { opacity: "1", transform: "scale(1.05)" } },
         float:         { "0%, 100%": { transform: "translateY(0px)" }, "50%": { transform: "translateY(-6px)" } },
         "pulse-dot":   { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.4" } },
+        shimmer:       { "0%": { backgroundPosition: "200% 0" }, "100%": { backgroundPosition: "-200% 0" } },
       },
 
       boxShadow: {
-        card:            "0 1px 3px rgba(0,0,0,0.5)",
+        card:            "0 1px 3px rgba(0,0,0,0.6)",
         elevated:        "0 4px 12px rgba(0,0,0,0.6)",
         panel:           "0 8px 32px rgba(0,0,0,0.7)",
-        glow:            "0 0 20px rgba(96,165,250,0.15)",
-        "glow-sm":       "0 0 10px rgba(96,165,250,0.1)",
+        glow:            "0 0 20px rgba(59,130,246,0.2)",
+        "glow-sm":       "0 0 10px rgba(59,130,246,0.15)",
         "glow-blue":     "0 0 20px rgba(59,130,246,0.3)",
         "glow-cyan":     "0 0 20px rgba(56,189,248,0.3)",
         "glow-danger":   "0 0 20px rgba(239,68,68,0.3)",
         "glow-accent":   "0 0 12px rgba(59,130,246,0.2)",
         "glow-critical": "0 0 12px rgba(239,68,68,0.2)",
-        // Legacy alias
         "glow-purple":   "0 0 20px rgba(59,130,246,0.3)",
       },
     },

@@ -42,7 +42,7 @@ export function CopilotPage() {
             boxShadow: "0 0 30px rgba(59,130,246,0.15)",
           }}
         >
-          <Brain className="w-8 h-8 text-primary-400 animate-neural-pulse" />
+          <Brain className="w-8 h-8 text-primary-400 animate-blue-pulse" />
         </div>
         <h2 className="font-display text-xl font-bold text-text-primary mb-2">
           NEURASHIELD AI Copilot

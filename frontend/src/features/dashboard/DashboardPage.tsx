@@ -1,7 +1,8 @@
-import { cn } from "@/lib/utils";
+import { useState, useEffect, useRef } from "react";
+import { Bell, AlertTriangle, FolderSearch, Activity } from "lucide-react";
 import { useDashboardStore } from "@/stores/dashboardStore";
 import { useDashboardRealtime } from "./hooks/useDashboardRealtime";
-import { KPIMetricsRow } from "./widgets/KPIMetricsRow";
+import { useKPISummary } from "./hooks/useDashboardData";
 import { LiveAlertsFeed } from "./widgets/LiveAlertsFeed";
 import { IngestionRateChart } from "./widgets/IngestionRateChart";
 import { DetectionHealthWidget } from "./widgets/DetectionHealthWidget";
@@ -15,7 +16,68 @@ const TIME_RANGES: DashboardTimeRange[] = [
   "last_15m", "last_1h", "last_6h", "last_24h", "last_7d",
 ];
 
-function TimeRangeSelector({
+// ─── Animated count-up ────────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 800) {
+  const [display, setDisplay] = useState(0);
+  const prev = useRef(0);
+  useEffect(() => {
+    const start = prev.current;
+    const end = target;
+    prev.current = target;
+    if (start === end) return;
+    const step = (end - start) / (duration / 16);
+    let current = start;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, end);
+      setDisplay(Math.floor(current));
+      if (current >= end) clearInterval(timer);
+    }, 16);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+  return display;
+}
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+
+interface KPICardProps {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  accent: string;
+  live?: boolean;
+  formatter?: (v: number) => string;
+}
+
+function KPICard({ label, value, icon: Icon, accent, live, formatter }: KPICardProps) {
+  const display = useCountUp(value);
+  const formatted = formatter ? formatter(display) : display.toLocaleString();
+
+  return (
+    <div className="kpi-card" style={{ cursor: "default" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span className="kpi-label">{label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {live && (
+            <>
+              <span className="dot-live" />
+              <span style={{ fontSize: 9, color: "#10B981", fontWeight: 700 }}>LIVE</span>
+            </>
+          )}
+          <Icon size={14} style={{ color: accent, opacity: 0.7 }} />
+        </div>
+      </div>
+      <div className="kpi-value" style={{ color: value > 0 ? accent : "#F5F7FA" }}>
+        {formatted}
+      </div>
+      <div className="kpi-trend">— 0% vs prev period</div>
+    </div>
+  );
+}
+
+// ─── Time range picker ────────────────────────────────────────────────────────
+
+function TimeRangePicker({
   value,
   onChange,
 }: {
@@ -23,94 +85,131 @@ function TimeRangeSelector({
   onChange: (v: DashboardTimeRange) => void;
 }) {
   return (
-    <div
-      className="flex items-center gap-0.5 rounded-lg p-0.5"
-      style={{
-        background: "rgba(10,10,10,0.8)",
-        border: "1px solid rgba(59,130,246,0.15)",
-      }}
-    >
-      {TIME_RANGES.map((range) => (
+    <div style={{
+      display: "flex",
+      gap: 2,
+      background: "#0D0D0D",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 8,
+      padding: 3,
+    }}>
+      {TIME_RANGES.map((r) => (
         <button
-          key={range}
-          onClick={() => onChange(range)}
-          className={cn(
-            "px-2.5 py-1 text-xs rounded-md transition-all duration-150 font-medium",
-            value === range
-              ? "text-white"
-              : "text-text-muted hover:text-text-primary hover:bg-white/[0.04]"
-          )}
-          style={
-            value === range
-              ? {
-                  background: "linear-gradient(135deg, #2563EB, #3B82F6)",
-                  boxShadow: "0 0 12px rgba(59,130,246,0.4)",
-                }
-              : undefined
-          }
+          key={r}
+          onClick={() => onChange(r)}
+          style={{
+            padding: "4px 12px",
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 600,
+            background: value === r ? "#2563EB" : "transparent",
+            color: value === r ? "#fff" : "#5C6373",
+            border: "none",
+            cursor: "pointer",
+            transition: "all 120ms",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
         >
-          {TIME_RANGE_LABELS[range]}
+          {TIME_RANGE_LABELS[r]}
         </button>
       ))}
     </div>
   );
 }
 
+// ─── Dashboard page ───────────────────────────────────────────────────────────
+
 export function DashboardPage() {
-  const timeRange = useDashboardStore((s) => s.timeRange);
+  const timeRange    = useDashboardStore((s) => s.timeRange);
   const setTimeRange = useDashboardStore((s) => s.setTimeRange);
+  const { data }     = useKPISummary(timeRange);
 
   useDashboardRealtime(timeRange);
 
+  const s = data!;
+
   return (
-    <div className="space-y-5 pb-6">
+    <div style={{ paddingBottom: 24 }}>
+
       {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        marginBottom: 20,
+        flexWrap: "wrap",
+        gap: 12,
+      }}>
         <div>
-          <h1 className="page-title">Security Overview</h1>
-          <p className="text-sm text-text-muted mt-0.5">
+          <h1 style={{
+            fontSize: 20,
+            fontWeight: 800,
+            color: "#F5F7FA",
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}>
+            Security Overview
+          </h1>
+          <p style={{ fontSize: 12, color: "#5C6373", marginTop: 2 }}>
             Real-time threat intelligence command center
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-status-online">
-            <span className="w-1.5 h-1.5 bg-status-online rounded-full animate-pulse" />
-            Live
-          </span>
-          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#10B981" }}>
+            <span className="dot-live" />
+            <span style={{ fontWeight: 600 }}>Live</span>
+          </div>
+          <TimeRangePicker value={timeRange} onChange={setTimeRange} />
         </div>
       </div>
 
-      {/* Row 1: KPI metrics */}
-      <KPIMetricsRow timeRange={timeRange} />
+      {/* KPI strip */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
+        <KPICard
+          label="TOTAL ALERTS"
+          value={s?.alerts?.total ?? 0}
+          icon={Bell}
+          accent="#EF4444"
+          live
+        />
+        <KPICard
+          label="CRITICAL P1"
+          value={s?.alerts?.critical ?? 0}
+          icon={AlertTriangle}
+          accent="#EF4444"
+        />
+        <KPICard
+          label="ACTIVE INVEST."
+          value={s?.investigations?.active ?? 0}
+          icon={FolderSearch}
+          accent="#3B82F6"
+        />
+        <KPICard
+          label="EVENTS / SEC"
+          value={s?.ingestion?.epsNow ?? 0}
+          icon={Activity}
+          accent="#10B981"
+          live
+          formatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v)}
+        />
+      </div>
 
       {/* Row 2: Alerts + Ingestion + Detection */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4" style={{ minHeight: 420 }}>
-        <div className="lg:col-span-2 flex flex-col">
-          <LiveAlertsFeed timeRange={timeRange} maxHeight={380} />
-        </div>
-        <div className="lg:col-span-2 flex flex-col">
-          <IngestionRateChart timeRange={timeRange} />
-        </div>
-        <div className="lg:col-span-1 flex flex-col">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, marginBottom: 12 }}>
+        <LiveAlertsFeed timeRange={timeRange} maxHeight={380} />
+        <IngestionRateChart timeRange={timeRange} />
+        <div style={{ width: 260 }}>
           <DetectionHealthWidget timeRange={timeRange} />
         </div>
       </div>
 
       {/* Row 3: MITRE + Correlation */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4" style={{ minHeight: 380 }}>
-        <div className="lg:col-span-3 flex flex-col">
-          <MitreHeatmap timeRange={timeRange} />
-        </div>
-        <div className="lg:col-span-2 flex flex-col">
-          <CorrelationWidget timeRange={timeRange} />
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12, marginBottom: 12 }}>
+        <MitreHeatmap timeRange={timeRange} />
+        <CorrelationWidget timeRange={timeRange} />
       </div>
 
       {/* Row 4: AI operations */}
-      <div style={{ minHeight: 280 }}>
-        <AIInvestigationWidget timeRange={timeRange} />
-      </div>
+      <AIInvestigationWidget timeRange={timeRange} />
     </div>
   );
 }

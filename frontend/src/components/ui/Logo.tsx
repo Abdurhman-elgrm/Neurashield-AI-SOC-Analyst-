@@ -1,90 +1,91 @@
+const SHIELD = "M4,2 L36,2 Q38,2 38,4 L38,26 Q38,36 20,44 Q2,36 2,26 L2,4 Q2,2 4,2 Z";
+
 interface LogoIconProps {
   size?: number;
-  className?: string;
 }
 
-interface LogoFullProps {
-  size?: number;
-  showSubtitle?: boolean;
-  className?: string;
-}
-
-export function LogoIcon({ size = 36, className = "" }: LogoIconProps) {
+export function LogoIcon({ size = 36 }: LogoIconProps) {
+  const s = size / 46;
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
+    <svg width={40 * s} height={46 * s} viewBox="0 0 40 46" fill="none">
       <defs>
-        <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#3B82F6" />
-          <stop offset="100%" stopColor="#38BDF8" />
+          <stop offset="100%" stopColor="#93C5FD" />
         </linearGradient>
-        <linearGradient id="node-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#60A5FA" />
-          <stop offset="100%" stopColor="#38BDF8" />
+        <linearGradient id="lg2" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="#93C5FD" stopOpacity="0.04" />
         </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="1" result="coloredBlur" />
+        <filter id="glow-logo">
+          <feGaussianBlur stdDeviation="1.2" result="b" />
           <feMerge>
-            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="b" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
       </defs>
 
-      {/* Shield shape */}
-      <path
-        d="M20 3L5 9.5V20.5C5 28.5 11.5 35.5 20 38C28.5 35.5 35 28.5 35 20.5V9.5L20 3Z"
-        fill="url(#shield-grad)"
-        fillOpacity="0.15"
-        stroke="url(#shield-grad)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-
-      {/* Neural network nodes */}
-      <circle cx="20" cy="14" r="2.5" fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="13" cy="22" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="27" cy="22" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
-      <circle cx="20" cy="29" r="2"   fill="url(#node-grad)" filter="url(#glow)" />
+      {/* Shield fill */}
+      <path d={SHIELD} fill="url(#lg2)" />
+      {/* Shield border */}
+      <path d={SHIELD} stroke="url(#lg1)" strokeWidth="1.5" fill="none" />
 
       {/* Neural network connections */}
-      <line x1="20" y1="14" x2="13" y2="22" stroke="#3B82F6" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="20" y1="14" x2="27" y2="22" stroke="#3B82F6" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="13" y1="22" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="27" y1="22" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.8" strokeOpacity="0.7" />
-      <line x1="13" y1="22" x2="27" y2="22" stroke="#3B82F6" strokeWidth="0.5" strokeOpacity="0.4" />
-      <line x1="20" y1="14" x2="20" y2="29" stroke="#38BDF8" strokeWidth="0.5" strokeOpacity="0.3" />
+      <g stroke="rgba(96,165,250,0.3)" strokeWidth="0.7" strokeLinecap="round">
+        <line x1="20" y1="10" x2="12" y2="20" />
+        <line x1="20" y1="10" x2="28" y2="20" />
+        <line x1="12" y1="20" x2="28" y2="20" />
+        <line x1="12" y1="20" x2="16" y2="32" />
+        <line x1="28" y1="20" x2="24" y2="32" />
+        <line x1="16" y1="32" x2="24" y2="32" />
+        <line x1="20" y1="10" x2="16" y2="32" />
+        <line x1="20" y1="10" x2="24" y2="32" />
+      </g>
+
+      {/* Neural network nodes */}
+      <g filter="url(#glow-logo)">
+        <circle cx="20" cy="10" r="2.2" fill="#60A5FA" />
+        <circle cx="12" cy="20" r="1.6" fill="#3B82F6" />
+        <circle cx="28" cy="20" r="1.6" fill="#3B82F6" />
+        <circle cx="16" cy="32" r="1.6" fill="#93C5FD" />
+        <circle cx="24" cy="32" r="1.6" fill="#93C5FD" />
+      </g>
     </svg>
   );
 }
 
-export function LogoFull({ size = 36, showSubtitle = false, className = "" }: LogoFullProps) {
-  const textScale = size / 36;
+interface LogoFullProps {
+  size?: number;
+  showSubtitle?: boolean;
+}
 
+export function LogoFull({ size = 34, showSubtitle = false }: LogoFullProps) {
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <LogoIcon size={size} />
-      <div className="flex flex-col leading-none">
-        <div
-          className="font-display font-bold tracking-wide"
-          style={{ fontSize: `${Math.round(textScale * 17)}px`, lineHeight: 1.1 }}
-        >
-          <span className="text-white">NEURA</span>
-          <span style={{ color: "#60A5FA" }}>SHIELD</span>
+      <div style={{ lineHeight: 1 }}>
+        <div style={{
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontWeight: 700,
+          fontSize: 14,
+          letterSpacing: "0.18em",
+          color: "#F5F7FA",
+        }}>
+          NEURA<span style={{ color: "#60A5FA" }}>SHIELD</span>
         </div>
         {showSubtitle && (
-          <span
-            className="text-text-muted font-sans tracking-wider uppercase"
-            style={{ fontSize: `${Math.round(textScale * 8)}px`, marginTop: 3 }}
-          >
-            AI-Powered Threat Intelligence
-          </span>
+          <div style={{
+            fontSize: 8,
+            color: "#3A4150",
+            letterSpacing: "0.2em",
+            marginTop: 2,
+            fontFamily: "'Inter', sans-serif",
+            fontWeight: 500,
+            textTransform: "uppercase",
+          }}>
+            AI THREAT INTELLIGENCE
+          </div>
         )}
       </div>
     </div>

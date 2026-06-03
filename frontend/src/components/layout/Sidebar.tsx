@@ -1,229 +1,237 @@
-import { NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
-  AlertTriangle,
-  ShieldCheck,
-  Database,
+  Bell,
+  FolderSearch,
+  Activity,
   Crosshair,
-  BookOpen,
-  Server,
-  Brain,
+  Shield,
+  Sparkles,
+  Monitor,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
-import { Tooltip } from "@/components/ui/Tooltip";
-import { LogoFull, LogoIcon } from "@/components/ui/Logo";
+import { useTenantStore } from "@/stores/tenantStore";
+import { LogoFull } from "@/components/ui/Logo";
+import { getAlerts } from "@/services/alertsApi";
+import { useQuery } from "@tanstack/react-query";
 
-interface NavItem {
-  label: string;
-  icon: React.ElementType;
+// ─── Live badge counts ────────────────────────────────────────────────────────
+
+function useOpenAlertCount() {
+  const { data } = useQuery({
+    queryKey: ["sidebar", "alerts-open"],
+    queryFn: () => getAlerts({ status: ["open"], pageSize: 1, page: 1 }),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  return data?.total ?? 0;
+}
+
+// ─── NavItem ─────────────────────────────────────────────────────────────────
+
+interface NavItemProps {
   to: string;
+  icon: React.ElementType;
+  label: string;
+  badge?: string | number;
+  badgeColor?: "red" | "green" | "blue";
 }
 
-interface NavSection {
-  title: string;
-  items: NavItem[];
-}
+function NavItem({ to, icon: Icon, label, badge, badgeColor = "blue" }: NavItemProps) {
+  const badgeBg =
+    badgeColor === "red"   ? "rgba(239,68,68,0.15)"  :
+    badgeColor === "green" ? "rgba(16,185,129,0.15)" :
+                             "rgba(59,130,246,0.15)";
+  const badgeFg =
+    badgeColor === "red"   ? "#FCA5A5" :
+    badgeColor === "green" ? "#6EE7B7" :
+                             "#93C5FD";
 
-const NAV_SECTIONS: NavSection[] = [
-  {
-    title: "Operations",
-    items: [
-      { label: "Dashboard",       icon: LayoutDashboard, to: "/dashboard" },
-      { label: "Alerts",          icon: AlertTriangle,   to: "/alerts" },
-      { label: "Investigations",  icon: ShieldCheck,     to: "/investigations" },
-    ],
-  },
-  {
-    title: "Investigate",
-    items: [
-      { label: "Events",          icon: Database,  to: "/events" },
-      { label: "Threat Hunt",     icon: Crosshair, to: "/hunt" },
-      { label: "Detection Rules", icon: BookOpen,  to: "/rules" },
-    ],
-  },
-  {
-    title: "AI & Response",
-    items: [
-      { label: "AI Copilot", icon: Brain,  to: "/copilot" },
-      { label: "Agents",     icon: Server, to: "/agents" },
-    ],
-  },
-  {
-    title: "Platform",
-    items: [
-      { label: "Settings", icon: Settings, to: "/settings" },
-    ],
-  },
-];
-
-export function Sidebar() {
-  const collapsed = useUIStore((s) => s.sidebarCollapsed);
-  const toggle    = useUIStore((s) => s.toggleSidebar);
-  const user      = useAuthStore((s) => s.user);
-  const clearAuth = useAuthStore((s) => s.clearAuth);
-
-  const initials = user?.full_name
-    ? user.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : (user?.email?.[0] ?? "U").toUpperCase();
+  const displayBadge = typeof badge === "number" ? (badge > 999 ? "999+" : badge > 0 ? badge : null) : badge;
 
   return (
-    <aside
-      className={cn(
-        "relative flex-shrink-0 flex flex-col h-full border-r transition-all duration-200",
-        collapsed ? "w-16" : "w-60"
-      )}
-      style={{ background: "#050505", borderColor: "#1C1C1C" }}
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        padding: "7px 14px",
+        fontSize: 13,
+        fontWeight: isActive ? 500 : 400,
+        color: isActive ? "#93C5FD" : "#8B95A7",
+        background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
+        borderLeft: `2px solid ${isActive ? "#3B82F6" : "transparent"}`,
+        transition: "all 120ms",
+        textDecoration: "none",
+      })}
     >
+      {({ isActive }) => (
+        <>
+          <Icon
+            size={14}
+            style={{
+              opacity: isActive ? 0.9 : 0.45,
+              color: isActive ? "#60A5FA" : "inherit",
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ flex: 1 }}>{label}</span>
+          {displayBadge != null && (
+            <span style={{
+              padding: "1px 6px",
+              borderRadius: 9999,
+              fontSize: 9,
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+              background: badgeBg,
+              color: badgeFg,
+            }}>
+              {displayBadge}
+            </span>
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
+
+export function Sidebar() {
+  const user       = useAuthStore((s) => s.user);
+  const clearAuth  = useAuthStore((s) => s.clearAuth);
+  const tenant     = useTenantStore((s) => s.activeTenant);
+  const memberRole = useTenantStore((s) => s.memberRole);
+  const navigate   = useNavigate();
+  const alertCount = useOpenAlertCount();
+
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  void now;
+
+  const tenantName = tenant?.name ?? "NEURASHIELD";
+  const userRole   = memberRole ?? user?.roles?.[0] ?? "analyst";
+
+  const handleLogout = () => {
+    clearAuth();
+    navigate("/login");
+  };
+
+  return (
+    <aside style={{
+      width: "220px",
+      minWidth: "220px",
+      background: "#050505",
+      borderRight: "1px solid rgba(255,255,255,0.06)",
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      position: "fixed",
+      top: 0,
+      left: 0,
+      zIndex: 40,
+    }}>
+
       {/* Logo */}
-      <div
-        className="flex items-center h-14 px-3 flex-shrink-0 border-b"
-        style={{ borderColor: "#1C1C1C" }}
-      >
-        {collapsed ? (
-          <div className="flex items-center justify-center w-full">
-            <LogoIcon size={30} />
-          </div>
-        ) : (
-          <div className="flex items-center justify-between w-full">
-            <LogoFull size={30} />
-            <button
-              onClick={toggle}
-              className="p-1 rounded text-text-muted hover:text-text-primary transition-colors"
-              aria-label="Collapse sidebar"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+      <div style={{ padding: "16px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+        <LogoFull size={34} />
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.title}>
-            {!collapsed && (
-              <p
-                className="px-3 mb-1.5 text-2xs font-semibold uppercase tracking-widest"
-                style={{ color: "rgba(96,165,250,0.4)" }}
-              >
-                {section.title}
-              </p>
-            )}
-            {collapsed && (
-              <div className="my-2 h-px mx-2" style={{ background: "#1C1C1C" }} />
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <li key={item.to}>
-                  {collapsed ? (
-                    <Tooltip content={item.label} side="right">
-                      <NavLink
-                        to={item.to}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all duration-150",
-                            isActive
-                              ? "bg-primary-600/20 text-primary-400"
-                              : "text-text-muted hover:text-text-primary hover:bg-white/[0.04]"
-                          )
-                        }
-                        aria-label={item.label}
-                      >
-                        {({ isActive }) => (
-                          <item.icon
-                            className={cn(
-                              "w-[18px] h-[18px] flex-shrink-0",
-                              isActive && "drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]"
-                            )}
-                          />
-                        )}
-                      </NavLink>
-                    </Tooltip>
-                  ) : (
-                    <NavLink
-                      to={item.to}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                          "border-l-2",
-                          isActive
-                            ? "bg-primary-600/15 border-primary-500 text-primary-400"
-                            : "border-transparent text-text-muted hover:text-text-primary hover:bg-white/[0.03]"
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <item.icon
-                            className={cn(
-                              "w-4 h-4 flex-shrink-0",
-                              isActive && "drop-shadow-[0_0_6px_rgba(59,130,246,0.7)]"
-                            )}
-                          />
-                          <span>{item.label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        <div className="sec-label">Operations</div>
+        <NavItem to="/dashboard"      icon={LayoutDashboard} label="Overview" />
+        <NavItem to="/alerts"         icon={Bell}            label="Alerts"   badge={alertCount} badgeColor="red" />
+        <NavItem to="/investigations" icon={FolderSearch}    label="Investigations" />
+
+        <div className="sec-label">Investigate</div>
+        <NavItem to="/events" icon={Activity}  label="Events" />
+        <NavItem to="/hunt"   icon={Crosshair} label="Threat Hunt" />
+        <NavItem to="/rules"  icon={Shield}    label="Detection Rules" />
+
+        <div className="sec-label">AI &amp; Response</div>
+        <NavItem to="/copilot" icon={Sparkles} label="AI Copilot" badge="BETA" badgeColor="blue" />
+
+        <div className="sec-label">Platform</div>
+        <NavItem to="/agents"   icon={Monitor}  label="Agents" />
+        <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 
-      {/* Footer — user info + logout */}
-      <div
-        className="p-2 border-t flex-shrink-0"
-        style={{ borderColor: "#1C1C1C" }}
-      >
-        {collapsed ? (
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-              style={{ background: "linear-gradient(135deg, #2563EB, #38BDF8)", color: "white" }}
-            >
-              {initials}
-            </div>
-            <button
-              onClick={toggle}
-              className="flex items-center justify-center w-8 h-8 rounded text-text-muted hover:text-text-primary hover:bg-white/[0.04] transition-colors"
-              aria-label="Expand sidebar"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+      {/* Footer */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "12px 14px" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#F5F7FA", marginBottom: 2 }}>
+          {tenantName}
+        </div>
+        <div style={{
+          fontSize: 9,
+          textTransform: "uppercase",
+          letterSpacing: "1px",
+          color: "#5C6373",
+          marginBottom: 8,
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>
+          {String(userRole).toUpperCase()}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span className="dot-live" />
+            <span style={{
+              fontSize: 9,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "1px",
+              color: "#10B981",
+            }}>LIVE</span>
           </div>
-        ) : (
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.03] group transition-colors">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-              style={{ background: "linear-gradient(135deg, #2563EB, #38BDF8)", color: "white" }}
-            >
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-text-primary truncate">
-                {user?.full_name ?? user?.email ?? "User"}
-              </p>
-              <p className="text-2xs text-text-muted truncate capitalize">
-                {user?.roles?.[0] ?? "analyst"}
-              </p>
-            </div>
-            <button
-              onClick={clearAuth}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded text-text-muted hover:text-critical transition-all"
-              title="Sign out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 11,
+            color: "#5C6373",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            <Monitor size={11} />
+            <span>{alertCount > 0 ? alertCount : "—"}</span>
           </div>
-        )}
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            width: "100%",
+            padding: "6px",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "#5C6373",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.05)",
+            cursor: "pointer",
+            transition: "all 120ms",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+          onMouseOver={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = "#F5F7FA";
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)";
+          }}
+          onMouseOut={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.color = "#5C6373";
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.05)";
+          }}
+        >
+          <LogOut size={11} />
+          Sign out
+        </button>
       </div>
     </aside>
   );
