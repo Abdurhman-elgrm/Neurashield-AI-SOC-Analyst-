@@ -5,11 +5,6 @@ interface LogoProps {
   className?: string
 }
 
-// viewBox is 180×112 — wide to hold the horizontal light beams
-// ring center: cx=90 cy=56 r=38
-// beam zones: left 0→52, right 128→180
-// dots: top cy=5, bottom cy=107
-
 export function LogoIcon({
   size = 44,
   compact = false,
@@ -19,11 +14,11 @@ export function LogoIcon({
   compact?: boolean
   className?: string
 }) {
-  // compact=true crops the long beams → nearly-square, fits sidebar
-  // compact=false shows the full wide composition with beams
-  const vb   = compact ? '34 0 112 112' : '0 0 180 112'
-  const ratio = compact ? (112 / 112)   : (180 / 112)
+  // size controls HEIGHT. compact mode clips long beams → ~square, fits sidebar.
+  const vb    = compact ? '34 0 112 112' : '0 0 180 112'
+  const ratio = compact ? 1.0 : (180 / 112)
   const w = size * ratio
+
   return (
     <svg
       width={w}
@@ -34,95 +29,79 @@ export function LogoIcon({
       className={className}
     >
       <defs>
-        {/* Ring bloom — 4 levels of glow, outermost to tightest */}
-        <filter id="logo-bloom-xl" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="9" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
+        {/* Atmospheric halo — wide, very faint, stays outside the ring stroke */}
         <filter id="logo-bloom-lg" x="-40%" y="-40%" width="180%" height="180%">
           <feGaussianBlur stdDeviation="5" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <filter id="logo-bloom-md" x="-25%" y="-25%" width="150%" height="150%">
+        {/* Medium glow */}
+        <filter id="logo-bloom-md" x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="2.5" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <filter id="logo-bloom-sm" x="-15%" y="-15%" width="130%" height="130%">
-          <feGaussianBlur stdDeviation="1.2" result="b"/>
+        {/* Tight near-core glow */}
+        <filter id="logo-bloom-sm" x="-12%" y="-12%" width="124%" height="124%">
+          <feGaussianBlur stdDeviation="1.1" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-
         {/* Dot glow */}
-        <filter id="logo-dot-bloom" x="-250%" y="-250%" width="600%" height="600%">
-          <feGaussianBlur stdDeviation="3" result="b"/>
+        <filter id="logo-dot" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="2.2" result="b"/>
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-
-        {/* Beam soft-glow layer (blur only, no merge — creates soft halo) */}
-        <filter id="logo-beam-glow" x="-15%" y="-300%" width="130%" height="700%">
-          <feGaussianBlur stdDeviation="2.5"/>
+        {/* Beam soft spread — blur only, no merge (just a haze behind the line) */}
+        <filter id="logo-beam" x="-5%" y="-300%" width="110%" height="700%">
+          <feGaussianBlur stdDeviation="1.8"/>
         </filter>
 
-        {/* Beam gradients — fade transparent→bright toward ring edge */}
+        {/* Beam gradients — fade in from edges toward ring */}
         <linearGradient id="logo-bl" x1="0" y1="0" x2="52" y2="0" gradientUnits="userSpaceOnUse">
           <stop offset="0%"   stopColor="white" stopOpacity="0"/>
-          <stop offset="75%"  stopColor="white" stopOpacity="0.55"/>
-          <stop offset="100%" stopColor="white" stopOpacity="0.85"/>
+          <stop offset="65%"  stopColor="white" stopOpacity="0.35"/>
+          <stop offset="100%" stopColor="white" stopOpacity="0.7"/>
         </linearGradient>
         <linearGradient id="logo-br" x1="128" y1="0" x2="180" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor="white" stopOpacity="0.85"/>
-          <stop offset="25%"  stopColor="white" stopOpacity="0.55"/>
+          <stop offset="0%"   stopColor="white" stopOpacity="0.7"/>
+          <stop offset="35%"  stopColor="white" stopOpacity="0.35"/>
           <stop offset="100%" stopColor="white" stopOpacity="0"/>
         </linearGradient>
       </defs>
 
-      {/* ── LEFT BEAM ─────────────────────────────────────────────── */}
-      {/* soft glow layer */}
-      <rect x="0" y="50" width="52" height="12"
-        fill="url(#logo-bl)" opacity="0.4" filter="url(#logo-beam-glow)"/>
-      {/* bright core */}
-      <rect x="0" y="54.5" width="52" height="3"
-        fill="url(#logo-bl)" opacity="0.9"/>
+      {/* ── BEAMS — 1px core + very subtle haze ──────────────────── */}
+      <rect x="0"   y="53.5" width="52" height="5"
+        fill="url(#logo-bl)" opacity="0.18" filter="url(#logo-beam)"/>
+      <rect x="0"   y="55.3" width="52" height="1.4"
+        fill="url(#logo-bl)" opacity="0.8"/>
 
-      {/* ── RIGHT BEAM ────────────────────────────────────────────── */}
-      <rect x="128" y="50" width="52" height="12"
-        fill="url(#logo-br)" opacity="0.4" filter="url(#logo-beam-glow)"/>
-      <rect x="128" y="54.5" width="52" height="3"
-        fill="url(#logo-br)" opacity="0.9"/>
+      <rect x="128" y="53.5" width="52" height="5"
+        fill="url(#logo-br)" opacity="0.18" filter="url(#logo-beam)"/>
+      <rect x="128" y="55.3" width="52" height="1.4"
+        fill="url(#logo-br)" opacity="0.8"/>
 
-      {/* ── RING — outermost atmospheric halo ─────────────────────── */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="28" fill="none"
-        opacity="0.03" filter="url(#logo-bloom-xl)"/>
-      {/* wide bloom */}
-      <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="14" fill="none"
-        opacity="0.07" filter="url(#logo-bloom-lg)"/>
-      {/* medium glow */}
+      {/* ── RING — 3 layers only, thin strokes keep center dark ───── */}
+      {/* 1. Atmospheric outer halo (thin stroke = blur stays outside ring) */}
       <circle cx="90" cy="56" r="38"
         stroke="white" strokeWidth="7" fill="none"
-        opacity="0.2" filter="url(#logo-bloom-md)"/>
-      {/* inner-edge glow (slightly inside — creates the inward-bright look) */}
-      <circle cx="90" cy="56" r="35"
-        stroke="white" strokeWidth="5" fill="none"
-        opacity="0.22" filter="url(#logo-bloom-md)"/>
-      {/* tight near-core glow */}
+        opacity="0.08" filter="url(#logo-bloom-lg)"/>
+      {/* 2. Clean medium glow */}
       <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="2" fill="none"
-        opacity="0.6" filter="url(#logo-bloom-sm)"/>
-      {/* core line — thin, near-full opacity */}
+        stroke="white" strokeWidth="3.5" fill="none"
+        opacity="0.28" filter="url(#logo-bloom-md)"/>
+      {/* 3. Tight bright halo */}
       <circle cx="90" cy="56" r="38"
-        stroke="white" strokeWidth="1.4" fill="none"
-        opacity="0.95"/>
+        stroke="white" strokeWidth="1.8" fill="none"
+        opacity="0.65" filter="url(#logo-bloom-sm)"/>
+      {/* 4. Crisp core line */}
+      <circle cx="90" cy="56" r="38"
+        stroke="white" strokeWidth="1.2" fill="none"
+        opacity="1"/>
 
-      {/* ── DOTS ──────────────────────────────────────────────────── */}
-      {/* top dot (13px above ring edge at cy=18) */}
-      <circle cx="90" cy="5"   r="2.5" fill="white" filter="url(#logo-dot-bloom)"/>
-      {/* bottom dot (13px below ring edge at cy=94) */}
-      <circle cx="90" cy="107" r="2.5" fill="white" filter="url(#logo-dot-bloom)"/>
+      {/* ── DOTS ─────────────────────────────────────────────────── */}
+      <circle cx="90" cy="5"   r="2.2" fill="white" filter="url(#logo-dot)"/>
+      <circle cx="90" cy="107" r="2.2" fill="white" filter="url(#logo-dot)"/>
 
-      {/* center point — very subtle */}
-      <circle cx="90" cy="56" r="1.4" fill="white" opacity="0.38"/>
+      {/* Center mark — barely visible */}
+      <circle cx="90" cy="56" r="1.1" fill="white" opacity="0.3"/>
     </svg>
   )
 }
@@ -131,7 +110,7 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
       <LogoIcon size={size} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span style={{
           fontFamily: "'Orbitron', sans-serif",
           fontSize: 16,
@@ -139,7 +118,7 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
           letterSpacing: '0.22em',
           textTransform: 'uppercase' as const,
           lineHeight: 1,
-          background: 'linear-gradient(180deg, #E2E8F0 0%, #94A3B8 45%, #334155 100%)',
+          background: 'linear-gradient(180deg, #FFFFFF 0%, #CBD5E1 40%, #475569 100%)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
