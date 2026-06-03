@@ -17,7 +17,7 @@ export function LogoIcon({
 }) {
   return (
     <img
-      src="/logo.png"
+      src="/neurashield.png"
       alt="NEURASHIELD"
       height={size}
       width={size}
