@@ -358,26 +358,28 @@ input:-webkit-autofill:focus {
     white-space: nowrap;
   }
   .btn-primary {
-    background: var(--blue-600);
-    border-color: rgba(96,165,250,0.25);
-    color: #fff;
+    background: #0f2744;
+    border-color: rgba(59,130,246,0.25);
+    color: #93C5FD;
   }
   .btn-primary:hover {
-    background: var(--blue-500);
-    box-shadow: 0 0 16px rgba(59,130,246,0.25);
+    background: #162f52;
+    border-color: rgba(96,165,250,0.4);
+    color: #BAD6FB;
+    box-shadow: 0 0 12px rgba(59,130,246,0.15);
   }
   .btn-ghost {
     background: transparent;
-    border-color: var(--border);
-    color: var(--tx-3);
+    border-color: transparent;
+    color: #5C6373;
   }
-  .btn-ghost:hover { background: var(--bg-hover); color: var(--tx-1); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.03); color: #B8C0CC; }
   .btn-danger {
-    background: rgba(239,68,68,0.1);
+    background: transparent;
     border-color: rgba(239,68,68,0.2);
-    color: #FCA5A5;
+    color: #F87171;
   }
-  .btn-danger:hover { background: rgba(239,68,68,0.18); }
+  .btn-danger:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.3); }
   .btn-sm { padding: 4px 10px; font-size: 11px; }
 
   /* ─ Input ─ */
@@ -458,9 +460,9 @@ input:-webkit-autofill:focus {
   }
 
   .btn-secondary {
-    background: rgba(59,130,246,0.08);
-    border: 1px solid rgba(59,130,246,0.2);
-    color: #60A5FA;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #8B95A7;
     font-weight: 500;
     border-radius: 6px;
     padding: 8px 16px;
@@ -472,8 +474,9 @@ input:-webkit-autofill:focus {
     cursor: pointer;
   }
   .btn-secondary:hover:not(:disabled) {
-    background: rgba(59,130,246,0.15);
-    border-color: rgba(59,130,246,0.4);
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.14);
+    color: #D1D9E0;
   }
 
   .sidebar-item {
