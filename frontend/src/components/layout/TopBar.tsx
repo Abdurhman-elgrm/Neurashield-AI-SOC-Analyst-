@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, Search, LogOut, User, Settings } from "lucide-react";
+import { ChevronDown, Search, LogOut, User, Settings, Plus, Loader } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useRealtimeStore } from "@/stores/realtimeStore";
 import { NotificationBell } from "@/components/notifications/NotificationCenter";
+import { fetchMyTenants, createTenant } from "@/api/tenants";
+import type { Tenant, MemberRole } from "@/types/tenant";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -134,24 +136,154 @@ function UserMenu() {
 // ─── Tenant selector ──────────────────────────────────────────────────────────
 
 function TenantSelector() {
-  const activeTenant = useTenantStore((s) => s.activeTenant);
-  if (!activeTenant) return <span style={{ fontSize: 12, color: "#5C6373" }}>No tenant</span>;
+  const activeTenant   = useTenantStore((s) => s.activeTenant);
+  const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
+  const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
+
+  const [open,     setOpen]     = useState(false);
+  const [tenants,  setTenants]  = useState<Tenant[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName,  setNewName]  = useState("");
+
+  const openDropdown = async () => {
+    setOpen(true);
+    setLoading(true);
+    try {
+      const list = await fetchMyTenants();
+      setTenants(list);
+    } catch {
+      setTenants([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectTenant = (t: Tenant) => {
+    const role: MemberRole = "analyst";
+    setStoreTenant(t, role);
+    setAuthTenant(t.id);
+    setOpen(false);
+  };
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    setCreating(true);
+    try {
+      const tenant = await createTenant(newName.trim());
+      selectTenant(tenant);
+      setNewName("");
+    } catch (err) {
+      console.error("[TenantSelector] create failed:", err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
-    <button style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 5,
-      fontSize: 13,
-      fontWeight: 600,
-      color: "#F5F7FA",
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      padding: 0,
-    }}>
-      {activeTenant.name}
-      <ChevronDown size={12} style={{ color: "#5C6373" }} />
-    </button>
+    <div style={{ position: "relative" }}>
+      {/* Trigger */}
+      <button
+        onClick={openDropdown}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          fontSize: 13, fontWeight: activeTenant ? 600 : 400,
+          color: activeTenant ? "#F5F7FA" : "#F59E0B",
+          background: activeTenant ? "none" : "rgba(245,158,11,0.08)",
+          border: activeTenant ? "none" : "1px solid rgba(245,158,11,0.2)",
+          borderRadius: 6, padding: activeTenant ? 0 : "3px 8px",
+          cursor: "pointer",
+        }}
+      >
+        {activeTenant ? activeTenant.name : "No tenant — click to set"}
+        <ChevronDown size={12} style={{ color: "#5C6373" }} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
+          <div style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0,
+            background: "#111111", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, zIndex: 100, minWidth: 220, overflow: "hidden",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+          }}>
+            {loading && (
+              <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8, color: "#5C6373", fontSize: 12 }}>
+                <Loader size={12} className="animate-spin" /> Loading…
+              </div>
+            )}
+
+            {!loading && tenants.length > 0 && (
+              <>
+                <div style={{ padding: "6px 10px 4px", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#5C6373" }}>
+                  Your workspaces
+                </div>
+                {tenants.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => selectTenant(t)}
+                    style={{
+                      display: "flex", alignItems: "center", width: "100%",
+                      padding: "8px 14px", background: activeTenant?.id === t.id ? "rgba(59,130,246,0.1)" : "transparent",
+                      border: "none", color: activeTenant?.id === t.id ? "#93C5FD" : "#F5F7FA",
+                      fontSize: 13, cursor: "pointer", textAlign: "left",
+                      transition: "background 120ms",
+                    }}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "4px 0" }} />
+              </>
+            )}
+
+            {/* Create workspace */}
+            {!loading && (
+              <div style={{ padding: "8px 10px" }}>
+                {!creating ? (
+                  <button
+                    onClick={() => setCreating(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6, width: "100%",
+                      padding: "7px 8px", background: "transparent", border: "none",
+                      color: "#8B95A7", fontSize: 12, cursor: "pointer",
+                      borderRadius: 5, transition: "background 120ms",
+                    }}
+                  >
+                    <Plus size={12} /> New workspace
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      autoFocus
+                      className="inp"
+                      style={{ flex: 1, fontSize: 12, height: 30, padding: "0 8px" }}
+                      placeholder="Workspace name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setCreating(false); }}
+                    />
+                    <button
+                      onClick={handleCreate}
+                      disabled={!newName.trim()}
+                      style={{
+                        padding: "0 10px", height: 30, borderRadius: 5, fontSize: 11,
+                        background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
+                        color: "#93C5FD", cursor: "pointer",
+                      }}
+                    >
+                      Create
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
