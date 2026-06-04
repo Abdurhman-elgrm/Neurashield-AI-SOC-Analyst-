@@ -3,14 +3,19 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
+import { useTenantStore } from "@/stores/tenantStore";
 import { authApi } from "@/api/auth";
+import { fetchMyTenants } from "@/api/tenants";
 import { cn, extractApiError } from "@/lib/utils";
 import { LogoFull } from "@/components/ui/Logo";
+import type { MemberRole } from "@/types/tenant";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const setAuth        = useAuthStore((s) => s.setAuth);
+  const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
+  const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +36,21 @@ export function LoginPage() {
         tokens.access_token,
         tokens.refresh_token,
       );
+
+      // Fetch and auto-select the first tenant so X-Tenant-ID is set immediately.
+      // fetchMyTenants() only needs the Bearer token — no X-Tenant-ID required.
+      try {
+        const tenants = await fetchMyTenants();
+        if (tenants.length > 0) {
+          const tenant = tenants[0];
+          const role: MemberRole = "analyst";
+          setStoreTenant(tenant, role);
+          setAuthTenant(tenant.id);
+        }
+      } catch {
+        // Non-fatal — useTenantInit in AppShell will retry on next render
+      }
+
       navigate(from, { replace: true });
     } catch (err) {
       setError(extractApiError(err));
