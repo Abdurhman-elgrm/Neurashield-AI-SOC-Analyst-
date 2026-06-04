@@ -16,10 +16,15 @@ export const installerApi = {
     limit?: number;
     status?: string;
   }): Promise<InstallerTokensPage> => {
-    const resp = await apiClient.get<InstallerTokensPage>("/installer/tokens", {
-      params,
-    });
-    return resp.data;
+    try {
+      const resp = await apiClient.get<InstallerTokensPage>("/installer/tokens", {
+        params,
+      });
+      return resp.data;
+    } catch (error) {
+      console.error("[installerApi.list] failed:", error);
+      throw error;
+    }
   },
 
   getStatus: (id: string) =>

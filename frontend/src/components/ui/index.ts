@@ -10,5 +10,6 @@ export * from "./Modal";
 export * from "./Select";
 export * from "./Skeleton";
 export * from "./Tabs";
+export * from "./SevBadge";
 export * from "./Toaster";
 export * from "./Tooltip";

@@ -5,9 +5,14 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import { useAuthStore } from "@/stores/authStore";
+import { useTenantStore } from "@/stores/tenantStore";
 import type { APIResponse } from "@/types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+if (!import.meta.env.VITE_API_URL && import.meta.env.PROD) {
+  console.error("[API] VITE_API_URL is not set — requests will fail in production");
+}
 const API_PREFIX = "/api/v1";
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
@@ -29,7 +34,10 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    const tenantId = useAuthStore.getState().activeTenantId;
+    // Prefer in-memory tenantStore (current session); fall back to persisted authStore value
+    const tenantId =
+      useTenantStore.getState().activeTenant?.id ??
+      useAuthStore.getState().activeTenantId;
     if (tenantId) {
       config.headers["X-Tenant-ID"] = tenantId;
     }

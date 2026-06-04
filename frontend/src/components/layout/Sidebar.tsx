@@ -16,6 +16,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
 import { LogoCompact } from "@/components/ui/Logo";
 import { getAlerts } from "@/services/alertsApi";
+import { agentsApi } from "@/api/agents";
 import { useQuery } from "@tanstack/react-query";
 
 // ─── Live badge counts ────────────────────────────────────────────────────────
@@ -29,6 +30,20 @@ function useOpenAlertCount() {
     retry: false,
   });
   return data?.total ?? 0;
+}
+
+function useOnlineAgentCount() {
+  const { data } = useQuery({
+    queryKey: ["sidebar", "agents-online"],
+    queryFn: async () => {
+      const resp = await agentsApi.list({ status: "online", limit: 1 });
+      return resp.data.pagination.total;
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  return data ?? 0;
 }
 
 // ─── NavItem ─────────────────────────────────────────────────────────────────
@@ -109,6 +124,7 @@ export function Sidebar() {
   const memberRole = useTenantStore((s) => s.memberRole);
   const navigate   = useNavigate();
   const alertCount = useOpenAlertCount();
+  const onlineAgentCount = useOnlineAgentCount();
 
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -161,7 +177,7 @@ export function Sidebar() {
         <NavItem to="/copilot" icon={Sparkles} label="AI Copilot" badge="BETA" badgeColor="blue" />
 
         <div className="sec-label">Platform</div>
-        <NavItem to="/agents"   icon={Monitor}  label="Agents" />
+        <NavItem to="/agents"   icon={Monitor}  label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
         <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 

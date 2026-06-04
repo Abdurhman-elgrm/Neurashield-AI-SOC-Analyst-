@@ -66,7 +66,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     session = factory()
     try:
         yield session
-        await session.rollback()  # Tests are isolated — never commit
+        await session.rollback()
     finally:
         await session.close()
 

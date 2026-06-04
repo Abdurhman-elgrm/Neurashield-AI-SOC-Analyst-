@@ -346,8 +346,24 @@ function Pagination({
 const PAGE_LIMIT = 25;
 
 export function InstallerPage() {
+  const activeTenant = useTenantStore((s) => s.activeTenant);
   const hasRole = useTenantStore((s) => s.hasRole);
   const canManage = hasRole("admin");
+
+  // Guard: no tenant selected yet
+  if (!activeTenant) {
+    return (
+      <div style={{ textAlign: "center", padding: "80px 0" }}>
+        <Server style={{ width: 36, height: 36, color: "#3A4150", margin: "0 auto 16px", display: "block" }} />
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#5C6373", marginBottom: 8 }}>
+          No workspace selected
+        </div>
+        <div style={{ fontSize: 12, color: "#3A4150" }}>
+          Select a workspace from the top navigation to continue
+        </div>
+      </div>
+    );
+  }
 
   const [statusFilter, setStatusFilter] = useState<
     InstallerTokenStatus | "all"
@@ -362,7 +378,7 @@ export function InstallerPage() {
     null,
   );
 
-  const { data, isLoading, isError, refetch, isFetching } =
+  const { data, isLoading, isError, error, refetch, isFetching } =
     useInstallerTokens(page, PAGE_LIMIT, statusFilter);
 
   const tokens = data?.data ?? [];
@@ -445,19 +461,31 @@ export function InstallerPage() {
           <motion.div
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-start gap-3 p-4 rounded-lg bg-severity-critical/8 border border-severity-critical/20"
+            style={{
+              padding: 16, borderRadius: 8,
+              background: "rgba(239,68,68,0.06)",
+              border: "1px solid rgba(239,68,68,0.15)",
+              display: "flex", alignItems: "flex-start", gap: 10,
+            }}
           >
-            <AlertTriangle className="w-4 h-4 text-severity-critical mt-0.5 flex-shrink-0" />
+            <AlertTriangle size={16} style={{ color: "#F87171", flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="text-sm font-medium text-severity-critical">
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#F87171", marginBottom: 4 }}>
                 Failed to load tokens
-              </p>
+              </div>
+              <div style={{ fontSize: 11, color: "#8B95A7", marginBottom: 10 }}>
+                {(error as Error)?.message ?? "Could not connect to the server"}
+              </div>
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="text-xs text-text-muted hover:text-text-secondary mt-1 underline"
+                style={{
+                  fontSize: 11, color: "#60A5FA", background: "none",
+                  border: "none", cursor: "pointer", padding: 0,
+                  display: "flex", alignItems: "center", gap: 4,
+                }}
               >
-                Retry
+                <RefreshCw size={11} /> Try again
               </button>
             </div>
           </motion.div>
