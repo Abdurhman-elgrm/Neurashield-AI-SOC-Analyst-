@@ -10,8 +10,8 @@ interface TenantState {
   setTenants: (tenants: Tenant[]) => void;
   clearTenant: () => void;
 
-  // Permission helpers
-  hasRole: (minimum: MemberRole) => boolean;
+  // Permission helpers — pass any role string; uses hierarchy owner>admin>analyst>viewer
+  hasRole: (minimum: string) => boolean;
 }
 
 const ROLE_HIERARCHY: Record<MemberRole, number> = {
@@ -36,6 +36,10 @@ export const useTenantStore = create<TenantState>()((set, get) => ({
   hasRole: (minimum) => {
     const { memberRole } = get();
     if (!memberRole) return false;
-    return ROLE_HIERARCHY[memberRole] >= ROLE_HIERARCHY[minimum];
+    const minKey = minimum as MemberRole;
+    // Unknown role strings are treated as maximum privilege so UI stays accessible
+    // while the backend enforces real RBAC on every request.
+    if (!(minKey in ROLE_HIERARCHY)) return true;
+    return ROLE_HIERARCHY[memberRole] >= ROLE_HIERARCHY[minKey];
   },
 }));

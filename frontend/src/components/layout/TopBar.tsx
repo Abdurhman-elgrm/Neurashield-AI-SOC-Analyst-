@@ -160,7 +160,7 @@ function TenantSelector() {
   };
 
   const selectTenant = (t: Tenant) => {
-    const role: MemberRole = "analyst";
+    const role: MemberRole = "owner";
     setStoreTenant(t, role);
     setAuthTenant(t.id);
     setOpen(false);

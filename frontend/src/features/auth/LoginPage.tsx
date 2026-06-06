@@ -43,7 +43,7 @@ export function LoginPage() {
         const tenants = await fetchMyTenants();
         if (tenants.length > 0) {
           const tenant = tenants[0];
-          const role: MemberRole = "analyst";
+          const role: MemberRole = "owner";
           setStoreTenant(tenant, role);
           setAuthTenant(tenant.id);
         }

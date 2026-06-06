@@ -349,7 +349,7 @@ export function InstallerPage() {
   // ALL hooks must come before any conditional returns (Rules of Hooks)
   const activeTenant = useTenantStore((s) => s.activeTenant);
   const hasRole      = useTenantStore((s) => s.hasRole);
-  const canManage    = hasRole("admin");
+  const canManage    = hasRole("admin") || hasRole("owner");
 
   const [statusFilter, setStatusFilter] = useState<InstallerTokenStatus | "all">("all");
   const [page, setPage]                 = useState(1);

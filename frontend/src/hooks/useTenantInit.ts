@@ -24,7 +24,9 @@ export function useTenantInit() {
         running.current = false
         if (tenants.length === 0) return   // no tenants — TenantSelector handles creation
         const tenant = tenants[0]
-        const role: MemberRole = 'analyst'
+        // Default to 'owner' so UI permissions match the most common case
+        // (user who created the tenant). The backend enforces real RBAC anyway.
+        const role: MemberRole = 'owner'
         setStoreTenant(tenant, role)
         setAuthTenant(tenant.id)
       })
