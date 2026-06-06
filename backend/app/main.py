@@ -62,6 +62,9 @@ def create_application() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        # Also accept any Railway deployment automatically via regex.
+        # Falls back to no regex if CORS_ALLOW_ORIGIN_REGEX is empty string.
+        allow_origin_regex=settings.CORS_ALLOW_ORIGIN_REGEX or None,
         allow_credentials=not use_wildcard,
         allow_methods=["*"],
         allow_headers=["*"],

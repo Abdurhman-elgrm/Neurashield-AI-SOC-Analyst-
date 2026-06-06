@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # ─── API ──────────────────────────────────────────────────────────────────
     API_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # Regex accepts any Railway.app deployment automatically (no Variables needed).
+    # Override with CORS_ALLOW_ORIGIN_REGEX="" to disable.
+    CORS_ALLOW_ORIGIN_REGEX: str = r"https://.*\.up\.railway\.app"
 
     # ─── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str
