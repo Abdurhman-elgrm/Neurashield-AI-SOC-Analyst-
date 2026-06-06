@@ -15,6 +15,7 @@ from app.models.event import Event
 from app.models.alert import Alert
 from app.models.installer_token import InstallerToken
 from app.models.investigation import Investigation
+from app.models.api_key import ApiKey
 from app.models.analyst import (
     InvestigationNote,
     InvestigationAssignment,
@@ -39,6 +40,7 @@ __all__ = [
     "Alert",
     "InstallerToken",
     "Investigation",
+    "ApiKey",
     "InvestigationNote",
     "InvestigationAssignment",
     "InvestigationActivity",
