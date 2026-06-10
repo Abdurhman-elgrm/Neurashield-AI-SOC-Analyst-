@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import database_manager
+from app.core.database import database_manager, get_db
 from app.core.redis import redis_manager
 
 router = APIRouter(tags=["Health"])
@@ -56,3 +57,31 @@ async def readiness() -> JSONResponse:
             "environment": settings.ENVIRONMENT,
         },
     )
+
+
+@router.get("/health/db", include_in_schema=False)
+async def db_schema_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """
+    Debug endpoint — lists all public tables in the database.
+    Useful for verifying migrations ran correctly on Railway.
+    """
+    try:
+        from sqlalchemy import text
+        result = await db.execute(text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' ORDER BY table_name"
+        ))
+        tables = [row[0] for row in result.fetchall()]
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "ok",
+                "table_count": len(tables),
+                "tables": tables,
+            },
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "error": str(exc)},
+        )
