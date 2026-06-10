@@ -39,22 +39,24 @@ class AuditService:
         Errors are swallowed to prevent audit failures from blocking operations.
         """
         try:
-            entry = AuditLog(
-                action=action,
-                actor_id=actor_id,
-                tenant_id=tenant_id,
-                actor_role=actor_role,
-                permission_used=permission_used,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                changes=changes,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                request_id=get_request_id(),
-            )
-            db.add(entry)
-            # Flush without committing — the outer request transaction commits this
-            await db.flush([entry])
+            # SAVEPOINT: a failure here rolls back only this nested transaction,
+            # leaving the parent session transaction intact so the caller can
+            # still commit the primary operation (e.g. the installer token row).
+            async with db.begin_nested():
+                entry = AuditLog(
+                    action=action,
+                    actor_id=actor_id,
+                    tenant_id=tenant_id,
+                    actor_role=actor_role,
+                    permission_used=permission_used,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    changes=changes,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    request_id=get_request_id(),
+                )
+                db.add(entry)
             logger.debug(
                 "audit_log_written",
                 action=action,
@@ -62,4 +64,9 @@ class AuditService:
                 tenant_id=str(tenant_id) if tenant_id else None,
             )
         except Exception as exc:
-            logger.error("audit_log_failed", action=action, error=str(exc))
+            logger.error(
+                "audit_log_failed",
+                action=action,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )

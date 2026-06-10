@@ -58,7 +58,16 @@ class InstallerService:
             created_by_id=created_by_id,
         )
         db.add(token)
-        await db.flush()
+        try:
+            await db.flush()
+        except Exception as flush_err:
+            logger.error(
+                "installer_token_flush_failed",
+                error=str(flush_err),
+                error_type=type(flush_err).__name__,
+                tenant_id=str(tenant_id),
+            )
+            raise
 
         await AuditService.log(
             db,

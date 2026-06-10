@@ -112,7 +112,17 @@ async def generate_installer_token(
     result = await InstallerService.generate_installer_token(
         db, m.tenant_id, payload, created_by_id=m.user_id
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as commit_err:
+        logger.error(
+            "installer_token_commit_failed",
+            error=str(commit_err),
+            error_type=type(commit_err).__name__,
+            tenant_id=str(m.tenant_id),
+        )
+        await db.rollback()
+        raise
 
     logger.info(
         "installer_token_generated_via_api",
