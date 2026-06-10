@@ -157,9 +157,9 @@ export function Sidebar() {
     }}>
 
       {/* Logo */}
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+      <NavLink to="/dashboard" style={{ display: "block", textDecoration: "none", padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)", cursor: "pointer" }}>
         <LogoCompact />
-      </div>
+      </NavLink>
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>

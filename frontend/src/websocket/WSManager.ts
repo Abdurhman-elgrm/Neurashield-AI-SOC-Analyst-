@@ -121,7 +121,8 @@ export class WSManager {
     this._setState("connecting");
 
     const base = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
-    const url = `${base}/ws/realtime?token=${encodeURIComponent(this.token)}&tenant_id=${encodeURIComponent(this.tenantId)}`;
+    const apiPrefix = base.includes("localhost") ? "" : "/api/v1";
+    const url = `${base}${apiPrefix}/ws/realtime?token=${encodeURIComponent(this.token)}&tenant_id=${encodeURIComponent(this.tenantId)}`;
 
     try {
       this.ws = new WebSocket(url);
