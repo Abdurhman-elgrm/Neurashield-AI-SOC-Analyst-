@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
@@ -30,7 +31,7 @@ class Heartbeat(Base):
         nullable=False,
         index=True,
     )
-    received_at: Mapped[None] = mapped_column(
+    received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,

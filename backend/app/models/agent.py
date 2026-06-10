@@ -3,6 +3,8 @@ from __future__ import annotations
 import enum
 from uuid import uuid4
 
+from datetime import datetime
+
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,7 +56,7 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     agent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     enrollment_token_hash: Mapped[str] = mapped_column(String(512), nullable=False)
-    last_seen_at: Mapped[None] = mapped_column(
+    last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
