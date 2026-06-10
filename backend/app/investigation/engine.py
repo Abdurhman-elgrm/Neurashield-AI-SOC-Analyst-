@@ -150,7 +150,7 @@ class InvestigationEngine:
                     :investigation_id, :tenant_id, :investigation_group_id,
                     :threat_score, :confidence, :tp_probability, :fp_probability,
                     :executive_summary, :technical_summary,
-                    :attack_progression::jsonb, :recommended_actions::jsonb, :status,
+                    :attack_progression, :recommended_actions, :status,
                     NOW(), NOW()
                 )
                 ON CONFLICT (id) DO UPDATE SET
