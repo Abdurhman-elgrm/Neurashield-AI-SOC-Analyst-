@@ -76,7 +76,17 @@ class NormalizedEvent:
 
     def to_dict(self) -> dict[str, Any]:
         import dataclasses
-        return dataclasses.asdict(self)
+
+        def _convert(obj: Any) -> Any:
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if isinstance(obj, dict):
+                return {k: _convert(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_convert(i) for i in obj]
+            return obj
+
+        return _convert(dataclasses.asdict(self))
 
     @property
     def source_ip(self) -> str | None:
