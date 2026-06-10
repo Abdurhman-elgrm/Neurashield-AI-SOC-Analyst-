@@ -81,8 +81,10 @@ class EventMatcher:
         process_tree_id = payload.get("process_tree_id")
         event_chain_id  = payload.get("event_chain_id")
 
-        entities: list[dict] = payload.get("entities", [])
-        entity_keys: list[str] = [e.get("key", "") for e in entities if e.get("key")]
+        entities = payload.get("entities", [])
+        if isinstance(entities, dict):
+            entities = [e for group in entities.values() if isinstance(group, list) for e in group]
+        entity_keys: list[str] = [e.get("key", "") for e in entities if isinstance(e, dict) and e.get("key")]
 
         # ── same_host_burst ──────────────────────────────────────────────────
         if correlation_id:
