@@ -31,16 +31,17 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/installer", tags=["installer"])
 
-_BOOTSTRAP_SCRIPT = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "scripts", "bootstrap.ps1"
+_SCRIPTS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts")
 )
+_BOOTSTRAP_SCRIPT = os.path.join(_SCRIPTS_DIR, "bootstrap.ps1")
 
 
 @router.get("/bootstrap.ps1", include_in_schema=False)
 async def download_bootstrap_script() -> PlainTextResponse:
     """Serves the PowerShell bootstrap installer script for download."""
     try:
-        with open(os.path.normpath(_BOOTSTRAP_SCRIPT), "r", encoding="utf-8") as f:
+        with open(_BOOTSTRAP_SCRIPT, "r", encoding="utf-8") as f:
             content = f.read()
         return PlainTextResponse(
             content=content,
@@ -49,6 +50,22 @@ async def download_bootstrap_script() -> PlainTextResponse:
         )
     except FileNotFoundError:
         return PlainTextResponse("# bootstrap.ps1 not found", status_code=404)
+
+
+@router.get("/soc_agent_v2.py", include_in_schema=False)
+async def download_agent_script() -> PlainTextResponse:
+    """Serves the V2 Python agent script for download."""
+    path = os.path.join(_SCRIPTS_DIR, "soc_agent_v2.py")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return PlainTextResponse(
+            content=content,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": 'attachment; filename="soc_agent_v2.py"'},
+        )
+    except FileNotFoundError:
+        return PlainTextResponse("# soc_agent_v2.py not found", status_code=404)
 
 # Rate limit: 50 token generations per hour per tenant
 _RATE_LIMIT = 50
