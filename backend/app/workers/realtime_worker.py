@@ -11,8 +11,6 @@ Consumes two pipeline streams per tenant using the GROUP_REALTIME consumer group
 One instance runs per tenant per backend process.
 """
 
-from __future__ import annotations
-
 import asyncio
 from typing import Any
 
