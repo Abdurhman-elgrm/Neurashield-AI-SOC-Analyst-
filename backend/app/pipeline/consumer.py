@@ -91,7 +91,7 @@ class StreamConsumer:
 
     async def _reclaim_stuck(self, handler: MessageHandler) -> None:
         try:
-            _next_id, messages = await self._client.xautoclaim(
+            result = await self._client.xautoclaim(
                 stream=self._stream,
                 group=self._group,
                 consumer=self._consumer_name,
@@ -99,6 +99,8 @@ class StreamConsumer:
                 start_id="0-0",
                 count=BATCH_SIZE,
             )
+            # Redis 7+ returns (next_id, messages, deleted_ids); older returns (next_id, messages)
+            _next_id, messages = result[0], result[1]
         except Exception as exc:
             logger.warning("xautoclaim_error", stream=self._stream, error=str(exc))
             return
