@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 NEURASHIELD SOC Agent v2.0
-Reads credentials from C:\ProgramData\SOCAnalyst\credentials.json
+Reads credentials from C:\\ProgramData\\SOCAnalyst\\credentials.json
 Uses V2 backend auth: X-Agent-ID + X-Agent-Token + X-Tenant-ID
 """
 
@@ -41,7 +41,7 @@ def _load_credentials():
             f"Credentials not found at {_CREDS_FILE}. "
             "Run bootstrap.ps1 first to enroll this device."
         )
-    with open(_CREDS_FILE, encoding="utf-8") as f:
+    with open(_CREDS_FILE, encoding="utf-8-sig") as f:
         creds = json.load(f)
     missing = [k for k in ("agent_id", "enrollment_token", "tenant_id", "api_url")
                if not creds.get(k)]
