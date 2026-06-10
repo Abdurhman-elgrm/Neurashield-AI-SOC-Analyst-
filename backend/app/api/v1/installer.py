@@ -28,8 +28,8 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/installer", tags=["installer"])
 
-# Rate limit: 10 token generations per hour per tenant
-_RATE_LIMIT = 10
+# Rate limit: 50 token generations per hour per tenant
+_RATE_LIMIT = 50
 _RATE_WINDOW_SECS = 3600
 
 # Brute-force protection: 20 enrollment attempts per 15 minutes per IP
