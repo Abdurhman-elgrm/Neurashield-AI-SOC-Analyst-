@@ -51,7 +51,19 @@ def enrich_normalized_payload(
         for entity in group:
             all_keys.append(entity.key)
 
-    payload["entities"]             = entity_set.model_dump()
+    # Flat list so the correlation engine can iterate with entity.get("key")
+    flat_entities: list[dict] = []
+    for group in (
+        entity_set.users,
+        entity_set.hosts,
+        entity_set.ips,
+        entity_set.domains,
+        entity_set.processes,
+        entity_set.hashes,
+    ):
+        for entity in group:
+            flat_entities.append(entity.model_dump())
+    payload["entities"]             = flat_entities
     payload["correlation_id"]       = meta.correlation_id
     payload["session_id"]           = meta.session_id
     payload["process_tree_id"]      = meta.process_tree_id
