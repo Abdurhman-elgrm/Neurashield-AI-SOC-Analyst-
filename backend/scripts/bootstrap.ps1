@@ -48,24 +48,25 @@ function Write-JsonNoBom {
 }
 
 # ── Step 0: Stop any running V1 agent ────────────────────────────────────────
-$v1Script = Join-Path $INSTALL_DIR "soc_agent.py"
 $existingV1Task = Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
-
 if ($existingV1Task) {
-    $v1Action = ($existingV1Task.Actions | Select-Object -First 1).Arguments
-    if ($v1Action -like "*soc_agent.py*") {
-        Write-Host "[bootstrap] V1 agent detected — upgrading to V2..." -ForegroundColor Yellow
+    $v1Args = $existingV1Task.Actions[0].Arguments
+    if ($v1Args -like '*soc_agent.py*') {
+        Write-Host '[bootstrap] V1 agent detected - upgrading to V2...' -ForegroundColor Yellow
     }
     Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
 }
 
-# Kill any lingering pythonw/python process running soc_agent.py (V1)
-Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like "*soc_agent.py*" } |
-    ForEach-Object {
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-        Write-Host "[bootstrap] Stopped V1 agent process (PID $($_.ProcessId))" -ForegroundColor Yellow
+# Kill lingering python processes running the V1 script
+$v1Procs = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue
+if ($v1Procs) {
+    foreach ($proc in $v1Procs) {
+        if ($proc.CommandLine -like '*soc_agent.py*') {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+            Write-Host "[bootstrap] Stopped V1 agent process (PID $($proc.ProcessId))" -ForegroundColor Yellow
+        }
     }
+}
 
 # ── Step 1: Gather machine information ────────────────────────────────────────
 Write-Step "Gathering machine information..."
