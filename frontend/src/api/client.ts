@@ -74,6 +74,18 @@ apiClient.interceptors.response.use(
       _retried?: boolean;
     };
 
+    // On 403 from a tenant-scoped endpoint, the stored tenant may have been
+    // deleted or the user removed. Clear it so useTenantInit can re-validate.
+    if (error.response?.status === 403) {
+      const sentTenantId = originalRequest.headers?.["X-Tenant-ID"] as string | undefined;
+      if (sentTenantId) {
+        const stored = useAuthStore.getState().activeTenantId;
+        if (stored === sentTenantId) {
+          useAuthStore.getState().setActiveTenant(null as unknown as string);
+        }
+      }
+    }
+
     // Only attempt refresh on 401, and not on auth endpoints themselves
     if (
       error.response?.status === 401 &&

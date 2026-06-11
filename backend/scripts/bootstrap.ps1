@@ -24,6 +24,13 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference    = "SilentlyContinue"
 
+# ── OS guard ─────────────────────────────────────────────────────────────────
+if ($env:OS -ne "Windows_NT") {
+    Write-Host "[bootstrap] ERR This installer is for Windows only." -ForegroundColor Red
+    Write-Host "[bootstrap]     Linux/macOS support coming soon." -ForegroundColor Red
+    exit 1
+}
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 $INSTALL_DIR  = "C:\ProgramData\SOCAnalyst"
 $CREDS_FILE   = Join-Path $INSTALL_DIR "credentials.json"
@@ -135,14 +142,20 @@ $pythonCandidates = @(
     "C:\Python313\pythonw.exe",
     "C:\Python312\pythonw.exe",
     "C:\Python311\pythonw.exe",
+    "C:\Python310\pythonw.exe",
+    "C:\Python39\pythonw.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python314\pythonw.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python313\pythonw.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python312\pythonw.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python311\pythonw.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python310\pythonw.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Python39\pythonw.exe",
     "C:\Python314\python.exe",
     "C:\Python313\python.exe",
     "C:\Python312\python.exe",
-    "C:\Python311\python.exe"
+    "C:\Python311\python.exe",
+    "C:\Python310\python.exe",
+    "C:\Python39\python.exe"
 )
 
 $pythonExe = $null
@@ -167,7 +180,7 @@ if (-not $pythonExe) {
 }
 
 if (-not $pythonExe) {
-    Write-Fail "Python 3.11+ not found. Install from https://www.python.org/downloads/ and re-run."
+    Write-Fail "Python 3.9+ not found.`n  Install from https://www.python.org/downloads/ (enable 'Add to PATH')`n  then re-run this installer."
 }
 
 Write-OK "Python found: $pythonExe"

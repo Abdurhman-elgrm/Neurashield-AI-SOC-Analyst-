@@ -47,8 +47,8 @@ export function LoginPage() {
           setAuthTenant(tenant.id);
           navigate(from, { replace: true });
         } else {
-          // New user — no workspaces yet, send to setup
-          navigate("/setup", { replace: true });
+          // New user — no workspaces yet, send to setup (preserve intended destination)
+          navigate("/setup", { replace: true, state: { from: from } });
         }
       } catch {
         // Non-fatal — navigate to destination; useTenantInit will handle it

@@ -89,6 +89,24 @@ class TenantService:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_user_tenants_with_role(
+        db: AsyncSession, user_id: UUID
+    ) -> list[tuple[Tenant, str]]:
+        """Returns (tenant, role) pairs for all active tenants the user belongs to."""
+        result = await db.execute(
+            select(Tenant, TenantMember.role)
+            .join(TenantMember, TenantMember.tenant_id == Tenant.id)
+            .where(
+                TenantMember.user_id == user_id,
+                TenantMember.deleted_at.is_(None),
+                Tenant.deleted_at.is_(None),
+                Tenant.is_active.is_(True),
+            )
+            .order_by(Tenant.name)
+        )
+        return [(row.Tenant, row.role) for row in result.all()]
+
+    @staticmethod
     async def update(
         db: AsyncSession,
         tenant: Tenant,

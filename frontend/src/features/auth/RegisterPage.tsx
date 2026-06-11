@@ -49,7 +49,7 @@ export function RegisterPage() {
         tokens.access_token,
         tokens.refresh_token,
       );
-      navigate("/onboarding", { replace: true });
+      navigate("/setup", { replace: true });
     } catch (err) {
       setError(extractApiError(err));
     } finally {

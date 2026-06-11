@@ -162,7 +162,7 @@ function TenantSelector() {
   };
 
   const selectTenant = (t: Tenant) => {
-    const role: MemberRole = "owner";
+    const role: MemberRole = t.member_role ?? "owner";
     setStoreTenant(t, role);
     setAuthTenant(t.id);
     setOpen(false);

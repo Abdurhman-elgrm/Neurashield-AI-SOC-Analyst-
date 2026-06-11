@@ -5,9 +5,11 @@ import { CommandPalette } from "@/components/command/CommandPalette";
 import { Toaster } from "@/components/ui/Toaster";
 import { KeyboardShortcuts } from "@/hooks/useKeyboard";
 import { useTenantInit } from "@/hooks/useTenantInit";
+import { useTenantCacheReset } from "@/hooks/useTenantCacheReset";
 
 export function AppShell() {
   useTenantInit();
+  useTenantCacheReset();
   return (
     <div style={{ display: "flex", height: "100vh", background: "#000000", overflow: "hidden" }}>
       {/* Fixed sidebar */}

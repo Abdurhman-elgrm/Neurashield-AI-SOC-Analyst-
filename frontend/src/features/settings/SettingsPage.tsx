@@ -163,7 +163,9 @@ function OrgTab() {
 function ApiKeysTab() {
   const [keys,       setKeys]       = useState<ApiKey[]>([])
   const [loading,    setLoading]    = useState(true)
+  const [loadError,  setLoadError]  = useState<string | null>(null)
   const [creating,   setCreating]   = useState(false)
+  const [createError,setCreateError]= useState<string | null>(null)
   const [newKeyName, setNewKeyName] = useState('')
   const [createdKey, setCreatedKey] = useState<ApiKeyCreateResponse | null>(null)
   const [copied,     setCopied]     = useState(false)
@@ -171,20 +173,33 @@ function ApiKeysTab() {
   useEffect(() => {
     settingsApi.listApiKeys()
       .then(setKeys)
-      .catch(console.error)
+      .catch((err) => {
+        const status = (err as { response?: { status?: number } })?.response?.status
+        if (status === 403) {
+          setLoadError('You need Owner or Admin role to manage API keys.')
+        } else {
+          setLoadError('Failed to load API keys. Please try again.')
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 
   const handleCreate = async () => {
     if (!newKeyName.trim()) return
     setCreating(true)
+    setCreateError(null)
     try {
       const key = await settingsApi.createApiKey(newKeyName.trim())
       setCreatedKey(key)
       setKeys(prev => [key, ...prev])
       setNewKeyName('')
     } catch (err) {
-      console.error('[ApiKeysTab] create failed:', err)
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 403) {
+        setCreateError('Insufficient permissions. Owner or Admin role required.')
+      } else {
+        setCreateError('Failed to create API key. Please try again.')
+      }
     } finally {
       setCreating(false)
     }
@@ -195,8 +210,8 @@ function ApiKeysTab() {
       await settingsApi.revokeApiKey(id)
       setKeys(prev => prev.filter(k => k.id !== id))
       if (createdKey?.id === id) setCreatedKey(null)
-    } catch (err) {
-      console.error('[ApiKeysTab] revoke failed:', err)
+    } catch {
+      // Revoke errors are rare — silently ignore
     }
   }
 
@@ -213,6 +228,15 @@ function ApiKeysTab() {
         description="Use API keys to authenticate the NEURASHIELD agent on your devices"
       />
 
+      {/* Load error */}
+      {loadError && (
+        <div style={{ padding: '10px 14px', marginBottom: 16, borderRadius: 8,
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+          fontSize: 12, color: '#FCA5A5' }}>
+          {loadError}
+        </div>
+      )}
+
       {/* Create */}
       <div className="card" style={{ padding: 16, marginBottom: 24 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#B8C0CC', marginBottom: 10 }}>
@@ -224,13 +248,16 @@ function ApiKeysTab() {
             style={{ flex: 1 }}
             placeholder="Key name (e.g. Production Server)"
             value={newKeyName}
-            onChange={e => setNewKeyName(e.target.value)}
+            onChange={e => { setNewKeyName(e.target.value); setCreateError(null); }}
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
           />
           <Button variant="primary" disabled={!newKeyName.trim()} loading={creating} onClick={handleCreate}>
             <Plus size={13} /> Generate
           </Button>
         </div>
+        {createError && (
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#FCA5A5' }}>{createError}</p>
+        )}
       </div>
 
       {/* Newly created — show once */}

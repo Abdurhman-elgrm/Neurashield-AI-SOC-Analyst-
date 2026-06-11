@@ -22,16 +22,21 @@ export function useTenantInit() {
     if (running.current) return
     running.current = true
 
+    const storedTenantId = useAuthStore.getState().activeTenantId
+
     fetchMyTenants()
       .then((tenants) => {
         running.current = false
         if (tenants.length === 0) {
-          // New user with no workspaces — send to setup
           navigate('/setup', { replace: true })
           return
         }
-        const tenant = tenants[0]
-        const role: MemberRole = 'owner'
+        // Verify stored tenantId is still valid; fall back to first available
+        const match = storedTenantId
+          ? tenants.find((t) => t.id === storedTenantId)
+          : null
+        const tenant = match ?? tenants[0]
+        const role: MemberRole = tenant.member_role ?? 'owner'
         setStoreTenant(tenant, role)
         setAuthTenant(tenant.id)
       })

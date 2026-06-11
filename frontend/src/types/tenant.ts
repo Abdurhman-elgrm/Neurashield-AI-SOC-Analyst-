@@ -4,6 +4,7 @@ export interface Tenant {
   slug: string;
   is_active: boolean;
   created_at: string;
+  member_role?: MemberRole;
 }
 
 export interface TenantMember {

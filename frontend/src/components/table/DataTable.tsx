@@ -36,6 +36,7 @@ export function DataTable<TData>({
   onRowClick,
   getRowId,
   isLoading = false,
+  emptyMessage = "No results found",
   getRowClassName,
   className,
 }: DataTableProps<TData>) {
@@ -168,7 +169,7 @@ export function DataTable<TData>({
                 colSpan={columns.length}
                 className="px-3 py-12 text-center text-sm text-text-muted"
               >
-                No results found
+                {emptyMessage}
               </td>
             </tr>
           )}

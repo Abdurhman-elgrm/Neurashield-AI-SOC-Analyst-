@@ -231,6 +231,7 @@ export function AlertsPage() {
           data={data?.items ?? []}
           columns={alertColumns}
           isLoading={isLoading}
+          emptyMessage={activeStatus ? `No ${activeStatus} alerts` : "No alerts yet — detections will appear here once the agent starts sending events"}
           enableRowSelection
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}

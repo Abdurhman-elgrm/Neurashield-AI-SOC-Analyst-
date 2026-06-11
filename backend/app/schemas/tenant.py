@@ -51,6 +51,7 @@ class TenantResponse(BaseModel):
     slug: str
     is_active: bool
     created_at: datetime
+    member_role: str | None = None
 
 
 # ─── Tenant Member ────────────────────────────────────────────────────────────

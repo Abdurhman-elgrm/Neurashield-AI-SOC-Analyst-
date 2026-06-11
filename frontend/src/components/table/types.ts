@@ -32,6 +32,8 @@ export interface DataTableProps<TData> {
   getRowClassName?: (row: TData) => string;
   // Loading
   isLoading?: boolean;
+  // Empty state
+  emptyMessage?: string;
   // Realtime
   realtimeKey?: string | number;    // when changed, flash new rows
   className?: string;

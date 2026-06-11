@@ -50,8 +50,15 @@ async def list_my_tenants(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[list[TenantResponse]]:
-    tenants = await TenantService.get_user_tenants(db, current_user.id)
-    return APIResponse.ok([TenantResponse.model_validate(t) for t in tenants])
+    from app.models.tenant_member import TenantMember as TM
+    from sqlalchemy import select as sa_select
+    pairs = await TenantService.get_user_tenants_with_role(db, current_user.id)
+    result = []
+    for tenant, role in pairs:
+        resp = TenantResponse.model_validate(tenant)
+        resp.member_role = role
+        result.append(resp)
+    return APIResponse.ok(result)
 
 
 @router.get(

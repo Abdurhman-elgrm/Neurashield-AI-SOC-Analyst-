@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { LogoFull } from "@/components/ui/Logo";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -8,6 +8,8 @@ import type { MemberRole } from "@/types/tenant";
 
 export function SetupPage() {
   const navigate      = useNavigate();
+  const location      = useLocation();
+  const from          = (location.state as { from?: string } | null)?.from ?? "/dashboard";
   const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
   const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
 
@@ -25,7 +27,7 @@ export function SetupPage() {
       const role: MemberRole = "owner";
       setStoreTenant(tenant, role);
       setAuthTenant(tenant.id);
-      navigate("/dashboard", { replace: true });
+      navigate(from, { replace: true });
     } catch {
       setError("Failed to create workspace. Please try again.");
     } finally {
