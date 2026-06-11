@@ -163,11 +163,9 @@ try {
 
 Write-OK "Agent script saved to $AGENT_FILE"
 
-# ── Step 6: Find / provision Python ──────────────────────────────────────────
+# ── Step 6: Find Python (same logic as V1) ───────────────────────────────────
 Write-Step "Locating Python runtime..."
 
-# Prefer system-wide installs; user-profile paths (AppData) may be blocked
-# by AppLocker or inaccessible to SYSTEM in Task Scheduler Session-0.
 $pythonCandidates = @(
     "C:\Python314\python.exe",
     "C:\Python313\python.exe",
@@ -179,8 +177,6 @@ $pythonCandidates = @(
     "C:\Program Files\Python313\python.exe",
     "C:\Program Files\Python312\python.exe",
     "C:\Program Files\Python311\python.exe",
-    "C:\Program Files\Python310\python.exe",
-    # user-profile fallbacks (checked but may not work as SYSTEM)
     "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
     "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
@@ -201,63 +197,11 @@ if (-not $pythonExe) {
     } catch {}
 }
 
-# If Python is missing or lives inside a user profile (AppData / Users),
-# download the official embeddable package to a SYSTEM-accessible path.
-$pyEmbedDir = Join-Path $INSTALL_DIR "python"
-$pyEmbedExe = Join-Path $pyEmbedDir "python.exe"
-
-$needsEmbed = (-not $pythonExe) -or
-              ($pythonExe -like "*\Users\*") -or
-              ($pythonExe -like "*AppData*")
-
-if ($needsEmbed) {
-    if (Test-Path $pyEmbedExe) {
-        Write-OK "Embedded Python already present at $pyEmbedExe"
-        $pythonExe = $pyEmbedExe
-    } else {
-        Write-Step "Python not in system path - downloading embeddable runtime (~8 MB)..."
-        $pyVersion  = "3.11.9"
-        $pyZipUrl   = "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip"
-        $pyZipPath  = Join-Path $env:TEMP "soc_python_embed.zip"
-        try {
-            Invoke-WebRequest -Uri $pyZipUrl -OutFile $pyZipPath -UseBasicParsing
-            [System.IO.Directory]::CreateDirectory($pyEmbedDir) | Out-Null
-            Expand-Archive -Path $pyZipPath -DestinationPath $pyEmbedDir -Force
-            Remove-Item $pyZipPath -Force -ErrorAction SilentlyContinue
-
-            # Enable site-packages (embeddable layout disables them by default)
-            $pthFile = Get-ChildItem $pyEmbedDir -Filter "python*._pth" | Select-Object -First 1
-            if ($pthFile) {
-                (Get-Content $pthFile.FullName -Raw) -replace '#import site', 'import site' |
-                    Set-Content $pthFile.FullName -Encoding ASCII
-            }
-
-            # Bootstrap pip then install requests
-            # Use 2>$null so pip warnings to stderr don't trigger $ErrorActionPreference=Stop
-            $getPipPath = Join-Path $env:TEMP "get-pip.py"
-            Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
-            & $pyEmbedExe $getPipPath --quiet 2>$null
-            Remove-Item $getPipPath -Force -ErrorAction SilentlyContinue
-            & $pyEmbedExe -m pip install requests --quiet 2>$null
-
-            # Verify requests is importable
-            & $pyEmbedExe -c "import requests" 2>$null
-            if ($LASTEXITCODE -ne 0) { throw "requests not importable after pip install" }
-
-            $pythonExe = $pyEmbedExe
-            Write-OK "Embedded Python ready: $pyEmbedExe"
-        } catch {
-            if ($pythonExe) {
-                Write-Host "[bootstrap] WARN  Embed download failed ($($_.Exception.Message)); falling back to $pythonExe" -ForegroundColor Yellow
-                Write-Host "            NOTE: Agent may fail if SYSTEM cannot execute user-profile Python." -ForegroundColor Yellow
-            } else {
-                Write-Fail "Python not found and embeddable download failed.`n  Install Python from https://www.python.org/downloads/ (select 'Install for all users')`n  then re-run this installer."
-            }
-        }
-    }
-} else {
-    Write-OK "Python found (system-wide): $pythonExe"
+if (-not $pythonExe) {
+    Write-Fail "Python 3.9+ not found.`n  Install from https://www.python.org/downloads/ (enable 'Add to PATH')`n  then re-run this installer."
 }
+
+Write-OK "Python found: $pythonExe"
 
 # ── Step 7: Create scheduled task ────────────────────────────────────────────
 Write-Step "Installing scheduled task..."
