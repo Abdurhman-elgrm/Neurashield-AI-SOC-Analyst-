@@ -60,7 +60,8 @@ class Settings(BaseSettings):
     WORKER_MAX_RETRY: int = 3
 
     # ─── AI / LLM ─────────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
@@ -80,12 +81,12 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def validate_anthropic_key(self) -> "Settings":
-        if self.is_production and not self.ANTHROPIC_API_KEY:
+    def validate_llm_keys(self) -> "Settings":
+        if self.is_production and not self.GROQ_API_KEY and not self.GEMINI_API_KEY:
             import structlog
             structlog.get_logger(__name__).warning(
-                "anthropic_api_key_missing",
-                detail="ANTHROPIC_API_KEY is not set in production — AI analysis will be disabled",
+                "llm_api_keys_missing",
+                detail="Neither GROQ_API_KEY nor GEMINI_API_KEY is set in production — AI analysis will be disabled",
             )
         return self
 

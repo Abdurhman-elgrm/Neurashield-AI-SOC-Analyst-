@@ -104,7 +104,7 @@ async def chat(
         log.warning("copilot_llm_failed", error=str(exc))
         response_text = (
             "I'm unable to process your request right now — the AI service is temporarily unavailable. "
-            "Please check your ANTHROPIC_API_KEY configuration and try again."
+            "Please check your GROQ_API_KEY / GEMINI_API_KEY configuration and try again."
         )
 
     # Persist both messages

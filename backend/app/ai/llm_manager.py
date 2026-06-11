@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from anthropic import AsyncAnthropic, APIError, RateLimitError
 
 log = structlog.get_logger(__name__)
 
@@ -13,6 +12,7 @@ log = structlog.get_logger(__name__)
 @dataclass
 class ModelState:
     name: str
+    provider: str  # "groq" | "gemini"
     error_count: int = 0
     cooldown_until: datetime | None = None
 
@@ -37,12 +37,67 @@ class ModelState:
 
 
 class LLMManager:
-    def __init__(self, api_key: str) -> None:
-        self._client = AsyncAnthropic(api_key=api_key)
+    def __init__(self, groq_api_key: str, gemini_api_key: str) -> None:
+        self._groq_key = groq_api_key
+        self._gemini_key = gemini_api_key
         self._models = [
-            ModelState(name="claude-haiku-4-5-20251001"),
-            ModelState(name="claude-sonnet-4-6"),
+            ModelState(name="llama-3.1-70b-versatile", provider="groq"),
+            ModelState(name="gemini-2.0-flash", provider="gemini"),
         ]
+        self._groq_client = None
+        self._gemini_client = None
+        self._initialized = False
+
+    def _init_clients(self) -> None:
+        if self._initialized:
+            return
+        if self._groq_key:
+            from groq import AsyncGroq
+            self._groq_client = AsyncGroq(api_key=self._groq_key)
+        if self._gemini_key:
+            from google import genai
+            self._gemini_client = genai.Client(api_key=self._gemini_key)
+        self._initialized = True
+
+    async def _call_groq(
+        self,
+        model_name: str,
+        prompt: str,
+        system_prompt: str,
+        max_tokens: int,
+    ) -> str:
+        if not self._groq_client:
+            raise RuntimeError("Groq client not initialized — GROQ_API_KEY missing")
+        response = await self._groq_client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.2,
+        )
+        return response.choices[0].message.content or ""
+
+    async def _call_gemini(
+        self,
+        prompt: str,
+        system_prompt: str,
+        max_tokens: int,
+    ) -> str:
+        if not self._gemini_client:
+            raise RuntimeError("Gemini client not initialized — GEMINI_API_KEY missing")
+        from google.genai import types
+        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        response = await self._gemini_client.aio.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=full_prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                temperature=0.2,
+            ),
+        )
+        return response.text or ""
 
     async def generate(
         self,
@@ -51,57 +106,41 @@ class LLMManager:
         max_tokens: int = 1024,
         model_override: str | None = None,
     ) -> str:
-        """Generate a response. Tries primary model first, falls back on error."""
-        if model_override:
-            t0 = time.monotonic()
-            try:
-                response = await self._client.messages.create(
-                    model=model_override,
-                    max_tokens=max_tokens,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                latency = time.monotonic() - t0
-                log.info(
-                    "llm_call_success",
-                    model=model_override,
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    latency_ms=int(latency * 1000),
-                )
-                return response.content[0].text
-            except (RateLimitError, APIError) as exc:
-                raise RuntimeError(f"Model {model_override} unavailable: {exc}") from exc
+        """Generate a response. Tries Groq first, falls back to Gemini on error."""
+        self._init_clients()
+        start = time.monotonic()
 
-        last_exc: Exception = RuntimeError("No models configured")
         for model_state in self._models:
             if not model_state.is_available():
                 continue
-            t0 = time.monotonic()
             try:
-                response = await self._client.messages.create(
-                    model=model_state.name,
-                    max_tokens=max_tokens,
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                latency = time.monotonic() - t0
+                if model_state.provider == "groq":
+                    result = await self._call_groq(
+                        model_state.name, prompt, system_prompt, max_tokens
+                    )
+                else:
+                    result = await self._call_gemini(prompt, system_prompt, max_tokens)
+
                 model_state.record_success()
                 log.info(
-                    "llm_call_success",
+                    "llm_generate_success",
                     model=model_state.name,
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    latency_ms=int(latency * 1000),
+                    provider=model_state.provider,
+                    latency_ms=round((time.monotonic() - start) * 1000),
                 )
-                return response.content[0].text
-            except (RateLimitError, APIError) as exc:
+                return result
+
+            except Exception as exc:
                 model_state.record_error()
-                last_exc = exc
-                log.warning("llm_call_failed", model=model_state.name, error=str(exc)[:120])
+                log.warning(
+                    "llm_model_error",
+                    model=model_state.name,
+                    provider=model_state.provider,
+                    error=str(exc)[:200],
+                )
                 continue
 
-        raise RuntimeError(f"All LLM models unavailable. Last error: {last_exc}")
+        raise RuntimeError("All LLM models unavailable or misconfigured")
 
     async def health(self) -> dict:
         """Return current model states for monitoring."""
@@ -109,9 +148,10 @@ class LLMManager:
             "models": [
                 {
                     "name": m.name,
+                    "provider": m.provider,
                     "available": m.is_available(),
                     "error_count": m.error_count,
-                    "cooldown_until": m.cooldown_until.isoformat() if m.cooldown_until else None,
+                    "cooldown_until": str(m.cooldown_until) if m.cooldown_until else None,
                 }
                 for m in self._models
             ]
@@ -126,7 +166,12 @@ def get_llm_manager() -> LLMManager:
     if _manager is None:
         from app.core.config import get_settings
         settings = get_settings()
-        if not settings.ANTHROPIC_API_KEY:
-            raise RuntimeError("ANTHROPIC_API_KEY not configured")
-        _manager = LLMManager(api_key=settings.ANTHROPIC_API_KEY)
+        if not settings.GROQ_API_KEY and not settings.GEMINI_API_KEY:
+            raise RuntimeError(
+                "No LLM API keys configured — set GROQ_API_KEY or GEMINI_API_KEY in .env"
+            )
+        _manager = LLMManager(
+            groq_api_key=settings.GROQ_API_KEY,
+            gemini_api_key=settings.GEMINI_API_KEY,
+        )
     return _manager
