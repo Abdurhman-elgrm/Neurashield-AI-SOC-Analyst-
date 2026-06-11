@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Monitor, Terminal, Activity, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { formatRelativeTime, formatDate } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/utils'
+import { formatDateTime } from '@/lib/timezone'
 import { useAgents, useDeleteAgent } from './hooks/useAgents'
 import type { Agent } from '@/api/agents'
 
@@ -223,7 +224,7 @@ function AgentDrawer({ agent, onClose, onDelete }: {
               ['OS',         agent.os_type],
               ['IP Address', agent.ip_address || '—'],
               ['Version',    agent.agent_version ? `v${agent.agent_version}` : '—'],
-              ['Enrolled',   formatDate(agent.created_at)],
+              ['Enrolled',   formatDateTime(agent.created_at)],
               ['Last Seen',  agent.last_seen_at ? formatRelativeTime(agent.last_seen_at) : '—'],
               ['Agent ID',   agent.id.slice(0, 8) + '...'],
             ] as [string, string][]).map(([label, value]) => (

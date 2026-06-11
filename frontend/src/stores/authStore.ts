@@ -12,6 +12,7 @@ interface AuthState {
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   setActiveTenant: (tenantId: string | null) => void;
+  setUser: (user: User) => void;
   clearAuth: () => void;
 
   // Computed
@@ -34,6 +35,9 @@ export const useAuthStore = create<AuthState>()(
 
       setActiveTenant: (tenantId) =>
         set({ activeTenantId: tenantId }),
+
+      setUser: (user) =>
+        set({ user }),
 
       clearAuth: () =>
         set({

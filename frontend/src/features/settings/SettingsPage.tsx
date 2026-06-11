@@ -8,6 +8,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { settingsApi } from '@/api/settings'
 import type { UserProfile, TenantInfo, Member, ApiKey, ApiKeyCreateResponse } from '@/api/settings'
+import { TIMEZONE_OPTIONS } from '@/lib/timezone'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -40,8 +41,12 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 // ─── Profile Tab ─────────────────────────────────────────────────────────────
 
 function ProfileTab() {
+  const setUser    = useAuthStore(s => s.setUser)
+  const storeUser  = useAuthStore(s => s.user)
+
   const [profile,  setProfile]  = useState<UserProfile | null>(null)
   const [fullName, setFullName] = useState('')
+  const [timezone, setTimezone] = useState('UTC')
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
 
@@ -49,15 +54,20 @@ function ProfileTab() {
     settingsApi.getProfile().then(p => {
       setProfile(p)
       setFullName(p.full_name ?? '')
+      setTimezone(p.timezone ?? storeUser?.timezone ?? 'UTC')
     }).catch(console.error)
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await settingsApi.updateProfile({ full_name: fullName })
+      const updated = await settingsApi.updateProfile({ full_name: fullName, timezone })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+      // Update auth store so timezone takes effect immediately
+      if (storeUser) {
+        setUser({ ...storeUser, full_name: updated.full_name, timezone: updated.timezone ?? 'UTC' })
+      }
     } finally {
       setSaving(false)
     }
@@ -86,6 +96,22 @@ function ProfileTab() {
           onChange={e => setFullName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSave()}
         />
+      </FormField>
+
+      <FormField label="Timezone">
+        <select
+          className="inp"
+          style={{ width: '100%' }}
+          value={timezone}
+          onChange={e => setTimezone(e.target.value)}
+        >
+          {TIMEZONE_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: 11, color: '#3A4150', marginTop: 4, display: 'block' }}>
+          All timestamps in the app will display in this timezone
+        </span>
       </FormField>
 
       <Button variant="primary" loading={saving} onClick={handleSave}>

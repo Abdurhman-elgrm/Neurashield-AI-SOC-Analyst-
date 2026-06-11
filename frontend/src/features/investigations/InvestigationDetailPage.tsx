@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
+import { formatDateTime } from '@/lib/timezone'
 import {
   ArrowLeft, LayoutDashboard, Clock, Share2, Paperclip,
   StickyNote, UserPlus, ChevronDown,
@@ -317,7 +318,7 @@ function TimelineTab({ id }: { id: string }) {
       {entries.map((entry, i) => {
         const isLast = i === entries.length - 1
         const color = sevColor(entry.severity)
-        const ts = new Date(entry.timestamp * 1000)
+        const tsIso = new Date(entry.timestamp * 1000).toISOString()
 
         return (
           <div key={entry.event_id} style={{ display: 'flex', gap: 16, paddingBottom: isLast ? 0 : 20 }}>
@@ -340,7 +341,7 @@ function TimelineTab({ id }: { id: string }) {
                   fontSize: 10, color: '#5C6373',
                   fontFamily: "'JetBrains Mono', monospace",
                 }}>
-                  {ts.toLocaleTimeString('en-GB')}
+                  {formatDateTime(tsIso)}
                 </span>
                 <SevBadge sev={entry.severity} />
                 <span style={{

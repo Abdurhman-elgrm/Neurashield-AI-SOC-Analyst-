@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { SevBadge } from '@/components/ui/SevBadge'
 import { useEvents } from './hooks/useEvents'
 import { eventsApi, type EventResponse } from '@/api/events'
+import { formatDateShort, formatDateTime } from '@/lib/timezone'
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
@@ -28,14 +29,7 @@ const categoryConfig: Record<string, {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatEventTime(ts: string): string {
-  try {
-    const d = new Date(ts)
-    return d.toLocaleTimeString('en-GB', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    }) + ' ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-  } catch {
-    return ts
-  }
+  return formatDateShort(ts)
 }
 
 function buildEventSummary(event: EventResponse): string {
@@ -258,7 +252,7 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
           }}>
             {([
               ['Severity',  <SevBadge sev={event.severity} />],
-              ['Timestamp', new Date(event.event_timestamp).toLocaleString()],
+              ['Timestamp', formatDateTime(event.event_timestamp)],
               ['Hostname',  event.host_name ?? '—'],
               ['Category',  cat.label],
               ['Agent',     event.agent_id ? event.agent_id.slice(0, 8) + '...' : '—'],

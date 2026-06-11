@@ -58,9 +58,12 @@ class UserService:
         db: AsyncSession,
         user: User,
         full_name: str | None = None,
+        timezone: str | None = None,
     ) -> User:
         if full_name is not None:
             user.full_name = full_name.strip()
+        if timezone is not None:
+            user.timezone = timezone
         await db.flush([user])
         return user
 

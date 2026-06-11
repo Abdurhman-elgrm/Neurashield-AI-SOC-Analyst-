@@ -35,5 +35,6 @@ async def update_profile(
         db,
         user=current_user,
         full_name=payload.full_name,
+        timezone=payload.timezone,
     )
     return APIResponse.ok(UserResponse.model_validate(updated))

@@ -8,10 +8,12 @@ export interface UserProfile {
   full_name: string
   is_active: boolean
   created_at: string
+  timezone?: string
 }
 
 export interface UpdateProfilePayload {
   full_name?: string
+  timezone?: string
 }
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
