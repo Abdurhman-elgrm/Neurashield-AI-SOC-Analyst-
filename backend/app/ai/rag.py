@@ -154,7 +154,7 @@ async def _upsert_chunks(db: AsyncSession, rows: list[dict[str, Any]]) -> int:
     """
     if not rows:
         return 0
-    stmt = pg_insert(RAGChunk).values(rows)
+    stmt = pg_insert(RAGChunk.__table__).values(rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=["chunk_id"],
         set_={
@@ -531,12 +531,14 @@ async def retrieve(
                         return chunks
 
     # Step 2 — FTS on content using technique IDs + keywords
+    # Strip dots/dashes to a single alphanumeric token (T1059.001 -> T1059001)
+    # so to_tsquery never sees the <-> phrase operator.
     search_terms = ttps[:4] + (keywords[:4] if keywords else [])
     if search_terms:
         ts_query = " | ".join(
-            term.replace(".", "<->").replace("-", "<->")
+            "".join(c for c in term if c.isalnum())
             for term in search_terms
-            if term.replace(".", "").replace("-", "").isalnum()
+            if any(c.isalnum() for c in term)
         )
         if ts_query:
             fts_result = await db.execute(
