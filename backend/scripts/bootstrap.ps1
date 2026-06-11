@@ -228,11 +228,16 @@ if ($needsEmbed) {
             }
 
             # Bootstrap pip then install requests
+            # Use 2>$null so pip warnings to stderr don't trigger $ErrorActionPreference=Stop
             $getPipPath = Join-Path $env:TEMP "get-pip.py"
             Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPipPath -UseBasicParsing
-            & $pyEmbedExe $getPipPath --quiet 2>&1 | Out-Null
+            & $pyEmbedExe $getPipPath --quiet 2>$null
             Remove-Item $getPipPath -Force -ErrorAction SilentlyContinue
-            & $pyEmbedExe -m pip install requests --quiet 2>&1 | Out-Null
+            & $pyEmbedExe -m pip install requests --quiet 2>$null
+
+            # Verify requests is importable
+            & $pyEmbedExe -c "import requests" 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "requests not importable after pip install" }
 
             $pythonExe = $pyEmbedExe
             Write-OK "Embedded Python ready: $pyEmbedExe"
@@ -278,7 +283,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartInterval          (New-TimeSpan -Minutes 1) `
     -StartWhenAvailable       `
     -RunOnlyIfNetworkAvailable:$false `
-    -MultipleInstances        StopExisting
+    -MultipleInstances        IgnoreNew
 
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
