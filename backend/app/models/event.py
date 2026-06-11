@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String
@@ -54,10 +55,10 @@ class Event(Base):
         index=True,
     )
     severity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, index=True)
-    event_timestamp: Mapped[None] = mapped_column(
+    event_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    ingested_at: Mapped[None] = mapped_column(
+    ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, index=True
     )
 
