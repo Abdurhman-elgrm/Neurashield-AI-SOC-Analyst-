@@ -21,8 +21,16 @@ param(
 )
 
 #Requires -Version 5.1
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ProgressPreference    = "SilentlyContinue"
+
+# Enable TLS 1.2 + system proxy (enterprise networks need this)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+try {
+    $sysProxy = [System.Net.WebRequest]::GetSystemWebProxy()
+    $sysProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+    [System.Net.WebRequest]::DefaultWebProxy = $sysProxy
+} catch {}
 
 # ── OS guard ─────────────────────────────────────────────────────────────────
 if ($env:OS -ne "Windows_NT") {
@@ -163,45 +171,116 @@ try {
 
 Write-OK "Agent script saved to $AGENT_FILE"
 
-# ── Step 6: Find Python (same logic as V1) ───────────────────────────────────
+# ── Step 6: Find / provision Python ──────────────────────────────────────────
 Write-Step "Locating Python runtime..."
 
-$pythonCandidates = @(
-    "C:\Python314\python.exe",
-    "C:\Python313\python.exe",
-    "C:\Python312\python.exe",
-    "C:\Python311\python.exe",
-    "C:\Python310\python.exe",
-    "C:\Python39\python.exe",
-    "C:\Program Files\Python314\python.exe",
-    "C:\Program Files\Python313\python.exe",
-    "C:\Program Files\Python312\python.exe",
-    "C:\Program Files\Python311\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
-    "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe"
-)
-
 $pythonExe = $null
-foreach ($candidate in $pythonCandidates) {
-    if (Test-Path $candidate) { $pythonExe = $candidate; break }
-}
 
-if (-not $pythonExe) {
+# 1. Try PATH (python / py / python3)
+foreach ($cmd in @("python", "py", "python3")) {
     try {
-        $found = (Get-Command "python.exe" -ErrorAction SilentlyContinue).Source
-        if ($found -and $found -notlike "*WindowsApps*") { $pythonExe = $found }
+        $p = (Get-Command $cmd -ErrorAction Stop).Source
+        if ($p -and $p -notlike "*WindowsApps*") { $pythonExe = $p; break }
     } catch {}
 }
 
+# 2. Glob search — finds any Python 3.x without hardcoding version numbers
 if (-not $pythonExe) {
-    Write-Fail "Python 3.9+ not found.`n  Install from https://www.python.org/downloads/ (enable 'Add to PATH')`n  then re-run this installer."
+    foreach ($glob in @(
+        "$env:LocalAppData\Programs\Python\Python3*\python.exe",
+        "$env:ProgramFiles\Python3*\python.exe",
+        "C:\Python3*\python.exe",
+        "$env:ProgramW6432\Python3*\python.exe"
+    )) {
+        $found = Resolve-Path $glob -ErrorAction SilentlyContinue | Select-Object -Last 1
+        if ($found) { $pythonExe = $found.Path; break }
+    }
 }
 
-Write-OK "Python found: $pythonExe"
+# Validate: reject stubs and incompatible runtimes
+if ($pythonExe -like "*WindowsApps*") {
+    Write-Host "[bootstrap] WARN  Microsoft Store Python stub ignored (cannot install packages)" -ForegroundColor Yellow
+    $pythonExe = $null
+}
+if ($pythonExe -match "msys|mingw|cygwin") {
+    Write-Host "[bootstrap] WARN  MSYS2/MinGW Python ignored (DLLs unavailable under SYSTEM)" -ForegroundColor Yellow
+    $pythonExe = $null
+}
+if ($pythonExe) {
+    $pyVer = & $pythonExe -c "import sys; print(sys.version_info.major)" 2>$null
+    if ($LASTEXITCODE -ne 0 -or "$pyVer" -ne "3") {
+        Write-Host "[bootstrap] WARN  $pythonExe is not Python 3 — ignoring" -ForegroundColor Yellow
+        $pythonExe = $null
+    }
+}
+
+# 3. Portable Python fallback — uses WebClient with system proxy like V1
+if (-not $pythonExe) {
+    Write-Step "No Python found — downloading portable Python 3.12..."
+    $pyDir = Join-Path $INSTALL_DIR "py312"
+    $pyZip = Join-Path $env:TEMP "neurashield_py312.zip"
+    try {
+        $wc = New-Object System.Net.WebClient
+        $wc.Proxy = [System.Net.WebRequest]::GetSystemWebProxy()
+        $wc.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+        $wc.DownloadFile("https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip", $pyZip)
+
+        [System.IO.Directory]::CreateDirectory($pyDir) | Out-Null
+        Expand-Archive -Path $pyZip -DestinationPath $pyDir -Force
+        Remove-Item $pyZip -Force -ErrorAction SilentlyContinue
+
+        $pthFile = Get-Item "$pyDir\python312._pth" -ErrorAction SilentlyContinue
+        if ($pthFile) {
+            (Get-Content $pthFile.FullName) -replace '#import site', 'import site' |
+                Set-Content $pthFile.FullName
+        }
+
+        $wc.DownloadFile("https://bootstrap.pypa.io/get-pip.py", "$pyDir\get-pip.py")
+        & "$pyDir\python.exe" "$pyDir\get-pip.py" --quiet 2>&1 | Out-Null
+        Remove-Item "$pyDir\get-pip.py" -Force -ErrorAction SilentlyContinue
+
+        $pythonExe = "$pyDir\python.exe"
+        Write-OK "Portable Python 3.12 ready at $pythonExe"
+    } catch {
+        Write-Fail "No Python found and portable download failed.`n  Install Python from https://www.python.org/downloads/ then re-run."
+    }
+}
+
+Write-OK "Python: $pythonExe"
+
+# ── Step 6b: Install dependencies (requests + pywin32) ───────────────────────
+Write-Step "Installing Python dependencies..."
+
+& $pythonExe -m pip install requests pywin32 --quiet 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    & $pythonExe -m pip install requests pywin32 --quiet 2>&1 | Out-Null
+}
+
+# Verify requests
+$reqCheck = & $pythonExe -c "import requests; print('ok')" 2>$null
+if ($reqCheck -ne "ok") {
+    Write-Fail "'requests' not importable after pip install. Try: $pythonExe -m pip install requests"
+}
+
+# pywin32 post-install (registers DLLs under SYSTEM context)
+$siteScripts = & $pythonExe -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null
+if ($siteScripts) {
+    $postInstall = Join-Path $siteScripts "pywin32_postinstall.py"
+    if (Test-Path $postInstall) { & $pythonExe $postInstall -install 2>$null | Out-Null }
+}
+$win32Check = & $pythonExe -c "import win32evtlog; print('ok')" 2>$null
+if ($win32Check -ne "ok") {
+    & $pythonExe -m pip install pywin32 --force-reinstall --quiet 2>&1 | Out-Null
+    if ($siteScripts -and (Test-Path (Join-Path $siteScripts "pywin32_postinstall.py"))) {
+        & $pythonExe (Join-Path $siteScripts "pywin32_postinstall.py") -install 2>$null | Out-Null
+    }
+}
+
+Write-OK "Dependencies OK (requests + pywin32)"
+
+# Use pythonw.exe (windowless) for the scheduled task if available
+$pythonwExe = $pythonExe -replace 'python\.exe$', 'pythonw.exe'
+if (-not (Test-Path $pythonwExe)) { $pythonwExe = $pythonExe }
 
 # ── Step 7: Create scheduled task ────────────────────────────────────────────
 Write-Step "Installing scheduled task..."
@@ -218,7 +297,7 @@ if ($existingTask) {
 # Run Python directly — no cmd.exe wrapper needed.
 # The agent opens its own log file as the very first operation, so all
 # startup errors (including import failures) are captured there.
-$action  = New-ScheduledTaskAction -Execute $pythonExe -Argument "-u `"$AGENT_FILE`""
+$action  = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
 $trigger = New-ScheduledTaskTrigger -AtStartup
 
 # Also add an AtLogon trigger so it starts when any user logs in
