@@ -41,7 +41,7 @@ class LLMManager:
         self._groq_key = groq_api_key
         self._gemini_key = gemini_api_key
         self._models = [
-            ModelState(name="llama-3.1-70b-versatile", provider="groq"),
+            ModelState(name="llama-3.3-70b-versatile", provider="groq"),
             ModelState(name="gemini-2.0-flash", provider="gemini"),
         ]
         self._groq_client = None
