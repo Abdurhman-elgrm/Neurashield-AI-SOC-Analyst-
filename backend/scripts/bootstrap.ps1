@@ -184,7 +184,7 @@ foreach ($cmd in @("python", "py", "python3")) {
     } catch {}
 }
 
-# 2. Glob search — finds any Python 3.x without hardcoding version numbers
+# 2. Glob search - finds any Python 3.x without hardcoding version numbers
 if (-not $pythonExe) {
     foreach ($glob in @(
         "$env:LocalAppData\Programs\Python\Python3*\python.exe",
@@ -209,14 +209,14 @@ if ($pythonExe -match "msys|mingw|cygwin") {
 if ($pythonExe) {
     $pyVer = & $pythonExe -c "import sys; print(sys.version_info.major)" 2>$null
     if ($LASTEXITCODE -ne 0 -or "$pyVer" -ne "3") {
-        Write-Host "[bootstrap] WARN  $pythonExe is not Python 3 — ignoring" -ForegroundColor Yellow
+        Write-Host "[bootstrap] WARN  $pythonExe is not Python 3 - ignoring" -ForegroundColor Yellow
         $pythonExe = $null
     }
 }
 
-# 3. Portable Python fallback — uses WebClient with system proxy like V1
+# 3. Portable Python fallback - uses WebClient with system proxy like V1
 if (-not $pythonExe) {
-    Write-Step "No Python found — downloading portable Python 3.12..."
+    Write-Step "No Python found - downloading portable Python 3.12..."
     $pyDir = Join-Path $INSTALL_DIR "py312"
     $pyZip = Join-Path $env:TEMP "neurashield_py312.zip"
     try {
@@ -294,7 +294,7 @@ if ($existingTask) {
     Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
 }
 
-# Run Python directly — no cmd.exe wrapper needed.
+# Run Python directly - no cmd.exe wrapper needed.
 # The agent opens its own log file as the very first operation, so all
 # startup errors (including import failures) are captured there.
 $action  = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
@@ -328,7 +328,7 @@ Write-Step "Starting agent..."
 
 Start-ScheduledTask -TaskName $TASK_NAME
 
-# Wait up to 20 seconds for Python to create its log file — that is the
+# Wait up to 20 seconds for Python to create its log file - that is the
 # definitive proof the agent process actually started and is running.
 $deadline = (Get-Date).AddSeconds(20)
 while (-not (Test-Path $LOG_FILE) -and (Get-Date) -lt $deadline) {
