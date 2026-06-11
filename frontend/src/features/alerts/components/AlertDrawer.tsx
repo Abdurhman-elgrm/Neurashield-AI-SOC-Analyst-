@@ -203,7 +203,7 @@ function InvestigationSection({
           <p className="text-2xs text-text-muted uppercase tracking-wider font-medium mb-2">
             Related Alerts ({ctx!.relatedAlerts.length})
           </p>
-          {ctx!.relatedAlerts.slice(0, 5).map((a) => (
+          {ctx!.relatedAlerts.slice(0, 5).map((a: Alert) => (
             <div
               key={a.id}
               className="flex items-center gap-2 py-1.5 border-b border-border last:border-0"
@@ -284,7 +284,7 @@ function TimelineSection({ alertId }: { alertId: string }) {
 
   return (
     <div className="space-y-0">
-      {events.map((e) => (
+      {events.map((e: AlertTimelineEvent) => (
         <TimelineEvent key={e.id} event={e} />
       ))}
     </div>

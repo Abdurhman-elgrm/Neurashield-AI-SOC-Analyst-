@@ -13,10 +13,10 @@ const helper = createColumnHelper<Alert>();
 // ─── Status display ───────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<AlertStatus, { label: string; variant: "default" | "primary" | "success" | "warning" | "info" }> = {
-  open:        { label: "Open",        variant: "default" },
-  in_progress: { label: "In Progress", variant: "primary" },
-  closed:      { label: "Closed",      variant: "success" },
-  suppressed:  { label: "Suppressed",  variant: "info" },
+  open:           { label: "Open",           variant: "default" },
+  acknowledged:   { label: "Acknowledged",   variant: "primary" },
+  closed:         { label: "Closed",         variant: "success" },
+  false_positive: { label: "False Positive", variant: "info" },
 };
 
 // ─── AI verdict display ───────────────────────────────────────────────────────

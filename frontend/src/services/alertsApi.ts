@@ -98,6 +98,16 @@ export async function updateAlert(
   return adaptAlert(data.data!);
 }
 
+// ─── Alert investigation context (stubs — backend endpoints not yet implemented) ─
+
+export async function getAlertContext(_alertId: string): Promise<import("@/features/alerts/types").AlertContext> {
+  return { alertId: _alertId, relatedAlerts: [] };
+}
+
+export async function getAlertTimeline(_alertId: string): Promise<import("@/features/alerts/types").AlertTimelineEvent[]> {
+  return [];
+}
+
 // ─── Bulk operations ──────────────────────────────────────────────────────────
 
 export async function bulkUpdateAlerts(

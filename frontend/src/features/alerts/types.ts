@@ -77,6 +77,7 @@ export interface AlertListParams {
   search?: string;
   timeRange?: string;
   correlationId?: string;
+  cursor?: string;
 }
 
 export interface AlertListResponse {
