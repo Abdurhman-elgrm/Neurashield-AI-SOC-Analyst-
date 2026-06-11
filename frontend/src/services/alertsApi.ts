@@ -61,17 +61,17 @@ export async function getAlerts(params: AlertListParams): Promise<AlertListRespo
     },
   });
 
-  // Backend returns PaginatedResponse: { data: [], next_cursor, has_more, limit }
-  const raw = data.data ?? data;
-  const items: Alert[] = (raw.data ?? []).map(adaptAlert);
+  // Backend returns PaginatedResponse: { data: [...items], pagination: { next_cursor, has_more, limit }, meta: {...} }
+  const items: Alert[] = (data.data ?? []).map(adaptAlert);
+  const pagination = data.pagination ?? {};
 
   return {
     items,
     total:     items.length,
     page:      1,
     pageSize:  params.pageSize ?? 50,
-    pageCount: raw.has_more ? 2 : 1,
-    nextCursor: raw.next_cursor ?? undefined,
+    pageCount: pagination.has_more ? 2 : 1,
+    nextCursor: pagination.next_cursor ?? undefined,
   } as AlertListResponse & { nextCursor?: string };
 }
 

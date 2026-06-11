@@ -920,7 +920,7 @@ export function InvestigationDetailPage() {
     if (!currentUser || assigning) return
     setAssigning(true)
     try {
-      await apiClient.patch(`/investigations/${id}/assign`, { user_id: currentUser.id })
+      await apiClient.patch(`/investigations/${id}/assign`, { assigned_to: currentUser.id })
       setAssignedLabel(true)
       setTimeout(() => setAssignedLabel(false), 2000)
     } catch (err) {

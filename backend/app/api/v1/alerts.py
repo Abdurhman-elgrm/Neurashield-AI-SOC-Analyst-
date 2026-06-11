@@ -4,10 +4,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
+from app.core.exceptions import ValidationError
 from app.rbac.permissions import Permission
 from app.schemas.alert import AlertFilterParams, AlertResponse, AlertUpdateRequest
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
@@ -15,6 +17,13 @@ from app.services.alert_service import AlertService
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+
+class BulkAlertUpdateRequest(BaseModel):
+    alert_ids: list[UUID] = Field(min_length=1, max_length=100)
+    status: str | None = None
+    notes: str | None = None
+    assignee_id: UUID | None = None
 
 
 @router.get("", response_model=PaginatedResponse[AlertResponse])
@@ -95,6 +104,55 @@ async def delete_alert(
     )
     await db.commit()
     return APIResponse.ok(EmptyResponse())
+
+
+# ─── Bulk update ─────────────────────────────────────────────────────────────
+
+@router.post(
+    "/bulk",
+    response_model=APIResponse[dict],
+    summary="Bulk update multiple alerts",
+)
+async def bulk_update_alerts(
+    payload: BulkAlertUpdateRequest,
+    member: Annotated[object, require_permission(Permission.ALERTS_UPDATE)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[dict]:
+    from app.models.alert import Alert
+    from sqlalchemy import update
+    from datetime import datetime, timezone
+
+    m = member  # type: ignore
+
+    updates: dict = {}
+    if payload.status is not None:
+        updates["status"] = payload.status
+        if payload.status == "acknowledged":
+            updates["acknowledged_at"] = datetime.now(tz=timezone.utc)
+        elif payload.status in ("closed", "false_positive"):
+            updates["closed_at"] = datetime.now(tz=timezone.utc)
+    if payload.notes is not None:
+        updates["notes"] = payload.notes
+    if payload.assignee_id is not None:
+        updates["assignee_id"] = payload.assignee_id
+
+    if not updates:
+        raise ValidationError("No fields to update")
+
+    result = await db.execute(
+        update(Alert)
+        .where(
+            Alert.id.in_(payload.alert_ids),
+            Alert.tenant_id == m.tenant_id,
+            Alert.deleted_at.is_(None),
+        )
+        .values(**updates)
+        .returning(Alert.id)
+    )
+    updated_ids = result.fetchall()
+    await db.commit()
+
+    return APIResponse.ok({"updated": len(updated_ids)})
 
 
 # ─── Promote alert to investigation ──────────────────────────────────────────
