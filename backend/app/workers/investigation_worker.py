@@ -133,12 +133,12 @@ class InvestigationWorker:
                 text(
                     """
                     UPDATE investigations SET
-                        timeline_json   = :tl::jsonb,
-                        graph_json      = :gr::jsonb,
-                        behaviors_json  = :bh::jsonb,
-                        context_json    = :ctx::jsonb,
+                        timeline_json   = CAST(:tl  AS jsonb),
+                        graph_json      = CAST(:gr  AS jsonb),
+                        behaviors_json  = CAST(:bh  AS jsonb),
+                        context_json    = CAST(:ctx AS jsonb),
                         updated_at      = NOW()
-                    WHERE id = :inv_id AND tenant_id = :tid
+                    WHERE id = CAST(:inv_id AS uuid) AND tenant_id = CAST(:tid AS uuid)
                     """
                 ),
                 {
