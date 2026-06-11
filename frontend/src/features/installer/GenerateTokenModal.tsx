@@ -193,7 +193,7 @@ export function GenerateTokenModal({ open, onClose, onSuccess }: Props) {
                     htmlFor="organization"
                     className="block text-xs font-medium text-text-secondary mb-1.5"
                   >
-                    Organization <span className="text-severity-critical">*</span>
+                    Department <span className="text-severity-critical">*</span>
                   </label>
                   <input
                     id="organization"

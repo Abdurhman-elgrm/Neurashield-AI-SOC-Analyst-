@@ -300,7 +300,7 @@ export function TokenDetailModal({ open, token, onClose }: Props) {
                 {/* Details grid */}
                 <div className="mb-4">
                   <Row label="Machine">{token.machine_name}</Row>
-                  <Row label="Organization">{token.organization}</Row>
+                  <Row label="Department">{token.organization}</Row>
                   {token.device_id && (
                     <Row label="Device ID" mono>
                       {token.device_id}

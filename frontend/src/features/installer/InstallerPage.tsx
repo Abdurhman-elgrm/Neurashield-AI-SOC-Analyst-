@@ -517,7 +517,7 @@ export function InstallerPage() {
                     Machine
                   </th>
                   <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-text-muted hidden md:table-cell">
-                    Organization
+                    Department
                   </th>
                   <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-text-muted">
                     Status
