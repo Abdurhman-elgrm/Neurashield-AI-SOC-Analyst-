@@ -356,6 +356,7 @@ class InvestigationListItem(BaseModel):
     source:                 str | None = "auto"
     created_at:             datetime
     updated_at:             datetime
+    ai_analysis_json:       dict | None = None
 
 
 class InvestigationCreate(BaseModel):
@@ -372,6 +373,7 @@ class InvestigationDetail(InvestigationListItem):
     recommended_actions: list[str]
     note_count:          int = 0
     evidence_count:      int = 0
+    ai_analysis_json:    dict | None = None
 
 
 class InvestigationFilterParams(BaseModel):

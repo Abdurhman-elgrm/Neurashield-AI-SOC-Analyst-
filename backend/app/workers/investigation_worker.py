@@ -103,6 +103,42 @@ class InvestigationWorker:
                 error=str(exc),
             )
 
+        # AI Analysis — only for high-confidence or high-severity investigations
+        should_analyze = (
+            result.score.threat_score >= 60
+            or result.score.confidence == "high"
+        )
+        if should_analyze:
+            try:
+                from app.ai.investigation_analyzer import get_investigation_analyzer
+                analyzer = get_investigation_analyzer()
+                investigation_data = {
+                    "id":             result.investigation_id,
+                    "title":          (result.summary.executive_summary or "")[:200],
+                    "threat_score":   result.score.threat_score,
+                    "confidence":     result.score.confidence,
+                    "behaviors_json": result.behaviors.model_dump(),
+                    "timeline_json":  result.timeline.model_dump(),
+                    "context_json":   result.context.model_dump(),
+                    "graph_json":     result.graph.model_dump(),
+                }
+                async with database_manager.session() as ai_db:
+                    analysis = await analyzer.analyze(ai_db, investigation_data)
+                    await self._persist_ai_analysis(
+                        result.investigation_id, analysis.to_dict(), ai_db
+                    )
+                    await ai_db.commit()
+                logger.info(
+                    "investigation_ai_analysis_complete",
+                    investigation_id=result.investigation_id,
+                    verdict=analysis.verdict_suggestion,
+                    kill_chain=analysis.kill_chain_stage,
+                    confidence=analysis.verdict_confidence,
+                )
+            except Exception:
+                logger.warning("investigation_ai_analysis_failed", exc_info=True)
+                # Never block the pipeline
+
         # Publish investigation result to stream.
         publisher = StreamPublisher(self._pipeline_client)
         try:
@@ -123,6 +159,32 @@ class InvestigationWorker:
             confidence=result.score.confidence,
             behavior_count=result.behaviors.behavior_count,
         )
+
+    async def _persist_ai_analysis(
+        self, investigation_id: str, ai_analysis: dict, db: Any
+    ) -> None:
+        """Write ai_analysis_json to the investigations row — best-effort."""
+        import json
+        from sqlalchemy import text
+        try:
+            await db.execute(
+                text(
+                    """
+                    UPDATE investigations SET
+                        ai_analysis_json = CAST(:ai_json AS jsonb),
+                        updated_at       = NOW()
+                    WHERE id        = CAST(:inv_id AS uuid)
+                      AND tenant_id = CAST(:tid AS uuid)
+                    """
+                ),
+                {
+                    "inv_id":  investigation_id,
+                    "tid":     self._tenant_id,
+                    "ai_json": json.dumps(ai_analysis),
+                },
+            )
+        except Exception as exc:
+            logger.warning("ai_analysis_persist_failed", error=str(exc))
 
     async def _persist_full_result(self, result: Any, db: Any) -> None:
         """Persist timeline/graph/behaviors/context JSONB columns — best-effort."""

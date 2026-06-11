@@ -162,6 +162,7 @@ export interface InvestigationListItem {
   source: string | null
   created_at: string
   updated_at: string
+  ai_analysis_json?: Record<string, unknown> | null
 }
 
 export interface InvestigationListResponse {

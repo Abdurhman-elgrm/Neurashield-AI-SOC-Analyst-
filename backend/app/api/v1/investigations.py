@@ -178,6 +178,48 @@ async def get_investigation(
     return APIResponse.ok(detail)
 
 
+# ─── AI Analysis ─────────────────────────────────────────────────────────────
+
+@router.post("/{investigation_id}/analyze", response_model=APIResponse[InvestigationDetail])
+async def run_ai_analysis(
+    investigation_id: str,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_UPDATE)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[InvestigationDetail]:
+    """Manually trigger AI analysis for any investigation."""
+    from datetime import datetime, timezone
+    from app.analyst.cases import CaseService
+    from app.ai.investigation_analyzer import get_investigation_analyzer
+    from app.models.tenant_member import TenantMember
+
+    m: TenantMember = member  # type: ignore[assignment]
+
+    inv = await CaseService.get_investigation(db, m.tenant_id, investigation_id)
+
+    investigation_data = {
+        "id":             str(inv.id),
+        "title":          inv.title or inv.executive_summary[:200],
+        "threat_score":   inv.threat_score,
+        "confidence":     inv.confidence,
+        "behaviors_json": inv.behaviors_json or {},
+        "timeline_json":  inv.timeline_json or {},
+        "context_json":   inv.context_json or {},
+        "graph_json":     inv.graph_json or {},
+    }
+
+    analyzer = get_investigation_analyzer()
+    analysis = await analyzer.analyze(db, investigation_data)
+    inv.ai_analysis_json = analysis.to_dict()
+    inv.updated_at = datetime.now(tz=timezone.utc)
+    await db.flush()
+
+    detail = await AnalystWorkspaceService.get_investigation_detail(
+        db, m.tenant_id, investigation_id, m.user_id
+    )
+    await db.commit()
+    return APIResponse.ok(detail)
+
+
 # ─── Timeline ─────────────────────────────────────────────────────────────────
 
 @router.get("/{investigation_id}/timeline", response_model=APIResponse[TimelineResponse])
@@ -462,6 +504,25 @@ async def set_verdict(
     verdict = await AnalystWorkspaceService.set_verdict(
         db, m.tenant_id, investigation_id, m.user_id, payload
     )
+
+    # Store analyst feedback in ai_analysis_json for AI improvement tracking
+    try:
+        from app.analyst.cases import CaseService
+        from datetime import datetime, timezone
+        inv = await CaseService.get_investigation(db, m.tenant_id, investigation_id)
+        if inv.ai_analysis_json is not None:
+            updated = dict(inv.ai_analysis_json)
+            verdict_str = payload.verdict.value if hasattr(payload.verdict, "value") else str(payload.verdict)
+            updated["analyst_feedback"] = {
+                "verdict": verdict_str,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                "agreed_with_ai": updated.get("verdict_suggestion") == verdict_str,
+            }
+            inv.ai_analysis_json = updated
+            await db.flush()
+    except Exception:
+        pass  # Never block verdict setting
+
     await db.commit()
     return APIResponse.ok(
         VerdictOut(

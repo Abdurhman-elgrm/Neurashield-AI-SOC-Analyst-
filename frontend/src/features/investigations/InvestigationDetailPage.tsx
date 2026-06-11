@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatDateTime } from '@/lib/timezone'
 import {
   ArrowLeft, LayoutDashboard, Clock, Share2, Paperclip,
-  StickyNote, UserPlus, ChevronDown,
+  StickyNote, UserPlus, ChevronDown, Brain, ChevronRight, Copy, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { SevBadge } from '@/components/ui/SevBadge'
@@ -13,8 +13,8 @@ import { formatRelativeTime } from '@/lib/utils'
 import {
   useInvDetail, useInvTimeline, useInvGraph,
   useInvEvidence, useInvNotes,
-  useInvUpdateStatus, useInvCreateNote,
-  type InvestigationDetail,
+  useInvUpdateStatus, useInvCreateNote, useRunAIAnalysis,
+  type InvestigationDetail, type AIAnalysis,
   type TimelineEntryOut,
   type GraphNodeOut, type GraphEdgeOut,
   type EvidenceOut, type NoteOut,
@@ -520,6 +520,371 @@ function NotesTab({ id }: { id: string }) {
   )
 }
 
+// ─── AIAnalysisTab ────────────────────────────────────────────────────────────
+
+const KILL_CHAIN_LABELS = ['Recon', 'Weapon.', 'Delivery', 'Exploit', 'Install', 'C2', 'Actions']
+
+function KillChainBar({ index }: { index: number }) {
+  return (
+    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+      {KILL_CHAIN_LABELS.map((label, i) => {
+        const isPast    = i < index
+        const isCurrent = i === index
+        const color = isCurrent ? '#EF4444' : isPast ? '#F97316' : '#3A4150'
+        return (
+          <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{
+              height: 6, borderRadius: 3,
+              background: color,
+              boxShadow: isCurrent ? `0 0 8px ${color}` : 'none',
+              marginBottom: 5,
+            }} />
+            <div style={{
+              fontSize: 8, fontWeight: isCurrent ? 700 : 500,
+              color: isCurrent ? '#F5F7FA' : isPast ? '#8B95A7' : '#3A4150',
+              fontFamily: "'JetBrains Mono', monospace",
+              textTransform: 'uppercase', letterSpacing: '0.3px',
+            }}>
+              {label}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function VerdictCard({ analysis }: { analysis: AIAnalysis }) {
+  const { verdict_suggestion: v, verdict_confidence: conf } = analysis
+  const cfg = v === 'true_positive'
+    ? { label: 'True Positive',       color: '#EF4444', dot: '#EF4444' }
+    : v === 'false_positive'
+    ? { label: 'False Positive',      color: '#10B981', dot: '#10B981' }
+    : { label: 'Needs Investigation', color: '#F59E0B', dot: '#F59E0B' }
+  const pct = Math.round(conf * 100)
+
+  return (
+    <div style={{
+      padding: '14px 16px', borderRadius: 8,
+      border: `1px solid ${cfg.color}40`,
+      background: `${cfg.color}0A`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{cfg.label}</span>
+      </div>
+      <div style={{ fontSize: 11, color: '#8B95A7', marginBottom: 6 }}>
+        Confidence: <span style={{ color: '#F5F7FA', fontWeight: 600 }}>{pct}%</span>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${pct}%`, borderRadius: 2,
+          background: cfg.color, transition: 'width 600ms ease',
+        }} />
+      </div>
+    </div>
+  )
+}
+
+function CopyableAction({ text, index }: { text: string; index: number }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <span style={{
+        width: 20, height: 20, borderRadius: '50%',
+        background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 9, fontWeight: 700, color: '#60A5FA', flexShrink: 0, marginTop: 1,
+      }}>
+        {index + 1}
+      </span>
+      <span style={{ flex: 1, fontSize: 12, color: '#B8C0CC', lineHeight: 1.6 }}>{text}</span>
+      <button
+        onClick={copy}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: copied ? '#10B981' : '#3A4150', padding: '2px 4px', flexShrink: 0,
+        }}
+        title="Copy"
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+    </div>
+  )
+}
+
+function EvidencePill({ text }: { text: string }) {
+  return (
+    <div style={{
+      fontSize: 11, color: '#B8C0CC', padding: '5px 10px',
+      background: 'rgba(255,255,255,0.03)', borderRadius: 5,
+      border: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.5,
+    }}>
+      {text}
+    </div>
+  )
+}
+
+function AIAnalysisTab({ inv, id }: { inv: InvestigationDetail; id: string }) {
+  const runAnalysis = useRunAIAnalysis(id)
+  const [narrativeOpen, setNarrativeOpen] = useState(false)
+  const analysis = inv.ai_analysis_json
+
+  if (runAnalysis.isPending) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: '50%',
+          border: '3px solid rgba(99,102,241,0.2)',
+          borderTop: '3px solid #818CF8',
+          margin: '0 auto 16px',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#5C6373' }}>Analyzing investigation...</div>
+        <div style={{ fontSize: 12, color: '#3A4150', marginTop: 4 }}>This may take 10–30 seconds</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  if (!analysis) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%',
+          background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 16px',
+        }}>
+          <Brain size={28} style={{ color: '#818CF8' }} />
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#5C6373', marginBottom: 6 }}>
+          No AI Analysis Yet
+        </div>
+        <div style={{ fontSize: 12, color: '#3A4150', marginBottom: 24 }}>
+          Automatically runs for HIGH/CRITICAL investigations
+        </div>
+        <Button variant="primary" size="sm" onClick={() => runAnalysis.mutate()}>
+          <Brain size={13} />
+          Run AI Analysis
+        </Button>
+      </div>
+    )
+  }
+
+  const actor = analysis.threat_actor_details
+  const actorConf = Math.round((actor?.confidence ?? 0) * 100)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 800 }}>
+
+      {/* Header bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Brain size={16} style={{ color: '#818CF8' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#F5F7FA' }}>AI Analysis</span>
+          <span style={{
+            fontSize: 9, padding: '1px 6px', borderRadius: 3,
+            background: 'rgba(99,102,241,0.15)', color: '#818CF8',
+            fontFamily: "'JetBrains Mono', monospace", fontWeight: 600,
+          }}>
+            {analysis.rag_sources_used?.length ?? 0} sources
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => runAnalysis.mutate()}>
+          Re-analyze
+        </Button>
+      </div>
+
+      {/* Kill chain */}
+      <div className="card" style={{ padding: '14px 16px' }}>
+        <div style={{
+          fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '1.5px', color: '#5C6373', marginBottom: 12,
+        }}>Kill Chain Stage</div>
+        <KillChainBar index={analysis.kill_chain_index ?? 3} />
+        <div style={{ marginTop: 8, fontSize: 11, color: '#818CF8', fontWeight: 600 }}>
+          {analysis.kill_chain_stage}
+        </div>
+      </div>
+
+      {/* Verdict */}
+      <VerdictCard analysis={analysis} />
+
+      {/* Threat actor */}
+      <div className="card" style={{ padding: '14px 16px' }}>
+        <div style={{
+          fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '1.5px', color: '#5C6373', marginBottom: 10,
+        }}>Threat Actor Attribution</div>
+        {analysis.threat_actor_attribution === 'Unknown' ? (
+          <div style={{ fontSize: 12, color: '#5C6373' }}>No known threat actor match</div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F7FA', marginBottom: 4 }}>
+              Likely: {analysis.threat_actor_attribution}
+              {actorConf > 0 && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: '#818CF8', fontWeight: 500 }}>
+                  ({actorConf}% match)
+                </span>
+              )}
+            </div>
+            {actor?.matching_ttps?.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                {actor.matching_ttps.map((ttp: string) => (
+                  <span key={ttp} style={{
+                    fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                    background: 'rgba(139,92,246,0.1)', color: '#C4B5FD',
+                    border: '1px solid rgba(139,92,246,0.2)',
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}>
+                    {ttp}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Executive summary */}
+      {analysis.executive_summary && (
+        <div className="card" style={{ padding: '14px 16px' }}>
+          <div style={{
+            fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '1.5px', color: '#5C6373', marginBottom: 10,
+          }}>Executive Summary</div>
+          <p style={{ fontSize: 13, color: '#B8C0CC', lineHeight: 1.7, margin: 0 }}>
+            {analysis.executive_summary}
+          </p>
+        </div>
+      )}
+
+      {/* Evidence strength */}
+      {(() => {
+        const ev = analysis.evidence_strength
+        const hasEvidence = (ev?.strong?.length ?? 0) + (ev?.circumstantial?.length ?? 0) + (ev?.noise?.length ?? 0) > 0
+        if (!hasEvidence) return null
+        return (
+          <div className="card" style={{ padding: '14px 16px' }}>
+            <div style={{
+              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '1.5px', color: '#5C6373', marginBottom: 12,
+            }}>Evidence Strength</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              {/* Strong */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#EF4444', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', display: 'inline-block' }} />
+                  Strong ({ev?.strong?.length ?? 0})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(ev?.strong ?? []).map((s: string, i: number) => <EvidencePill key={i} text={s} />)}
+                  {(ev?.strong?.length ?? 0) === 0 && <span style={{ fontSize: 11, color: '#3A4150' }}>None</span>}
+                </div>
+              </div>
+              {/* Circumstantial */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }} />
+                  Circumstantial ({ev?.circumstantial?.length ?? 0})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(ev?.circumstantial ?? []).map((s: string, i: number) => <EvidencePill key={i} text={s} />)}
+                  {(ev?.circumstantial?.length ?? 0) === 0 && <span style={{ fontSize: 11, color: '#3A4150' }}>None</span>}
+                </div>
+              </div>
+              {/* Noise */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#8B95A7', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#8B95A7', display: 'inline-block' }} />
+                  Noise ({ev?.noise?.length ?? 0})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(ev?.noise ?? []).map((s: string, i: number) => <EvidencePill key={i} text={s} />)}
+                  {(ev?.noise?.length ?? 0) === 0 && <span style={{ fontSize: 11, color: '#3A4150' }}>None</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Recommended actions */}
+      {analysis.recommended_actions?.length > 0 && (
+        <div className="card" style={{ padding: '14px 16px' }}>
+          <div style={{
+            fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '1.5px', color: '#5C6373', marginBottom: 12,
+          }}>Recommended Actions</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {analysis.recommended_actions.map((action: string, i: number) => (
+              <CopyableAction key={i} text={action} index={i} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Attack narrative (collapsible) */}
+      {analysis.attack_narrative && (
+        <div className="card" style={{ padding: '14px 16px' }}>
+          <button
+            onClick={() => setNarrativeOpen(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            }}
+          >
+            <div style={{
+              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '1.5px', color: '#5C6373',
+            }}>Attack Narrative</div>
+            <ChevronRight
+              size={14}
+              style={{
+                color: '#5C6373',
+                transform: narrativeOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 150ms',
+              }}
+            />
+          </button>
+          {narrativeOpen && (
+            <p style={{
+              fontSize: 12, color: '#8B95A7', lineHeight: 1.8,
+              margin: '10px 0 0',
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              {analysis.attack_narrative}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Analyst feedback indicator */}
+      {analysis.analyst_feedback && (
+        <div style={{
+          fontSize: 11, color: '#5C6373',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <Check size={12} style={{ color: '#10B981' }} />
+          Analyst feedback recorded: {analysis.analyst_feedback.verdict?.replace(/_/g, ' ')}
+          {analysis.analyst_feedback.agreed_with_ai !== null && (
+            <span style={{ color: analysis.analyst_feedback.agreed_with_ai ? '#10B981' : '#F59E0B' }}>
+              · {analysis.analyst_feedback.agreed_with_ai ? 'Agreed with AI' : 'Disagreed with AI'}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Skeletons ────────────────────────────────────────────────────────────────
 
 function DetailSkeleton() {
@@ -542,7 +907,7 @@ export function InvestigationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'timeline' | 'graph' | 'evidence' | 'notes'
+    'overview' | 'ai_analysis' | 'timeline' | 'graph' | 'evidence' | 'notes'
   >('overview')
 
   const { data: inv, isLoading } = useInvDetail(id ?? '')
@@ -581,12 +946,15 @@ export function InvestigationDetailPage() {
   const color = scoreColor(inv.threat_score)
   const title = inv.title ?? `Investigation ${inv.investigation_id.slice(0, 8)}`
 
+  const hasAI = !!inv.ai_analysis_json
+
   const TABS = [
-    { id: 'overview',  label: 'Overview',  icon: LayoutDashboard },
-    { id: 'timeline',  label: 'Timeline',  icon: Clock           },
-    { id: 'graph',     label: 'Graph',     icon: Share2          },
-    { id: 'evidence',  label: 'Evidence',  icon: Paperclip       },
-    { id: 'notes',     label: 'Notes',     icon: StickyNote      },
+    { id: 'overview',     label: 'Overview',    icon: LayoutDashboard },
+    { id: 'ai_analysis',  label: 'AI Analysis', icon: Brain, badge: hasAI },
+    { id: 'timeline',     label: 'Timeline',    icon: Clock           },
+    { id: 'graph',        label: 'Graph',       icon: Share2          },
+    { id: 'evidence',     label: 'Evidence',    icon: Paperclip       },
+    { id: 'notes',        label: 'Notes',       icon: StickyNote      },
   ] as const
 
   return (
@@ -685,6 +1053,12 @@ export function InvestigationDetailPage() {
             >
               <Icon size={13} />
               {tab.label}
+              {'badge' in tab && tab.badge && (
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#818CF8', flexShrink: 0,
+                }} />
+              )}
             </button>
           )
         })}
@@ -692,11 +1066,12 @@ export function InvestigationDetailPage() {
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', paddingTop: 16 }}>
-        {activeTab === 'overview'  && <OverviewTab  inv={inv} />}
-        {activeTab === 'timeline'  && <TimelineTab  id={id!} />}
-        {activeTab === 'graph'     && <GraphTab     id={id!} />}
-        {activeTab === 'evidence'  && <EvidenceTab  id={id!} />}
-        {activeTab === 'notes'     && <NotesTab     id={id!} />}
+        {activeTab === 'overview'    && <OverviewTab    inv={inv} />}
+        {activeTab === 'ai_analysis' && <AIAnalysisTab  inv={inv} id={id!} />}
+        {activeTab === 'timeline'    && <TimelineTab    id={id!} />}
+        {activeTab === 'graph'       && <GraphTab       id={id!} />}
+        {activeTab === 'evidence'    && <EvidenceTab    id={id!} />}
+        {activeTab === 'notes'       && <NotesTab       id={id!} />}
       </div>
     </div>
   )

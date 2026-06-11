@@ -117,6 +117,7 @@ class AnalystWorkspaceService:
             updated_at=inv.updated_at,
             note_count=note_count,
             evidence_count=evidence_count,
+            ai_analysis_json=inv.ai_analysis_json,
         )
 
     # ── Status / case management ───────────────────────────────────────────────
@@ -408,6 +409,9 @@ def _to_list_item(inv: Investigation) -> InvestigationListItem:
         verdict=inv.verdict,
         assigned_to=inv.assigned_to,
         executive_summary=inv.executive_summary,
+        title=inv.title,
+        source=inv.source,
         created_at=inv.created_at,
         updated_at=inv.updated_at,
+        ai_analysis_json=inv.ai_analysis_json,
     )

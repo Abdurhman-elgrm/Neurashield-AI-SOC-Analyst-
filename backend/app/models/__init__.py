@@ -25,6 +25,7 @@ from app.models.analyst import (
     SavedHunt,
 )
 from app.models.chat import ChatMessage
+from app.models.rag_chunk import RAGChunk
 
 __all__ = [
     "Base",
@@ -49,4 +50,5 @@ __all__ = [
     "InvestigationVerdict",
     "SavedHunt",
     "ChatMessage",
+    "RAGChunk",
 ]

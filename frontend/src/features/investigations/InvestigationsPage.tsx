@@ -104,11 +104,26 @@ function InvRow({ inv, onClick }: { inv: InvestigationListItem; onClick: () => v
         <SevBadge score={inv.threat_score} />
       </td>
       <td style={{ padding: "9px 12px", maxWidth: 320 }}>
-        <div style={{
-          fontSize: 12, fontWeight: 600, color: "#F5F7FA",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {displayTitle}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{
+            fontSize: 12, fontWeight: 600, color: "#F5F7FA",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {displayTitle}
+          </span>
+          {inv.ai_analysis_json && (
+            <span style={{
+              fontSize: 9, padding: "2px 6px",
+              background: "rgba(99,102,241,0.15)",
+              border: "1px solid rgba(99,102,241,0.3)",
+              borderRadius: 4, color: "#818CF8",
+              fontWeight: 600, letterSpacing: "0.5px",
+              flexShrink: 0,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              AI
+            </span>
+          )}
         </div>
       </td>
       <td style={{ padding: "9px 12px" }}>

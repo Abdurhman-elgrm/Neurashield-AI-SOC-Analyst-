@@ -57,6 +57,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await database_manager.initialize()
 
+    # ── Auto-ingest RAG knowledge base if empty ────────────────────────────
+    async def _maybe_ingest_rag() -> None:
+        async with database_manager.session() as db:
+            from app.ai.rag import ingest_all
+            from sqlalchemy import select, func
+            from app.models.rag_chunk import RAGChunk
+            count_result = await db.execute(select(func.count()).select_from(RAGChunk))
+            count = count_result.scalar() or 0
+            if count < 100:
+                logger.info("rag_ingestion_starting", existing_chunks=count)
+                results = await ingest_all(db)
+                logger.info("rag_ingestion_complete", results=results)
+            else:
+                logger.info("rag_already_populated", chunk_count=count)
+
+    asyncio.create_task(_maybe_ingest_rag())
+    # ──────────────────────────────────────────────────────────────────────
+
     # Redis is optional — rate limiting degrades gracefully when unavailable.
     # A missing or unreachable Redis must never prevent the app from starting.
     try:

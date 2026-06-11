@@ -3,6 +3,33 @@ import { apiClient } from '@/api/client'
 
 // ─── Backend types ────────────────────────────────────────────────────────────
 
+export interface AIAnalysis {
+  executive_summary: string
+  attack_narrative: string
+  kill_chain_stage: string
+  kill_chain_index: number
+  threat_actor_attribution: string
+  threat_actor_details: {
+    name: string
+    confidence: number
+    matching_ttps: string[]
+  }
+  evidence_strength: {
+    strong: string[]
+    circumstantial: string[]
+    noise: string[]
+  }
+  recommended_actions: string[]
+  verdict_suggestion: 'true_positive' | 'false_positive' | 'needs_investigation'
+  verdict_confidence: number
+  rag_sources_used: string[]
+  analyst_feedback?: {
+    verdict: string
+    timestamp: string
+    agreed_with_ai: boolean | null
+  }
+}
+
 export interface InvestigationDetail {
   investigation_id: string
   tenant_id: string
@@ -24,6 +51,7 @@ export interface InvestigationDetail {
   recommended_actions: string[]
   note_count: number
   evidence_count: number
+  ai_analysis_json?: AIAnalysis | null
 }
 
 export interface TimelineEntryOut {
@@ -194,5 +222,15 @@ export function useInvCreateNote(id: string) {
       apiClient.post(`/investigations/${id}/notes`, { content }),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['inv-detail', id, 'notes'] }),
+  })
+}
+
+export function useRunAIAnalysis(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<{ data: InvestigationDetail }>(`/investigations/${id}/analyze`),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['inv-detail', id] }),
   })
 }

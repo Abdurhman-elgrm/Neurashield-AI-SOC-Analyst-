@@ -91,6 +91,9 @@ class Investigation(Base, TimestampMixin):
     behaviors_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     context_json:  Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # AI analysis enrichment (Phase 2)
+    ai_analysis_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
+
     __table_args__ = (
         Index("idx_investigation_tenant_score",   "tenant_id", "threat_score"),
         Index("idx_investigation_tenant_created",  "tenant_id", "created_at"),
