@@ -47,6 +47,26 @@ function Write-JsonNoBom {
     [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+# ── Step 0: Stop any running V1 agent ────────────────────────────────────────
+$v1Script = Join-Path $INSTALL_DIR "soc_agent.py"
+$existingV1Task = Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+
+if ($existingV1Task) {
+    $v1Action = ($existingV1Task.Actions | Select-Object -First 1).Arguments
+    if ($v1Action -like "*soc_agent.py*") {
+        Write-Host "[bootstrap] V1 agent detected — upgrading to V2..." -ForegroundColor Yellow
+    }
+    Stop-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+}
+
+# Kill any lingering pythonw/python process running soc_agent.py (V1)
+Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*soc_agent.py*" } |
+    ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "[bootstrap] Stopped V1 agent process (PID $($_.ProcessId))" -ForegroundColor Yellow
+    }
+
 # ── Step 1: Gather machine information ────────────────────────────────────────
 Write-Step "Gathering machine information..."
 
@@ -99,8 +119,9 @@ if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
 }
 
-# Grant Users read/write so the agent (running as scheduled task) can access files
-icacls $INSTALL_DIR /grant "Everyone:(OI)(CI)F" /T 2>$null | Out-Null
+# Grant Users read/write so the agent (running as SYSTEM) can access all files.
+# Single quotes prevent PowerShell from parsing (OI)(CI) as sub-expressions.
+icacls "$INSTALL_DIR" /grant 'Everyone:(OI)(CI)F' /T 2>$null | Out-Null
 
 Write-OK "Directory ready: $INSTALL_DIR"
 
