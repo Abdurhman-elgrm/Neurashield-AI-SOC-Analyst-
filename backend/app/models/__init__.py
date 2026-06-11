@@ -24,6 +24,7 @@ from app.models.analyst import (
     InvestigationVerdict,
     SavedHunt,
 )
+from app.models.chat import ChatMessage
 
 __all__ = [
     "Base",
@@ -47,4 +48,5 @@ __all__ = [
     "InvestigationEvidence",
     "InvestigationVerdict",
     "SavedHunt",
+    "ChatMessage",
 ]

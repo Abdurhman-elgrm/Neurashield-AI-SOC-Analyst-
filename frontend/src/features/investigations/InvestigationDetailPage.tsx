@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { apiClient } from '@/api/client'
+import { useAuthStore } from '@/stores/authStore'
 import {
   ArrowLeft, LayoutDashboard, Clock, Share2, Paperclip,
   StickyNote, UserPlus, ChevronDown,
@@ -16,6 +18,7 @@ import {
   type GraphNodeOut, type GraphEdgeOut,
   type EvidenceOut, type NoteOut,
 } from './hooks/useInvestigationDetail'
+import { GraphView } from './components/graph/GraphView'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -373,74 +376,12 @@ function GraphTab({ id }: { id: string }) {
       sub="The attack graph will be generated as events are correlated" />
   )
 
-  const nodeTypeColors: Record<string, string> = {
-    host:    '#60A5FA',
-    user:    '#34D399',
-    ip:      '#F59E0B',
-    process: '#C084FC',
-    file:    '#FBBF24',
-    domain:  '#22D3EE',
-  }
-
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#5C6373', marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: '#5C6373', marginBottom: 12 }}>
         {data.node_count} nodes · {data.edge_count} connections · depth {data.max_depth}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {data.nodes.map((node: GraphNodeOut) => {
-          const color = nodeTypeColors[node.node_type] ?? '#8B95A7'
-          return (
-            <div key={node.node_id} className="card" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                fontSize: 9, fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '0.08em',
-                padding: '1px 5px', borderRadius: 3,
-                background: `${color}1a`,
-                color, fontFamily: "'JetBrains Mono', monospace",
-              }}>
-                {node.node_type}
-              </span>
-              <span style={{ fontSize: 12, color: '#B8C0CC', fontFamily: "'JetBrains Mono', monospace" }}>
-                {node.label}
-              </span>
-              {node.event_count > 0 && (
-                <span style={{ fontSize: 10, color: '#5C6373', marginLeft: 4 }}>
-                  {node.event_count} evt
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Edges */}
-      {data.edges.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '1.5px', color: '#5C6373', marginBottom: 8,
-          }}>Connections</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {data.edges.slice(0, 20).map((edge: GraphEdgeOut, i: number) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                <span style={{ color: '#B8C0CC', fontFamily: "'JetBrains Mono', monospace" }}>
-                  {edge.source.slice(0, 12)}
-                </span>
-                <span style={{ color: '#5C6373', fontSize: 10 }}>→ {edge.edge_type} →</span>
-                <span style={{ color: '#B8C0CC', fontFamily: "'JetBrains Mono', monospace" }}>
-                  {edge.target.slice(0, 12)}
-                </span>
-              </div>
-            ))}
-            {data.edges.length > 20 && (
-              <div style={{ fontSize: 11, color: '#5C6373', marginTop: 4 }}>
-                +{data.edges.length - 20} more connections
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <GraphView nodes={data.nodes as GraphNodeOut[]} edges={data.edges as GraphEdgeOut[]} />
     </div>
   )
 }
@@ -605,6 +546,23 @@ export function InvestigationDetailPage() {
 
   const { data: inv, isLoading } = useInvDetail(id ?? '')
   const updateStatus = useInvUpdateStatus(id ?? '')
+  const currentUser = useAuthStore((s) => s.user)
+  const [assigning, setAssigning] = useState(false)
+  const [assignedLabel, setAssignedLabel] = useState(false)
+
+  const handleAssign = async () => {
+    if (!currentUser || assigning) return
+    setAssigning(true)
+    try {
+      await apiClient.patch(`/investigations/${id}/assign`, { user_id: currentUser.id })
+      setAssignedLabel(true)
+      setTimeout(() => setAssignedLabel(false), 2000)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   if (isLoading) return <DetailSkeleton />
 
@@ -695,8 +653,8 @@ export function InvestigationDetailPage() {
               current={inv.status}
               onChange={status => updateStatus.mutate(status)}
             />
-            <Button variant="secondary" size="sm">
-              <UserPlus size={12} /> Assign
+            <Button variant="secondary" size="sm" onClick={handleAssign} disabled={assigning}>
+              <UserPlus size={12} /> {assignedLabel ? 'Assigned to you' : 'Assign'}
             </Button>
           </div>
         </div>

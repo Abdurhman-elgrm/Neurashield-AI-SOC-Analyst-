@@ -23,6 +23,7 @@ dependencies = [
     "email-validator>=2.2.0",
     "orjson>=3.10.0",
     "python-ulid>=3.0.0",
+    "anthropic>=0.40.0",
 ]
 
 [project.optional-dependencies]

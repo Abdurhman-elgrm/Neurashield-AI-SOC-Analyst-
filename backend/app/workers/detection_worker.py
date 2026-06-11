@@ -73,6 +73,24 @@ class DetectionWorker:
 
             if alerts:
                 await engine.publish_alerts(alerts)
+
+                # Run AI analysis for each alert — failure must never block the pipeline
+                for alert in alerts:
+                    try:
+                        from app.ai.analyzer import get_analyzer
+                        analyzer = get_analyzer()
+                        result = await analyzer.analyze(event)
+                        alert.metadata = {**(alert.metadata or {}), "ai_analysis": result.to_dict()}
+                        await db.flush()
+                        logger.info(
+                            "ai_analysis_complete",
+                            alert_id=str(alert.id),
+                            severity=result.severity_assessment,
+                            technique=result.mitre_technique,
+                        )
+                    except Exception:
+                        logger.warning("ai_analysis_failed", exc_info=True)
+
                 await db.commit()
 
                 # Fan out to WebSocket clients

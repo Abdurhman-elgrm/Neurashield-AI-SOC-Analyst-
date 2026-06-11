@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     WORKER_CLAIM_IDLE_MS: int = 30000
     WORKER_MAX_RETRY: int = 3
 
+    # ─── AI / LLM ─────────────────────────────────────────────────────────────
+    ANTHROPIC_API_KEY: str = ""
+
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_allowed_origins(cls, v: Any) -> list[str]:
@@ -75,6 +78,16 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("JWT secret must be at least 32 characters")
         return v
+
+    @model_validator(mode="after")
+    def validate_anthropic_key(self) -> "Settings":
+        if self.is_production and not self.ANTHROPIC_API_KEY:
+            import structlog
+            structlog.get_logger(__name__).warning(
+                "anthropic_api_key_missing",
+                detail="ANTHROPIC_API_KEY is not set in production — AI analysis will be disabled",
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_secrets_differ(self) -> "Settings":

@@ -4,6 +4,7 @@ from app.api.v1 import auth, health, members, tenants, users
 from app.api.v1 import agents, alerts, events, rules, installer
 from app.api.v1 import investigations, entities
 from app.api.v1 import api_keys
+from app.api.v1.copilot import router as copilot_router
 from app.ingestion.router import router as ingestion_router
 from app.realtime.router import router as ws_router
 
@@ -42,6 +43,9 @@ api_router.include_router(entities.router)
 
 # ─── Settings: API Keys ───────────────────────────────────────────────────────
 api_router.include_router(api_keys.router)
+
+# ─── AI Copilot ───────────────────────────────────────────────────────────────
+api_router.include_router(copilot_router)
 
 # ─── Phase 2: WebSocket (registered at root level, no prefix) ────────────────
 api_router.include_router(ws_router)

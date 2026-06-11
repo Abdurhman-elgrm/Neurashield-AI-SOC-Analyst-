@@ -28,6 +28,7 @@ class AlertResponse(BaseModel):
     mitre_techniques: list[str]
     created_at: datetime
     updated_at: datetime
+    ai_analysis: dict[str, Any] | None = None
 
 
 class AlertUpdateRequest(BaseModel):
