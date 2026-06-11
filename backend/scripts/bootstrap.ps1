@@ -210,7 +210,7 @@ if ($needsEmbed) {
         Write-OK "Embedded Python already present at $pyEmbedExe"
         $pythonExe = $pyEmbedExe
     } else {
-        Write-Step "Python not in system path — downloading embeddable runtime (~8 MB)..."
+        Write-Step "Python not in system path - downloading embeddable runtime (~8 MB)..."
         $pyVersion  = "3.11.9"
         $pyZipUrl   = "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip"
         $pyZipPath  = Join-Path $env:TEMP "soc_python_embed.zip"
@@ -308,7 +308,7 @@ while ($state -eq "Queued" -and (Get-Date) -lt $deadline) {
 if ($state -eq "Running") {
     Write-OK "Agent task state: Running"
 } elseif ($state -eq "Queued") {
-    Write-Host "[bootstrap] WARN  Task still Queued after 15s — may start on next login/reboot" -ForegroundColor Yellow
+    Write-Host "[bootstrap] WARN  Task still Queued after 15s - may start on next login/reboot" -ForegroundColor Yellow
     Write-Host "            Check log: $INSTALL_DIR\agent_v2.log" -ForegroundColor Yellow
 } else {
     Write-Host "[bootstrap] INFO  Agent task state: $state" -ForegroundColor Cyan
