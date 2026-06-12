@@ -2,6 +2,7 @@ import { lazy, Suspense, Component } from "react";
 import type { ReactNode, ErrorInfo } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { AuthGuard } from "@/features/auth/AuthGuard";
+import { RequireRole } from "@/components/auth/RequireRole";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { NotFound } from "@/pages/NotFound";
@@ -187,19 +188,21 @@ const router = createBrowserRouter([
       </AuthGuard>
     ),
     children: [
-      { index: true,                    element: <S><DashboardPage /></S> },
-      { path: "dashboard",              element: <S><DashboardPage /></S> },
-      { path: "alerts",                 element: <S><AlertsPage /></S> },
-      { path: "investigations",         element: <S><InvestigationsPage /></S> },
-      { path: "investigations/:id",     element: <S><InvestigationDetailPage /></S> },
-      { path: "events",                 element: <S><EventsPage /></S> },
-      { path: "hunt",                   element: <S><HuntPage /></S> },
-      { path: "rules",                  element: <S><RulesPage /></S> },
-      { path: "graph",                  element: <S><GraphPage /></S> },
-      { path: "agents",                 element: <S><AgentsPage /></S> },
-      { path: "copilot",                element: <S><CopilotPage /></S> },
-      { path: "installer",              element: <S><InstallerPage /></S> },
-      { path: "settings",               element: <S><SettingsPage /></S> },
+      { index: true,                element: <S><DashboardPage /></S> },
+      { path: "dashboard",          element: <S><DashboardPage /></S> },
+      { path: "alerts",             element: <S><AlertsPage /></S> },
+      { path: "events",             element: <S><EventsPage /></S> },
+      { path: "agents",             element: <S><AgentsPage /></S> },
+      { path: "installer",          element: <S><InstallerPage /></S> },
+      { path: "settings",           element: <S><SettingsPage /></S> },
+      // analyst+ only
+      { path: "investigations",     element: <S><RequireRole min="analyst"><InvestigationsPage /></RequireRole></S> },
+      { path: "investigations/:id", element: <S><RequireRole min="analyst"><InvestigationDetailPage /></RequireRole></S> },
+      { path: "hunt",               element: <S><RequireRole min="analyst"><HuntPage /></RequireRole></S> },
+      { path: "copilot",            element: <S><RequireRole min="analyst"><CopilotPage /></RequireRole></S> },
+      // viewer+ (read-only for non-admins, admin-only actions blocked in UI)
+      { path: "rules",              element: <S><RulesPage /></S> },
+      { path: "graph",              element: <S><GraphPage /></S> },
     ],
   },
 

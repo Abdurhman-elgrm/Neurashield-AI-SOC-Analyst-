@@ -7,6 +7,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
+import { useTenantStore } from '@/stores/tenantStore'
 import { settingsApi } from '@/api/settings'
 import type { UserProfile, TenantInfo, Member, ApiKey, ApiKeyCreateResponse, NotificationPreferences } from '@/api/settings'
 import { invitationsApi } from '@/api/invitations'
@@ -687,6 +688,8 @@ function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: (inv: I
 
 function MembersTab() {
   const activeTenantId = useAuthStore(s => s.activeTenantId)
+  const hasRole        = useTenantStore(s => s.hasRole)
+  const canInvite      = hasRole('admin')
 
   const [members,      setMembers]      = useState<Member[]>([])
   const [invitations,  setInvitations]  = useState<Invitation[]>([])
@@ -747,10 +750,12 @@ function MembersTab() {
           </h2>
           <p style={{ fontSize: 12, color: '#5C6373' }}>Manage team access and permissions</p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => setShowInvite(true)}>
-          <Plus size={13} />
-          Invite Member
-        </Button>
+        {canInvite && (
+          <Button variant="primary" size="sm" onClick={() => setShowInvite(true)}>
+            <Plus size={13} />
+            Invite Member
+          </Button>
+        )}
       </div>
 
       {showInvite && (
@@ -851,8 +856,8 @@ function MembersTab() {
                     {m.created_at ? formatRelativeTime(m.created_at) : '—'}
                   </span>
 
-                  {/* Edit permissions button */}
-                  <button
+                  {/* Edit permissions button — admins only */}
+                  {canInvite && <button
                     onClick={() => setExpandedPerm(isExpanded ? null : m.user_id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4,
@@ -866,7 +871,7 @@ function MembersTab() {
                     <Shield size={11} />
                     Permissions
                     {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Permission editor (expandable) */}
@@ -1043,18 +1048,22 @@ function NotificationsTab() {
 
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: 'profile',       label: 'Profile',       icon: User      },
-  { id: 'org',           label: 'Organization',  icon: Building2 },
-  { id: 'api-keys',      label: 'API Keys',      icon: Key       },
-  { id: 'members',       label: 'Members',       icon: Users     },
-  { id: 'notifications', label: 'Notifications', icon: Bell      },
+import type { MemberRole } from '@/types/tenant'
+
+const ALL_TABS = [
+  { id: 'profile',       label: 'Profile',       icon: User,      minRole: 'viewer'  as MemberRole },
+  { id: 'org',           label: 'Organization',  icon: Building2, minRole: 'admin'   as MemberRole },
+  { id: 'api-keys',      label: 'API Keys',      icon: Key,       minRole: 'admin'   as MemberRole },
+  { id: 'members',       label: 'Members',       icon: Users,     minRole: 'viewer'  as MemberRole },
+  { id: 'notifications', label: 'Notifications', icon: Bell,      minRole: 'viewer'  as MemberRole },
 ] as const
 
-type TabId = typeof TABS[number]['id']
+type TabId = typeof ALL_TABS[number]['id']
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('api-keys')
+  const hasRole = useTenantStore(s => s.hasRole)
+  const TABS = ALL_TABS.filter(t => hasRole(t.minRole))
+  const [activeTab, setActiveTab] = useState<TabId>('profile')
 
   return (
     <div

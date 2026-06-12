@@ -122,6 +122,7 @@ export function Sidebar() {
   const clearAuth  = useAuthStore((s) => s.clearAuth);
   const tenant     = useTenantStore((s) => s.activeTenant);
   const memberRole = useTenantStore((s) => s.memberRole);
+  const hasRole    = useTenantStore((s) => s.hasRole);
   const navigate   = useNavigate();
   const alertCount = useOpenAlertCount();
   const onlineAgentCount = useOnlineAgentCount();
@@ -164,17 +165,23 @@ export function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
         <div className="sec-label">Operations</div>
-        <NavItem to="/dashboard"      icon={LayoutDashboard} label="Overview" />
-        <NavItem to="/alerts"         icon={Bell}            label="Alerts"   badge={alertCount} badgeColor="red" />
-        <NavItem to="/investigations" icon={FolderSearch}    label="Investigations" />
+        <NavItem to="/dashboard" icon={LayoutDashboard} label="Overview" />
+        <NavItem to="/alerts"    icon={Bell}            label="Alerts" badge={alertCount} badgeColor="red" />
+        {hasRole('analyst') && (
+          <NavItem to="/investigations" icon={FolderSearch} label="Investigations" />
+        )}
 
         <div className="sec-label">Investigate</div>
-        <NavItem to="/events" icon={Activity}  label="Events" />
-        <NavItem to="/hunt"   icon={Crosshair} label="Threat Hunt" />
-        <NavItem to="/rules"  icon={Shield}    label="Detection Rules" />
+        <NavItem to="/events" icon={Activity} label="Events" />
+        {hasRole('analyst') && (
+          <NavItem to="/hunt"  icon={Crosshair} label="Threat Hunt" />
+        )}
+        <NavItem to="/rules" icon={Shield} label="Detection Rules" />
 
         <div className="sec-label">AI &amp; Response</div>
-        <NavItem to="/copilot" icon={Sparkles} label="AI Copilot" badge="BETA" badgeColor="blue" />
+        {hasRole('analyst') && (
+          <NavItem to="/copilot" icon={Sparkles} label="AI Copilot" badge="BETA" badgeColor="blue" />
+        )}
 
         <div className="sec-label">Platform</div>
         <NavItem to="/agents"   icon={Monitor}  label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit2, Trash2, Shield, ChevronDown } from 'lucide-react'
 import { rulesApi } from '@/api/rules'
+import { useTenantStore } from '@/stores/tenantStore'
 import type { DetectionRule, RuleType, RuleSeverity, PatternCondition, ThresholdCondition } from '@/api/rules'
 import { extractApiError } from '@/lib/utils'
 
@@ -567,6 +568,9 @@ function RuleModal({ editRule, onClose, onSaved }: {
 type FilterEnabled = 'all' | 'enabled' | 'disabled'
 
 export function RulesPage() {
+  const hasRole  = useTenantStore(s => s.hasRole)
+  const canManage = hasRole('admin')
+
   const [rules,      setRules]      = useState<DetectionRule[]>([])
   const [loading,    setLoading]    = useState(true)
   const [loadErr,    setLoadErr]    = useState<string | null>(null)
@@ -688,14 +692,16 @@ export function RulesPage() {
             {loading ? 'Loading...' : `${rules.length} rule${rules.length !== 1 ? 's' : ''} configured`}
           </p>
         </div>
-        <button onClick={openCreate} style={{
-          display: 'flex', alignItems: 'center', gap: 7,
-          padding: '9px 16px', borderRadius: 8,
-          background: '#3B82F6', border: 'none', color: '#fff',
-          fontSize: 13, fontWeight: 600, cursor: 'pointer',
-        }}>
-          <Plus size={14} /> New Rule
-        </button>
+        {canManage && (
+          <button onClick={openCreate} style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            padding: '9px 16px', borderRadius: 8,
+            background: '#3B82F6', border: 'none', color: '#fff',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <Plus size={14} /> New Rule
+          </button>
+        )}
       </div>
 
       {/* Filters + Search bar */}
@@ -793,9 +799,9 @@ export function RulesPage() {
                 isToggling={togglingId === rule.id}
                 isDeleting={deleting && deleteId === rule.id}
                 deleteId={deleteId}
-                onToggle={() => handleToggle(rule)}
-                onEdit={() => openEdit(rule)}
-                onDeleteClick={() => setDeleteId(rule.id)}
+                onToggle={() => canManage && handleToggle(rule)}
+                onEdit={() => canManage && openEdit(rule)}
+                onDeleteClick={() => canManage && setDeleteId(rule.id)}
                 onDeleteConfirm={handleDeleteConfirm}
                 onDeleteCancel={() => setDeleteId(null)}
               />
