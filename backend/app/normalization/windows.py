@@ -18,6 +18,10 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
     """
     event_id = raw.get("event_id_windows") or raw.get("EventID")
 
+    # Persist Windows EventID into raw so the frontend can display human-readable descriptions
+    if event_id:
+        base.raw["windows_event_id"] = str(event_id)
+
     if base.process is None and (proc := raw.get("process") or raw.get("Image")):
         base.process = _extract_process_windows(raw, proc if isinstance(proc, dict) else {})
 
@@ -43,15 +47,68 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.category = "file"
         base.file = _extract_file_from_sysmon(raw)
 
-    elif event_id in ("13", 13, "14", 14):  # Registry
+    elif event_id in ("13", 13, "14", 14):  # Registry value set / renamed
         base.category = "registry"
         base.registry = _extract_registry_windows(raw)
 
-    # Windows Security log
-    elif event_id in ("4624", 4624, "4625", 4625):  # Logon success/failure
+    # Windows Security log — auth events
+    elif event_id in ("4624", 4624):  # Successful logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
-        base.severity = 1 if event_id in ("4624", 4624) else 2
+        base.severity = 1
+
+    elif event_id in ("4625", 4625):  # Failed logon
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    elif event_id in ("4648", 4648):  # Logon with explicit credentials
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    elif event_id in ("4634", 4634):  # Logoff
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+
+    elif event_id in ("4672", 4672):  # Special privileges assigned
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    elif event_id in ("4698", 4698, "4702", 4702):  # Scheduled task created/updated
+        base.category = "process"
+        base.severity = 3
+
+    elif event_id in ("4719", 4719):  # Audit policy changed
+        base.category = "auth"
+        base.severity = 3
+
+    elif event_id in ("4720", 4720):  # User account created
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    elif event_id in ("4728", 4728, "4732", 4732):  # User added to security group
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    elif event_id in ("4768", 4768, "4769", 4769, "4776", 4776):  # Kerberos auth events
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+
+    elif event_id in ("7045", 7045):  # Service installed
+        base.category = "process"
+        base.severity = 3
+
+    elif event_id in ("1102", 1102):  # Audit log cleared
+        base.category = "auth"
+        base.severity = 4
+
+    elif event_id in ("4104", 4104):  # PowerShell script block logged
+        base.category = "process"
+        base.severity = 3
 
     return base
 
@@ -127,15 +184,31 @@ def _extract_file_windows(f: dict[str, Any]) -> NormalizedFile:
     )
 
 
+_SYSTEM_ACCOUNTS = {"-", "", "system", "local service", "network service", "anonymous logon"}
+
+
 def _extract_user_windows(raw: dict[str, Any]) -> NormalizedUser:
     user_raw = raw.get("user") or {}
     if not isinstance(user_raw, dict):
         user_raw = {}
-    name = user_raw.get("name") or raw.get("SubjectUserName") or raw.get("User")
-    domain = user_raw.get("domain") or raw.get("SubjectDomainName")
-    if name and domain and "\\" in name:
+    # TargetUserName is the acting account in security events (more useful than SubjectUserName)
+    name = (
+        user_raw.get("name")
+        or raw.get("TargetUserName")
+        or raw.get("SubjectUserName")
+        or raw.get("User")
+    )
+    domain = (
+        user_raw.get("domain")
+        or raw.get("TargetDomainName")
+        or raw.get("SubjectDomainName")
+    )
+    # Filter out noise: system/service accounts that don't represent real users
+    if name and name.lower() in _SYSTEM_ACCOUNTS:
+        name = None
+    if name and "\\" in name:
         parts = name.split("\\", 1)
-        domain = parts[0]
+        domain = domain or parts[0]
         name = parts[1]
     return NormalizedUser(name=name, domain=domain, id=user_raw.get("id"))
 

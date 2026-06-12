@@ -24,6 +24,7 @@ const categoryConfig: Record<string, {
   registry: { icon: Database, color: '#C084FC', label: 'Registry' },
   dns:      { icon: Globe,    color: '#22D3EE', label: 'DNS'      },
   system:   { icon: Settings, color: '#94A3B8', label: 'System'   },
+  other:    { icon: Activity, color: '#64748B', label: 'Other'    },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,28 +33,87 @@ function formatEventTime(ts: string): string {
   return formatDateShort(ts)
 }
 
+const EVENT_ID_DESCRIPTIONS: Record<string, string> = {
+  '4624': 'Successful logon',
+  '4625': 'Failed logon',
+  '4634': 'Logoff',
+  '4648': 'Logon with explicit credentials',
+  '4672': 'Special privileges assigned',
+  '4688': 'Process created',
+  '4698': 'Scheduled task created',
+  '4702': 'Scheduled task updated',
+  '4719': 'Audit policy changed',
+  '4720': 'User account created',
+  '4728': 'User added to privileged group',
+  '4732': 'User added to security group',
+  '4768': 'Kerberos TGT request',
+  '4769': 'Kerberos service ticket',
+  '4776': 'Credential validation',
+  '7045': 'Service installed',
+  '1102': 'Audit log cleared',
+  '4104': 'PowerShell script block',
+}
+
 function buildEventSummary(event: EventResponse): string {
+  const process = event.process as Record<string, unknown> | null
+  const network = event.network as Record<string, unknown> | null
+  const file    = event.file    as Record<string, unknown> | null
+  const user    = event.user    as Record<string, unknown> | null
+
+  // Process events
   if (event.process_name) {
-    const cmdLine = (event.process as Record<string, unknown> | null)?.command_line
-    const cmd = typeof cmdLine === 'string' ? ` — ${cmdLine.slice(0, 80)}` : ''
+    const cmd = typeof process?.command_line === 'string'
+      ? ` — ${(process.command_line as string).slice(0, 100)}`
+      : ''
     return `${event.process_name}${cmd}`
   }
+
+  // Network events
   if (event.dest_ip || event.source_ip) {
-    const dst = event.dest_ip ?? '?'
-    const src = event.source_ip ?? '?'
-    const port = (event.network as Record<string, unknown> | null)?.dst_port
-    const portStr = port ? `:${port}` : ''
-    return `${src} → ${dst}${portStr}`
+    const src   = event.source_ip ?? '?'
+    const dst   = event.dest_ip   ?? '?'
+    const port  = network?.dst_port ? `:${network.dst_port}` : ''
+    const proto = typeof network?.protocol === 'string' ? ` (${network.protocol})` : ''
+    return `${src} → ${dst}${port}${proto}`
   }
-  const filePath = (event.file as Record<string, unknown> | null)?.path
+
+  // File events
+  const filePath = file?.path
   if (typeof filePath === 'string') {
-    const op = (event.file as Record<string, unknown>)?.operation ?? 'access'
-    return `${op} ${filePath}`
+    const op = file?.action ?? file?.operation ?? 'access'
+    return `${op}: ${filePath.slice(-60)}`
   }
-  if (event.username) {
-    return `User: ${event.username}`
+
+  // Auth / system events — look up Windows EventID for human-readable label
+  const username = event.username
+    ?? (typeof user?.name === 'string' ? user.name : null)
+
+  const winEventId = event.raw?.windows_event_id
+    ?? event.raw?.EventID
+    ?? event.raw?.event_id_windows
+    ?? null
+
+  if (winEventId != null) {
+    const desc = EVENT_ID_DESCRIPTIONS[String(winEventId)] ?? `Event ${winEventId}`
+    return username ? `${desc} — ${username}` : desc
   }
-  return event.stream_id ?? event.raw_id ?? '—'
+
+  if (username) {
+    return `Auth event — ${username}`
+  }
+
+  // Category-based fallback — never show raw IDs
+  const categoryDescriptions: Record<string, string> = {
+    auth:     'Authentication event',
+    process:  'Process activity',
+    network:  'Network connection',
+    file:     'File system activity',
+    registry: 'Registry change',
+    dns:      'DNS query',
+    system:   'System event',
+    other:    'Security event',
+  }
+  return categoryDescriptions[event.category] ?? 'Security event'
 }
 
 // ─── Section / DetailRow helper components ────────────────────────────────────
@@ -106,7 +166,7 @@ function DetailRow({ label, value, mono }: {
 function EventRow({ event, onClick }: { event: EventResponse; onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
   const cat = categoryConfig[event.category] ?? {
-    icon: Activity, color: '#94A3B8', label: event.category,
+    icon: Activity, color: '#64748B', label: 'Other',
   }
   const CatIcon = cat.icon
   const summary = buildEventSummary(event)
@@ -187,7 +247,7 @@ function EventRow({ event, onClick }: { event: EventResponse; onClick: () => voi
 
 function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => void }) {
   const cat = categoryConfig[event.category] ?? {
-    icon: Activity, color: '#94A3B8', label: event.category,
+    icon: Activity, color: '#64748B', label: 'Other',
   }
   const CatIcon = cat.icon
 

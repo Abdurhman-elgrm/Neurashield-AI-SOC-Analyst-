@@ -49,6 +49,7 @@ export interface EventResponse {
   session_id: string | null
   process_tree_id: string | null
   event_chain_id: string | null
+  raw?: Record<string, unknown> | null
 }
 
 // ─── Search request (mirrors backend EventSearchRequest) ─────────────────────
