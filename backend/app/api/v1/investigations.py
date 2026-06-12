@@ -134,21 +134,36 @@ async def create_investigation(
 async def list_investigations(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    status:      str | None  = Query(default=None),
-    verdict:     str | None  = Query(default=None),
-    assigned_to: UUID | None = Query(default=None),
-    min_score:   int | None  = Query(default=None, ge=0, le=100),
-    max_score:   int | None  = Query(default=None, ge=0, le=100),
-    cursor:      str | None  = Query(default=None),
-    limit:       int         = Query(default=50, ge=1, le=200),
-    sort:        str         = Query(default="desc", pattern="^(asc|desc)$"),
+    status:         str | None  = Query(default=None),
+    verdict:        str | None  = Query(default=None),
+    assigned_to:    UUID | None = Query(default=None),
+    title_search:   str | None  = Query(default=None),
+    min_score:      int | None  = Query(default=None, ge=0, le=100),
+    max_score:      int | None  = Query(default=None, ge=0, le=100),
+    assigned_to_me: bool        = Query(default=False),
+    from_ts:        str | None  = Query(default=None),
+    cursor:         str | None  = Query(default=None),
+    limit:          int         = Query(default=50, ge=1, le=200),
+    sort:           str         = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> PaginatedResponse[InvestigationListItem]:
+    from datetime import datetime
     from app.models.tenant_member import TenantMember
     m: TenantMember = member  # type: ignore[assignment]
 
+    from_ts_dt: datetime | None = None
+    if from_ts:
+        try:
+            from_ts_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+
+    effective_assigned_to = m.user_id if assigned_to_me else assigned_to
+
     params = InvestigationFilterParams(
-        status=status, verdict=verdict, assigned_to=assigned_to,
+        status=status, verdict=verdict, assigned_to=effective_assigned_to,
+        title_search=title_search,
         min_score=min_score, max_score=max_score,
+        from_ts=from_ts_dt,
         cursor=cursor, limit=limit, sort=sort,
     )
     items, next_cursor = await AnalystWorkspaceService.list_investigations(

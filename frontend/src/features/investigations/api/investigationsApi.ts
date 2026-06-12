@@ -172,11 +172,17 @@ export interface InvestigationListResponse {
   total: number
 }
 
-export async function listInvestigations(params?: {
+export interface ListInvestigationsParams {
   status?: string
+  title_search?: string
+  min_score?: number
+  assigned_to_me?: boolean
+  from_ts?: string
   limit?: number
   cursor?: string
-}): Promise<InvestigationListResponse> {
+}
+
+export async function listInvestigations(params?: ListInvestigationsParams): Promise<InvestigationListResponse> {
   const { data } = await apiClient.get<InvestigationListResponse>("/investigations", { params })
   return data
 }

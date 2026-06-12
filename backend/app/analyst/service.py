@@ -67,6 +67,7 @@ class AnalystWorkspaceService:
             status=params.status,
             verdict=params.verdict,
             assigned_to=params.assigned_to,
+            title_search=params.title_search,
             min_score=params.min_score,
             max_score=params.max_score,
             from_ts=params.from_ts,

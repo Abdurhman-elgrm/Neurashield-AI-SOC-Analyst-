@@ -1,8 +1,8 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { formatDistanceToNowStrict } from "date-fns"
-import { Plus, RefreshCw, GitMerge } from "lucide-react"
+import { Plus, RefreshCw, GitMerge, User, X } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { listInvestigations } from "./api/investigationsApi"
 import type { InvestigationListItem } from "./api/investigationsApi"
@@ -215,16 +215,69 @@ const STATUS_FILTERS: Array<{ label: string; value: string | undefined }> = [
   { label: "Closed",        value: "closed"        },
 ]
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const TIME_RANGES: Array<{ label: string; value: string | undefined }> = [
+  { label: "All time",    value: undefined },
+  { label: "Last hour",   value: "1h"      },
+  { label: "Last 24h",    value: "24h"     },
+  { label: "Last 7 days", value: "7d"      },
+  { label: "Last 30 days",value: "30d"     },
+]
+
+function timeRangeToIso(range: string | undefined): string | undefined {
+  if (!range) return undefined
+  const ms: Record<string, number> = {
+    "1h":  3_600_000,
+    "24h": 86_400_000,
+    "7d":  604_800_000,
+    "30d": 2_592_000_000,
+  }
+  return new Date(Date.now() - (ms[range] ?? 0)).toISOString()
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function InvestigationsPage() {
   const navigate = useNavigate()
   const [showModal,    setShowModal]    = useState(false)
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
+  const [titleSearch,  setTitleSearch]  = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [minScore,     setMinScore]     = useState<number | "">("")
+  const [fromTs,       setFromTs]       = useState<string | undefined>(undefined)
+  const [assignedToMe, setAssignedToMe] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(titleSearch), 400)
+    return () => clearTimeout(t)
+  }, [titleSearch])
+
+  const hasFilters = !!(titleSearch || minScore || fromTs || assignedToMe)
+
+  function clearFilters() {
+    setTitleSearch("")
+    setMinScore("")
+    setFromTs(undefined)
+    setAssignedToMe(false)
+  }
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["investigations", { status: statusFilter }],
-    queryFn:  () => listInvestigations({ status: statusFilter, limit: 50 }),
+    queryKey: ["investigations", {
+      status: statusFilter,
+      title_search: debouncedSearch || undefined,
+      min_score: minScore ? Number(minScore) : undefined,
+      assigned_to_me: assignedToMe || undefined,
+      from_ts: timeRangeToIso(fromTs),
+    }],
+    queryFn: () => listInvestigations({
+      status: statusFilter,
+      title_search: debouncedSearch || undefined,
+      min_score: minScore ? Number(minScore) : undefined,
+      assigned_to_me: assignedToMe || undefined,
+      from_ts: timeRangeToIso(fromTs),
+      limit: 50,
+    }),
     staleTime: 30_000,
     refetchInterval: 60_000,
     retry: 1,
@@ -268,11 +321,10 @@ export function InvestigationsPage() {
         </div>
       </div>
 
-      {/* Filter bar */}
+      {/* Status tabs */}
       <div style={{
         display: "flex", alignItems: "center", gap: 4,
-        padding: "8px 0",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        padding: "8px 0 6px",
         flexShrink: 0,
       }}>
         {STATUS_FILTERS.map((f) => (
@@ -291,6 +343,83 @@ export function InvestigationsPage() {
             {f.label}
           </button>
         ))}
+      </div>
+
+      {/* Search + filter row */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "6px 0 8px",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        flexShrink: 0,
+        flexWrap: "wrap",
+      }}>
+        {/* Title search */}
+        <input
+          className="inp"
+          value={titleSearch}
+          onChange={(e) => setTitleSearch(e.target.value)}
+          placeholder="Search by title..."
+          style={{ width: 240, height: 32 }}
+        />
+
+        {/* Min score */}
+        <input
+          className="inp"
+          type="number"
+          min={0}
+          max={100}
+          value={minScore}
+          onChange={(e) => setMinScore(e.target.value === "" ? "" : Number(e.target.value))}
+          placeholder="Score ≥"
+          style={{ width: 90, height: 32 }}
+        />
+
+        {/* Time range */}
+        <select
+          className="inp"
+          value={fromTs ?? ""}
+          onChange={(e) => setFromTs(e.target.value || undefined)}
+          style={{ width: 130, height: 32 }}
+        >
+          {TIME_RANGES.map((r) => (
+            <option key={String(r.value ?? "")} value={r.value ?? ""}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Assigned to me */}
+        <button
+          onClick={() => setAssignedToMe((v) => !v)}
+          style={{
+            padding: "0 10px", height: 32, borderRadius: 6,
+            fontSize: 11, fontWeight: 600, cursor: "pointer",
+            background: assignedToMe ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.04)",
+            border: `1px solid ${assignedToMe ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.08)"}`,
+            color: assignedToMe ? "#818CF8" : "#5C6373",
+            display: "flex", alignItems: "center", gap: 5,
+            transition: "all 120ms",
+          }}
+        >
+          <User size={11} /> Mine
+        </button>
+
+        {/* Clear filters */}
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            style={{
+              fontSize: 11, color: "#5C6373",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              padding: "0 10px", height: 32, borderRadius: 6,
+              cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 4,
+            }}
+          >
+            <X size={11} /> Clear
+          </button>
+        )}
       </div>
 
       {/* Table */}

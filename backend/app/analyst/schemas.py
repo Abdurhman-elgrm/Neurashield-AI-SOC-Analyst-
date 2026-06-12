@@ -377,13 +377,14 @@ class InvestigationDetail(InvestigationListItem):
 
 
 class InvestigationFilterParams(BaseModel):
-    status:      str | None  = None
-    verdict:     str | None  = None
-    assigned_to: UUID | None = None
-    min_score:   int | None  = Field(default=None, ge=0, le=100)
-    max_score:   int | None  = Field(default=None, ge=0, le=100)
-    from_ts:     datetime | None = None
-    to_ts:       datetime | None = None
-    cursor:      str | None  = None
-    limit:       int         = Field(default=50, ge=1, le=200)
-    sort:        str         = Field(default="desc", pattern="^(asc|desc)$")
+    status:       str | None  = None
+    verdict:      str | None  = None
+    assigned_to:  UUID | None = None
+    title_search: str | None  = None
+    min_score:    int | None  = Field(default=None, ge=0, le=100)
+    max_score:    int | None  = Field(default=None, ge=0, le=100)
+    from_ts:      datetime | None = None
+    to_ts:        datetime | None = None
+    cursor:       str | None  = None
+    limit:        int         = Field(default=50, ge=1, le=200)
+    sort:         str         = Field(default="desc", pattern="^(asc|desc)$")

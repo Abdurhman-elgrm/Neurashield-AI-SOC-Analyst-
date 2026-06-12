@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
@@ -253,6 +253,7 @@ class CaseService:
         status: str | None = None,
         verdict: str | None = None,
         assigned_to: UUID | None = None,
+        title_search: str | None = None,
         min_score: int | None = None,
         max_score: int | None = None,
         from_ts: datetime | None = None,
@@ -271,6 +272,14 @@ class CaseService:
             conditions.append(Investigation.verdict == verdict)
         if assigned_to:
             conditions.append(Investigation.assigned_to == assigned_to)
+        if title_search:
+            pattern = f"%{title_search}%"
+            conditions.append(
+                or_(
+                    Investigation.title.ilike(pattern),
+                    Investigation.executive_summary.ilike(pattern),
+                )
+            )
         if min_score is not None:
             conditions.append(Investigation.threat_score >= min_score)
         if max_score is not None:
