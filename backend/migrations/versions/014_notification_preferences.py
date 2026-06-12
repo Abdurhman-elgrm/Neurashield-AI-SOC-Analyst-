@@ -19,16 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "tenant_members",
-        sa.Column(
-            "notification_preferences",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=False,
-            server_default=sa.text(
-                '\'{"email_high_critical_alerts":true,"email_agent_offline":true,"email_new_investigation":false}\'::jsonb'
-            ),
-        ),
+    op.execute(
+        sa.text(
+            "ALTER TABLE tenant_members"
+            " ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL"
+            " DEFAULT jsonb_build_object("
+            "   'email_high_critical_alerts', true::boolean,"
+            "   'email_agent_offline', true::boolean,"
+            "   'email_new_investigation', false::boolean"
+            " )"
+        )
     )
 
 
