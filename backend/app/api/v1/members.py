@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
 from app.schemas.tenant import MemberResponse, MemberRoleUpdateRequest
@@ -31,13 +31,18 @@ class CustomPermissionsRequest(BaseModel):
 )
 async def list_members(
     tenant_id: UUID,
-    _member: Annotated[object, require_permission(Permission.MEMBERS_READ)],
+    actor: Annotated[object, require_permission(Permission.MEMBERS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=25, ge=1, le=100),
 ) -> PaginatedResponse[MemberResponse]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = actor  # type: ignore[assignment]
+    if m.tenant_id != tenant_id:
+        raise ForbiddenError("Tenant ID mismatch")
+
     members_data, total = await TenantService.get_members(db, tenant_id, page, limit)
-    members = [MemberResponse.model_validate(m) for m in members_data]
+    members = [MemberResponse.model_validate(mem) for mem in members_data]
     return PaginatedResponse.offset(data=members, page=page, limit=limit, total=total)
 
 
@@ -55,6 +60,9 @@ async def update_member_role(
 ) -> APIResponse[MemberResponse]:
     from app.models.tenant_member import TenantMember
     m: TenantMember = actor  # type: ignore[assignment]
+    if m.tenant_id != tenant_id:
+        raise ForbiddenError("Tenant ID mismatch")
+
     updated = await TenantService.update_member_role(
         db, tenant_id, user_id, payload.role, actor=m
     )
@@ -74,6 +82,27 @@ async def update_member_permissions(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[MemberResponse]:
     from app.models.tenant_member import TenantMember
+    from app.rbac.roles import get_effective_permissions
+
+    m: TenantMember = actor  # type: ignore[assignment]
+    if m.tenant_id != tenant_id:
+        raise ForbiddenError("Tenant ID mismatch")
+
+    # Actor cannot grant permissions they don't hold themselves
+    actor_perms = get_effective_permissions(m.role, m.custom_permissions)
+    for perm_str in payload.grant:
+        try:
+            perm = Permission(perm_str)
+            if perm not in actor_perms:
+                raise ForbiddenError(
+                    f"Cannot grant permission '{perm_str}' — you don't have it yourself"
+                )
+        except ValueError:
+            pass  # invalid perms caught by validator below
+
+    # tenant:delete can only be granted by owners
+    if "tenant:delete" in payload.grant and m.role != "owner":
+        raise ForbiddenError("Only owners can grant tenant:delete")
 
     # Validate all permission strings
     valid_perms = {p.value for p in Permission}
@@ -120,5 +149,8 @@ async def remove_member(
     """
     from app.models.tenant_member import TenantMember
     m: TenantMember = actor  # type: ignore[assignment]
+    if m.tenant_id != tenant_id:
+        raise ForbiddenError("Tenant ID mismatch")
+
     await TenantService.remove_member(db, tenant_id, user_id, actor=m)
     return APIResponse.ok(EmptyResponse())

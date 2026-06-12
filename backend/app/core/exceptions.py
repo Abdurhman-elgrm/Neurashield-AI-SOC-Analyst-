@@ -168,10 +168,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         response = _error_response(exc.status_code, exc.code, exc.message, exc.details)
         for k, v in headers.items():
             response.headers[k] = v
-        origin = request.headers.get("origin", "")
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
 
     @app.exception_handler(RequestValidationError)
@@ -192,10 +188,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             "Request validation failed",
             details,
         )
-        origin = request.headers.get("origin", "")
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
 
     @app.exception_handler(Exception)
@@ -211,8 +203,4 @@ def register_exception_handlers(app: FastAPI) -> None:
             "INTERNAL_ERROR",
             "An unexpected error occurred",
         )
-        origin = request.headers.get("origin", "")
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
         return response

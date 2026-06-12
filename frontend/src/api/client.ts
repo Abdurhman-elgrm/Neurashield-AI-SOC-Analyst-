@@ -33,6 +33,7 @@ export const apiClient: AxiosInstance = axios.create({
     "Content-Type": "application/json",
   },
   timeout: 30000,
+  withCredentials: true, // send httpOnly refresh-token cookie automatically
 });
 
 // ─── Request interceptor — attach access token ────────────────────────────────
@@ -84,12 +85,7 @@ apiClient.interceptors.response.use(
       !originalRequest._retried &&
       !originalRequest.url?.includes("/auth/")
     ) {
-      const refreshToken = useAuthStore.getState().refreshToken;
-      if (!refreshToken) {
-        useAuthStore.getState().clearAuth();
-        return Promise.reject(error);
-      }
-
+      // No refreshToken check — cookie is sent automatically by the browser
       if (isRefreshing) {
         // Queue this request until refresh completes
         return new Promise((resolve) => {
@@ -104,14 +100,13 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
+        // Send empty body — refresh token is in the httpOnly cookie (sent automatically)
         const response = await axios.post<APIResponse<{
           access_token: string;
           refresh_token: string;
           token_type: string;
           expires_in: number;
-        }>>(`${API_BASE_URL}${API_PREFIX}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        }>>(`${API_BASE_URL}${API_PREFIX}/auth/refresh`, {}, { withCredentials: true });
 
         const tokens = response.data.data!;
         useAuthStore.getState().setTokens(tokens.access_token, tokens.refresh_token);

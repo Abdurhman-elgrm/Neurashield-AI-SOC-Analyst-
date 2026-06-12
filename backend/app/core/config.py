@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     # ─── API ──────────────────────────────────────────────────────────────────
     API_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    # Regex accepts any Railway.app deployment automatically (no Variables needed).
-    # Override with CORS_ALLOW_ORIGIN_REGEX="" to disable.
-    CORS_ALLOW_ORIGIN_REGEX: str = r"https://.*\.up\.railway\.app"
+    # Derived from FRONTEND_URL by set_cors_from_frontend_url validator if not set explicitly.
+    # Set to your exact frontend URL in production — do NOT use wildcards.
+    CORS_ALLOW_ORIGIN_REGEX: str = ""
 
     # ─── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str
@@ -89,6 +89,21 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("JWT secret must be at least 32 characters")
         return v
+
+    @model_validator(mode="after")
+    def set_cors_from_frontend_url(self) -> "Settings":
+        """Build a precise CORS regex from FRONTEND_URL when not configured explicitly."""
+        if not self.CORS_ALLOW_ORIGIN_REGEX and self.FRONTEND_URL:
+            import re
+            escaped = re.escape(self.FRONTEND_URL.rstrip("/"))
+            object.__setattr__(self, "CORS_ALLOW_ORIGIN_REGEX", f"^{escaped}$")
+        if self.is_production and not self.CORS_ALLOW_ORIGIN_REGEX:
+            import structlog
+            structlog.get_logger(__name__).warning(
+                "cors_not_configured",
+                note="Set CORS_ALLOW_ORIGIN_REGEX or FRONTEND_URL to restrict cross-origin access",
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_llm_keys(self) -> "Settings":

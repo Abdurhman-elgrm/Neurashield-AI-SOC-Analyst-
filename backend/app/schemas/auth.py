@@ -33,7 +33,7 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=10)
+    refresh_token: str = Field(default="", max_length=512)
 
 
 # ─── Responses ────────────────────────────────────────────────────────────────

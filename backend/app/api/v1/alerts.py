@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -21,8 +21,8 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 class BulkAlertUpdateRequest(BaseModel):
     alert_ids: list[UUID] = Field(min_length=1, max_length=100)
-    status: str | None = None
-    notes: str | None = None
+    status: Literal["open", "acknowledged", "closed", "false_positive"] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
     assignee_id: UUID | None = None
 
 

@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>()(
       // (user profile is re-fetched on app init)
       partialize: (state) => ({
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
+        // refreshToken intentionally excluded — stored in httpOnly cookie, not localStorage
         activeTenantId: state.activeTenantId,
         user: state.user,
       }),
