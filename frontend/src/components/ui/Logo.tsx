@@ -21,7 +21,7 @@ export function LogoIcon({
       alt="NEURASHIELD"
       height={size}
       width={size}
-      style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
+      style={{ objectFit: 'contain', display: 'block', flexShrink: 0, mixBlendMode: 'screen' }}
       className={className}
     />
   )
