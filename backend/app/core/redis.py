@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import structlog
 from redis.asyncio import Redis, ConnectionPool
 from redis.asyncio.client import Pipeline
+from redis.exceptions import BusyLoadingError, ResponseError
 
 from app.core.config import settings
 
@@ -29,9 +31,22 @@ class RedisManager:
 
     async def _verify_connection(self) -> None:
         assert self._client is not None
-        # Apply config before PING: Railway managed Redis blocks even PING when
-        # stop-writes-on-bgsave-error=yes and the RDB disk is full. CONFIG SET
-        # is exempt from that block, so we fix it first on every startup.
+        # Wait for Redis to finish loading its RDB snapshot (BusyLoadingError)
+        # then apply the MISCONF fix before PING. Railway managed Redis blocks
+        # even PING when stop-writes-on-bgsave-error=yes and disk is full, but
+        # CONFIG SET is exempt from that block.
+        for attempt in range(30):
+            try:
+                await self._client.ping()
+                break
+            except BusyLoadingError:
+                logger.info("redis_loading_waiting", attempt=attempt)
+                await asyncio.sleep(2)
+            except ResponseError:
+                # MISCONF state: CONFIG SET is exempt, apply fix first.
+                break
+            except Exception:
+                break
         try:
             await self._client.config_set("stop-writes-on-bgsave-error", "no")
             await self._client.config_set("save", "")
