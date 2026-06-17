@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 import structlog
@@ -14,7 +15,9 @@ _PRIVATE_RANGES = (
     "172.29.", "172.30.", "172.31.", "192.168.", "127.", "::1", "fc", "fd",
 )
 
-_CACHE_TTL = 86400  # 24 hours — geo data rarely changes
+_CACHE_TTL = 86400   # 24 hours
+_LOCK_TTL  = 10      # seconds a single lookup may hold the lock
+_LOCK_WAIT = 2.0     # seconds to wait when another process holds the lock
 
 
 @dataclass
@@ -35,8 +38,13 @@ def _is_private(ip: str) -> bool:
 class GeoIPService:
     """
     GeoIP lookup via ip-api.com (free, no key needed, 45 req/min limit).
-    All results are cached in Redis for 24 hours to stay within rate limits.
-    Fails silently — never raises, always returns GeoResult.
+
+    Cache strategy:
+      1. Redis 24-hour cache — primary source.
+      2. Per-IP Redis lock (SETNX) — cache-stampede protection.
+         When 50 events with the same uncached IP arrive at once, only ONE
+         outbound HTTP request is made; the other 49 wait up to _LOCK_WAIT
+         seconds for the cache to be populated.
     """
 
     _FIELDS = "status,country,countryCode,city,lat,lon,isp,query"
@@ -47,18 +55,35 @@ class GeoIPService:
             return GeoResult(is_private=True)
 
         cache_key = f"geoip:{ip}"
+        lock_key  = f"geoip:lock:{ip}"
 
-        # ── Try cache first ────────────────────────────────────────────────
+        # ── 1. Try cache ───────────────────────────────────────────────────
         if redis is not None:
             try:
                 cached = await redis.get(cache_key)
                 if cached:
-                    data = json.loads(cached)
-                    return GeoResult(**data)
+                    return GeoResult(**json.loads(cached))
             except Exception:
                 pass
 
-        # ── External lookup ────────────────────────────────────────────────
+        # ── 2. Acquire per-IP lock (stampede protection) ───────────────────
+        if redis is not None:
+            try:
+                acquired = await redis.set(lock_key, "1", nx=True, ex=_LOCK_TTL)
+                if not acquired:
+                    # Another coroutine/process is fetching this IP — wait briefly
+                    await asyncio.sleep(_LOCK_WAIT)
+                    try:
+                        cached = await redis.get(cache_key)
+                        if cached:
+                            return GeoResult(**json.loads(cached))
+                    except Exception:
+                        pass
+                    return GeoResult()  # give up — next event will retry
+            except Exception:
+                pass  # Redis error: proceed without lock
+
+        # ── 3. External HTTP lookup ────────────────────────────────────────
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(
@@ -92,6 +117,7 @@ class GeoIPService:
                         "is_private": False,
                     }
                     await redis.set(cache_key, json.dumps(payload), ex=_CACHE_TTL)
+                    await redis.delete(lock_key)
                 except Exception:
                     pass
 
@@ -99,4 +125,9 @@ class GeoIPService:
 
         except Exception as exc:
             logger.debug("geoip_lookup_failed", ip=ip, error=str(exc))
+            if redis is not None:
+                try:
+                    await redis.delete(lock_key)
+                except Exception:
+                    pass
             return GeoResult()
