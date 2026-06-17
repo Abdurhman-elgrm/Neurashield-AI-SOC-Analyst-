@@ -213,13 +213,35 @@ _CATEGORY_MAP = {
 }
 
 
+# Maps human-readable Security log labels (from _EVTID_FIELDS) to Windows field names
+# that the backend normalizer (windows.py) expects at the top level of the message.
+_LABEL_TO_FIELD = {
+    "Account Name":         "TargetUserName",
+    "Subject Account Name": "SubjectUserName",
+    "New Account Name":     "TargetUserName",
+    "Target Account Name":  "TargetUserName",
+    "Logon Account":        "TargetUserName",
+    "Network Address":      "__src_ip",
+    "New Process Name":     "Image",
+    "Creator Process Name": "ParentImage",
+    "Process Command Line": "CommandLine",
+    "Service Name":         "ServiceName",
+    "Image Path":           "Image",
+    "Group Name":           "GroupName",
+    "Member Name":          "MemberName",
+    "Process Name":         "Image",
+}
+
+
 def _to_v2_format(v1_events: list) -> list:
-    """Convert V1 log entries {source_name, timestamp, raw_message}
-    to V2 RawEventPayload format."""
+    """Convert V1 log entries to V2 RawEventPayload format with structured fields."""
     result = []
     for evt in v1_events:
-        source  = evt.get("source_name", "")
-        raw_msg = evt.get("raw_message", "")
+        source   = evt.get("source_name", "")
+        raw_msg  = evt.get("raw_message", "")
+        eid      = evt.get("event_id_windows")
+        fields   = evt.get("structured_fields", {})
+        is_xml   = evt.get("is_xml_fields", False)
 
         # Determine category
         category = "other"
@@ -238,7 +260,7 @@ def _to_v2_format(v1_events: list) -> list:
             else:
                 category = "auth"
 
-        result.append({
+        payload = {
             "event_id":  str(_uuid_mod.uuid4()),
             "timestamp": evt.get("timestamp", _utc_iso()),
             "category":  category,
@@ -248,7 +270,31 @@ def _to_v2_format(v1_events: list) -> list:
                 "message":     raw_msg,
                 "source_name": source,
             },
-        })
+        }
+
+        if eid:
+            payload["event_id_windows"] = eid
+
+        if fields:
+            if is_xml:
+                # Modern channel XML fields already use real Windows field names
+                # (e.g. Image, CommandLine, ProcessId, TargetUserName)
+                for k, v in fields.items():
+                    if v and v not in ("-", ""):
+                        payload[k] = v
+            else:
+                # Classic Security log: map human-readable labels → Windows field names
+                for label, value in fields.items():
+                    win_field = _LABEL_TO_FIELD.get(label)
+                    if win_field and value and value not in ("-", ""):
+                        payload[win_field] = value
+
+        # Resolve source IP — promote to top-level source_ip for enrichment
+        src_ip = payload.pop("__src_ip", None) or payload.pop("IpAddress", None)
+        if src_ip and src_ip not in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
+            payload["source_ip"] = src_ip
+
+        result.append(payload)
     return result
 
 # â”€â”€ Queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -642,10 +688,20 @@ def _read_windows_logs() -> list:
                 elif not should_send_event(eid, ev.StringInserts):
                     continue
                 msg = _fmt_event_message(ev, channel)
+                inserts = ev.StringInserts or ()
+                structured = {}
+                if eid in _EVTID_FIELDS and inserts:
+                    for _lbl, _idx in _EVTID_FIELDS[eid]:
+                        if _idx < len(inserts):
+                            _val = str(inserts[_idx]).strip()
+                            if _val and _val != "-" and not _val.startswith("%%"):
+                                structured[_lbl] = _val
                 logs.append({
-                    "source_name": f"{channel}/{ev.SourceName}",
-                    "timestamp":   _pywin_time_to_utc_iso(ev.TimeGenerated),
-                    "raw_message": f"EventID {eid}: {msg or '(no message)'}",
+                    "source_name":       f"{channel}/{ev.SourceName}",
+                    "timestamp":         _pywin_time_to_utc_iso(ev.TimeGenerated),
+                    "raw_message":       f"EventID {eid}: {msg or '(no message)'}",
+                    "event_id_windows":  eid,
+                    "structured_fields": structured,
                 })
 
             _win_last_record[channel] = new_last
@@ -705,20 +761,25 @@ def _read_win_modern_channels() -> list:
                         ts      = ts_el.get("SystemTime") if ts_el is not None else _utc_iso()
                         eid_el  = sys_el.find(_EID) if sys_el is not None else None
                         eid     = eid_el.text if eid_el is not None else "0"
-                        parts   = []
+                        xml_fields = {}
                         for d in root.iter(_DAT):
                             n = d.get("Name", ""); v = (d.text or "").strip()
                             if n and v:
-                                parts.append(f"{n}={v}")
-                            elif v:
-                                parts.append(v)
-                        msg = "; ".join(parts) if parts else "(no data)"
+                                xml_fields[n] = v
                         if not new_ts or ts > new_ts:
                             new_ts = ts
+                        try:
+                            eid_int = int(eid)
+                        except (ValueError, TypeError):
+                            eid_int = 0
+                        msg_parts = "; ".join(f"{k}={v}" for k, v in xml_fields.items()) or "(no data)"
                         logs.append({
-                            "source_name": channel,
-                            "timestamp":   ts,
-                            "raw_message": f"EventID {eid}: {msg}",
+                            "source_name":       channel,
+                            "timestamp":         ts,
+                            "raw_message":       f"EventID {eid}: {msg_parts}",
+                            "event_id_windows":  eid_int,
+                            "structured_fields": xml_fields,
+                            "is_xml_fields":     True,
                         })
                         count += 1
                     except Exception:

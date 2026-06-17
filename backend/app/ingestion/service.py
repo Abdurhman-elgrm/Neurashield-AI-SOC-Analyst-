@@ -178,18 +178,24 @@ class IngestionService:
 
 
 def _build_stream_message(agent: Agent, event: RawEventPayload) -> dict[str, Any]:
-    return {
-        "agent_id": str(agent.id),
+    # Spread extra fields first (e.g. event_id_windows, Image, CommandLine, TargetUserName
+    # sent by the Windows agent) so the normalizer can read them at the top level.
+    message: dict[str, Any] = {**(event.model_extra or {})}
+    message.update({
+        # Authoritative agent metadata — always override what the agent claims
+        "agent_id":  str(agent.id),
         "tenant_id": str(agent.tenant_id),
-        "hostname": agent.hostname,
-        "os_type": agent.os_type.value,
-        "event_id": event.event_id,
+        "hostname":  agent.hostname,
+        "os_type":   agent.os_type.value,
+        # Named event fields
+        "event_id":  event.event_id,
         "timestamp": event.timestamp.isoformat(),
-        "category": event.category,
-        "process": event.process,
-        "user": event.user,
-        "network": event.network,
-        "file": event.file,
-        "registry": event.registry,
-        "raw": event.raw,
-    }
+        "category":  event.category,
+        "process":   event.process,
+        "user":      event.user,
+        "network":   event.network,
+        "file":      event.file,
+        "registry":  event.registry,
+        "raw":       event.raw,
+    })
+    return message

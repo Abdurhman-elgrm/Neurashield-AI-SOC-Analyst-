@@ -51,21 +51,41 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.category = "registry"
         base.registry = _extract_registry_windows(raw)
 
+    # Windows Security log — process creation
+    elif event_id in ("4688", 4688):  # Process Create (Security log)
+        base.category = "process"
+        image = raw.get("Image") or raw.get("NewProcessName")
+        if image:
+            base.process = NormalizedProcess(
+                name=image.split("\\")[-1] if image else None,
+                executable=image or None,
+                command_line=raw.get("CommandLine"),
+                pid=_to_int(raw.get("NewProcessId")),
+                ppid=_to_int(raw.get("ProcessId")),
+            )
+        if not base.user:
+            name = raw.get("SubjectUserName") or raw.get("TargetUserName")
+            if name and name.lower() not in _SYSTEM_ACCOUNTS:
+                base.user = NormalizedUser(name=name, domain=raw.get("SubjectDomainName"))
+
     # Windows Security log — auth events
     elif event_id in ("4624", 4624):  # Successful logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 1
+        _try_extract_src_ip(raw, base)
 
     elif event_id in ("4625", 4625):  # Failed logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
+        _try_extract_src_ip(raw, base)
 
     elif event_id in ("4648", 4648):  # Logon with explicit credentials
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
+        _try_extract_src_ip(raw, base)
 
     elif event_id in ("4634", 4634):  # Logoff
         base.category = "auth"
@@ -248,3 +268,13 @@ def _to_int(val: object) -> int | None:
         return int(val)
     except (ValueError, TypeError):
         return None
+
+
+def _try_extract_src_ip(raw: dict[str, Any], base: NormalizedEvent) -> None:
+    ip = raw.get("IpAddress") or raw.get("source_ip")
+    if not ip or ip in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
+        return
+    if base.network is None:
+        base.network = NormalizedNetwork(src_ip=ip)
+    elif base.network.src_ip is None:
+        base.network.src_ip = ip
