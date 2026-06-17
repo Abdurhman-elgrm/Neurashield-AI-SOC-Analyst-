@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +19,89 @@ _SEVERITY_MAP = {
     "high": 3,
     "critical": 4,
 }
+
+# Human-readable labels used by the old agent format → Windows field names
+_LABEL_TO_WIN_FIELD: dict[str, str] = {
+    "Account Name":         "TargetUserName",
+    "Subject Account Name": "SubjectUserName",
+    "New Account Name":     "TargetUserName",
+    "Target Account Name":  "TargetUserName",
+    "Logon Account":        "TargetUserName",
+    "Network Address":      "__src_ip",
+    "New Process Name":     "Image",
+    "Creator Process Name": "ParentImage",
+    "Process Command Line": "CommandLine",
+    "Service Name":         "ServiceName",
+    "Image Path":           "Image",
+    "Group Name":           "GroupName",
+    "Member Name":          "MemberName",
+    "Process Name":         "Image",
+    "Logon Type":           "LogonType",
+}
+
+
+def _enrich_from_raw_message(message: dict[str, Any]) -> dict[str, Any]:
+    """
+    Fallback parser for old-format agent events where structured fields were
+    not included at the top level of the stream message.
+
+    Parses the agent's formatted text from raw.message, e.g.:
+      "EventID 4688: Subject Account Name: ahmed\\nNew Process Name: C:\\cmd.exe"
+    and injects the extracted fields back into the message dict so that
+    normalize_windows_event() can process them normally.
+    """
+    # Already has structured fields — nothing to do
+    if message.get("event_id_windows") or message.get("EventID"):
+        return message
+
+    raw_sub = message.get("raw")
+    if not isinstance(raw_sub, dict):
+        return message
+
+    raw_msg: str = raw_sub.get("message", "")
+    if not raw_msg:
+        return message
+
+    # ── Extract EventID ────────────────────────────────────────────────────────
+    m = re.match(r"EventID\s+(\d+)[:\s]", raw_msg)
+    if not m:
+        return message
+
+    eid = int(m.group(1))
+    extra: dict[str, Any] = {"event_id_windows": eid}
+
+    body = re.sub(r"^EventID\s+\d+:\s*", "", raw_msg).strip()
+
+    # ── Parse "Key: Value" lines (classic Security log format) ─────────────────
+    for line in body.splitlines():
+        line = line.strip()
+        if ": " in line:
+            k, _, v = line.partition(": ")
+            k = k.strip(); v = v.strip()
+            if k and v and v not in ("-", ""):
+                mapped = _LABEL_TO_WIN_FIELD.get(k)
+                if mapped:
+                    extra[mapped] = v
+                elif "=" not in k:
+                    # Unknown label — pass through as-is (may be useful for Sysmon fields)
+                    extra[k] = v
+
+    # ── Parse "Key=Value; Key2=Value2" (modern Sysmon/PowerShell channel format) ─
+    if not extra.get("Image") and "=" in body:
+        for part in body.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, _, v = part.partition("=")
+                k = k.strip(); v = v.strip()
+                if k and v and v not in ("-", ""):
+                    extra.setdefault(k, v)
+
+    # ── Resolve source IP ──────────────────────────────────────────────────────
+    src_ip = extra.pop("__src_ip", None) or extra.pop("IpAddress", None)
+    if src_ip and src_ip not in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
+        extra["source_ip"] = src_ip
+
+    return {**message, **extra}
 
 
 def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent:
@@ -87,6 +171,11 @@ def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent
         u = message["user"]
         if isinstance(u, dict):
             base.user = NormalizedUser(**{k: u.get(k) for k in dataclasses.fields(NormalizedUser) if k in u})
+
+    # Fallback: parse raw.message text for old-format agent events that don't
+    # include structured fields (event_id_windows, Image, CommandLine, etc.)
+    # at the top level of the stream message.
+    message = _enrich_from_raw_message(message)
 
     # OS-specific enrichment
     os_type = base.os_type
