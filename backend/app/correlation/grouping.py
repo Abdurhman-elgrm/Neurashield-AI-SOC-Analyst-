@@ -29,8 +29,11 @@ from app.correlation.utils import deterministic_uuid
 # ─── Namespace for investigation IDs ─────────────────────────────────────────
 _NS_INVESTIGATION = uuid.UUID("e5f6a7b8-c9d0-1234-ef01-345678901234")
 
-# Group TTL — expire investigation state after 24 hours of inactivity.
-_GROUP_TTL_SECONDS = 86_400
+# Group TTL — expire investigation state after 7 days of inactivity.
+# 24 hours was too short: slow-moving campaigns (e.g. APT lateral movement
+# over several days) would lose their correlation history mid-investigation,
+# causing new events to start fresh groups instead of enriching the existing one.
+_GROUP_TTL_SECONDS = 86_400 * 7
 
 # Maximum events stored per group ZSET (oldest pruned).
 _MAX_GROUP_EVENTS = 5_000

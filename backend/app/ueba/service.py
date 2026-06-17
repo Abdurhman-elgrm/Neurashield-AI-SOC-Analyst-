@@ -136,14 +136,20 @@ class UEBAService:
             await baseline.set_last_location(username, enr.geo_latitude, enr.geo_longitude)
 
         # ── 3. Auth success / failure classification ───────────────────────────
-        tags_lower = [t.lower() for t in normalized.tags]
-        raw_str = str(normalized.raw).lower()
+        # Use EventID for precise classification instead of fragile substring
+        # matching (e.g. tag "logon_failure" incorrectly matched "logon" before).
+        _win_eid = str(normalized.raw.get("windows_event_id", ""))
         is_auth_success = category == "auth" and (
-            "success" in tags_lower or "logon" in tags_lower or "4624" in raw_str
+            _win_eid in ("4624", "4648")  # Successful logon / logon with explicit credentials
         )
         is_auth_failure = category == "auth" and (
-            "fail" in tags_lower or "4625" in raw_str or "logonfailure" in raw_str
+            _win_eid == "4625"  # Failed logon
         )
+        # Fall back to tag-based for Linux/non-Windows sources (no EventID)
+        if not _win_eid and category == "auth":
+            tags_lower = [t.lower() for t in normalized.tags]
+            is_auth_success = any(t in tags_lower for t in ("logon_success", "auth_success", "accepted"))
+            is_auth_failure = any(t in tags_lower for t in ("logon_failure", "auth_failure", "failed"))
 
         # ── 4. Attack chain detection ──────────────────────────────────────────
         detector = AttackChainDetector(redis, tenant_id)

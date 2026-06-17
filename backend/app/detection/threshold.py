@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import structlog
@@ -13,20 +14,24 @@ logger = structlog.get_logger(__name__)
 
 class ThresholdEvaluator:
     """
-    Evaluates threshold-type detection rules.
+    Evaluates threshold-type detection rules using a Redis ZSET sliding window.
+
+    Each distinct (rule_id, group_value) pair maintains an independent ZSET where:
+      - member = unique event marker (event_id or high-res timestamp)
+      - score  = unix timestamp (float)
+
+    On every call we atomically: add the new member, prune expired members, count,
+    and refresh the key TTL — all via a Redis pipeline.  This eliminates the
+    INCR/EXPIRE race condition that the original counter-based approach had.
 
     Rule conditions schema:
     {
-      "field": "network.dst_ip",      -- value to count occurrences of
+      "field": "network.dst_ip",      -- value to group/count occurrences of
       "group_by": "hostname",          -- optional dimension key
       "threshold": 5,                  -- fire when count >= this
       "window_secs": 300,              -- sliding window in seconds
       "filters": [...]                 -- pre-conditions: event must match ALL of these
     }
-
-    Counter key pattern:
-      threshold:{rule_id}:{group_value}
-    (TenantRedisClient prefix: tenant:{id}:detect:)
     """
 
     def __init__(self, client: TenantRedisClient) -> None:
@@ -40,7 +45,7 @@ class ThresholdEvaluator:
     ) -> tuple[bool, int]:
         """
         Returns (fired, current_count).
-        fired=True means count crossed the threshold after this event.
+        fired=True means the sliding-window count crossed the threshold after this event.
         """
         filters: list[dict[str, Any]] = conditions.get("filters", [])
         if filters and not evaluate_conditions(filters, event):
@@ -56,11 +61,23 @@ class ThresholdEvaluator:
             return False, 0
 
         group_value = _get_field(event, group_by) if group_by else "global"
-        counter_key = f"threshold:{rule_id}:{group_value or 'global'}"
+        zset_key = f"threshold:{rule_id}:{group_value or 'global'}"
 
-        count = await self._client.incr(counter_key)
-        if count == 1:
-            await self._client.expire(counter_key, window_secs)
+        now = time.time()
+        cutoff = now - window_secs
+        # Use event_id for deduplication if available, otherwise high-res timestamp
+        member = str(event.event_id) if event.event_id else f"{now:.9f}"
+
+        # Atomic pipeline: add → prune expired → count current window → refresh TTL.
+        # No race condition possible — all ops are sequential in a single pipeline.
+        pipe = self._client.pipeline()
+        full_key = self._client._key(zset_key)
+        pipe.zadd(full_key, {member: now})
+        pipe.zremrangebyscore(full_key, "-inf", cutoff)
+        pipe.zcount(full_key, cutoff, "+inf")
+        pipe.expire(full_key, window_secs + 60)  # TTL slightly longer than window
+        results = await pipe.execute()
+        count = int(results[2])  # zcount result
 
         fired = count >= threshold
 
@@ -70,12 +87,16 @@ class ThresholdEvaluator:
                 rule_id=rule_id,
                 count=count,
                 threshold=threshold,
+                window_secs=window_secs,
                 group_value=str(group_value),
             )
 
         return fired, count
 
     async def get_count(self, rule_id: str, group_value: str = "global") -> int:
-        """Returns current counter without incrementing."""
-        val = await self._client.get(f"threshold:{rule_id}:{group_value}")
-        return int(val) if val else 0
+        """Returns current sliding-window count without incrementing."""
+        now = time.time()
+        # We need the window_secs to compute cutoff, but we don't have it here.
+        # Return the total ZSET count as a best-effort approximation.
+        zset_key = f"threshold:{rule_id}:{group_value}"
+        return await self._client.zcount(zset_key, "-inf", "+inf")

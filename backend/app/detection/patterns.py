@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any
+
+import structlog
 
 from app.normalization.models import NormalizedEvent
 
+logger = structlog.get_logger(__name__)
 
 _OP_EQ = "eq"
 _OP_NE = "ne"
@@ -20,6 +24,102 @@ _OP_GTE = "gte"
 _OP_LTE = "lte"
 _OP_EXISTS = "exists"
 
+# ─── Regex cache + ReDoS protection ──────────────────────────────────────────
+
+_REGEX_CACHE: dict[str, re.Pattern[str]] = {}
+_REGEX_CACHE_LOCK = threading.Lock()
+_REGEX_TIMEOUT_SECS = 2.0  # max seconds allowed for a single regex match
+
+
+def _get_compiled_regex(pattern: str) -> re.Pattern[str] | None:
+    """Compile and cache a regex pattern; return None if invalid."""
+    with _REGEX_CACHE_LOCK:
+        if pattern not in _REGEX_CACHE:
+            try:
+                _REGEX_CACHE[pattern] = re.compile(pattern, re.IGNORECASE)
+            except re.error as exc:
+                logger.warning("invalid_regex_pattern", pattern=pattern[:100], error=str(exc))
+                _REGEX_CACHE[pattern] = None  # type: ignore[assignment]
+        return _REGEX_CACHE.get(pattern)
+
+
+def _safe_regex_match(pattern: str, text: str) -> bool:
+    """
+    Thread-based timeout to guard against catastrophically backtracking (ReDoS)
+    regular expressions.  If the match doesn't complete within _REGEX_TIMEOUT_SECS
+    the function returns False and logs a warning.
+
+    Note: The thread continues running in the background but its result is
+    discarded.  Pattern validation on rule creation is the first line of defense;
+    this is the last-resort safety net.
+    """
+    compiled = _get_compiled_regex(pattern)
+    if compiled is None:
+        return False
+
+    result: list[bool] = [False]
+
+    def _run() -> None:
+        try:
+            result[0] = bool(compiled.search(text))
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=_REGEX_TIMEOUT_SECS)
+
+    if t.is_alive():
+        logger.warning(
+            "regex_timeout_possible_redos",
+            pattern=pattern[:100],
+            text_length=len(text),
+        )
+        return False
+
+    return result[0]
+
+
+# ─── Field access ─────────────────────────────────────────────────────────────
+
+def _get_field(event: NormalizedEvent, path: str) -> Any:
+    """
+    Dot-notation field access with unlimited nesting depth.
+
+    Examples:
+      "hostname"                → event.hostname
+      "process.name"            → event.process.name
+      "raw.windows_event_id"    → event.raw["windows_event_id"]
+      "network.dst_port"        → event.network.dst_port
+      "registry.key"            → event.registry["key"]
+    """
+    if not path:
+        return None
+
+    parts = path.split(".")
+    obj: Any = event
+
+    for part in parts:
+        if obj is None:
+            return None
+
+        # Try attribute access first (dataclass / object fields)
+        attr = getattr(obj, part, _MISSING := object())
+        if attr is not _MISSING:
+            obj = attr
+            continue
+
+        # Fall back to dict key access (JSONB sub-objects: raw, registry, etc.)
+        if isinstance(obj, dict):
+            obj = obj.get(part)
+            continue
+
+        return None
+
+    return obj
+
+
+# ─── Condition evaluation ─────────────────────────────────────────────────────
 
 def evaluate_condition(condition: dict[str, Any], event: NormalizedEvent) -> bool:
     """
@@ -36,39 +136,11 @@ def evaluate_condition(condition: dict[str, Any], event: NormalizedEvent) -> boo
 
 
 def evaluate_conditions(conditions: list[dict[str, Any]], event: NormalizedEvent) -> bool:
-    """
-    All conditions must match (logical AND).
-    """
+    """All conditions must match (logical AND)."""
     return all(evaluate_condition(c, event) for c in conditions)
 
 
-def _get_field(event: NormalizedEvent, path: str) -> Any:
-    """
-    Dot-notation field access.  Supports first-level sub-objects.
-    e.g. "process.name", "network.dst_port", "hostname", "severity"
-    """
-    parts = path.split(".", 1)
-    top = parts[0]
-    sub = parts[1] if len(parts) > 1 else None
-
-    # Top-level event attributes
-    if sub is None:
-        return getattr(event, top, None)
-
-    # Sub-object access
-    obj = getattr(event, top, None)
-    if obj is None:
-        return None
-
-    if hasattr(obj, sub):
-        return getattr(obj, sub, None)
-
-    # JSONB dict-like sub-objects (registry, raw)
-    if isinstance(obj, dict):
-        return obj.get(sub)
-
-    return None
-
+# ─── Operator dispatch ────────────────────────────────────────────────────────
 
 def _apply_op(op: str, actual: Any, expected: Any) -> bool:
     if op == _OP_EXISTS:
@@ -91,10 +163,7 @@ def _apply_op(op: str, actual: Any, expected: Any) -> bool:
     if op == _OP_ENDSWITH:
         return isinstance(actual_str, str) and actual_str.endswith(str(expected_str))
     if op == _OP_REGEX:
-        try:
-            return bool(re.search(str(expected), str(actual), re.IGNORECASE))
-        except re.error:
-            return False
+        return _safe_regex_match(str(expected), str(actual))
     if op == _OP_IN:
         if not isinstance(expected, (list, tuple)):
             return False

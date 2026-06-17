@@ -7,7 +7,9 @@ Each window is a ZSET keyed by:
     tenant:{tenant_id}:corr:win:{window_key}
 Where score = unix timestamp (float) and member = event_id.
 
-Windows are pruned lazily on every `add()` call.
+Windows are pruned lazily on every `add()` call AND an explicit TTL is set so
+that idle windows are eventually evicted from Redis even with no new traffic
+(prevents unbounded memory growth during quiet periods).
 """
 
 from dataclasses import dataclass
@@ -17,9 +19,9 @@ from app.core.redis import TenantRedisClient
 
 # ─── Window size presets (seconds) ────────────────────────────────────────────
 
-WINDOW_SHORT = 300     # 5 min  — burst / same-host
+WINDOW_SHORT  = 300    # 5 min  — burst / same-host
 WINDOW_MEDIUM = 900    # 15 min — session / chain
-WINDOW_LONG = 3600     # 1 hr   — process-tree / user cross-host
+WINDOW_LONG   = 3600   # 1 hr   — process-tree / user cross-host
 
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -50,7 +52,6 @@ class TemporalWindowManager:
     def __init__(self, client: TenantRedisClient) -> None:
         self._client = client
 
-    # Internal key builder — client already adds tenant prefix.
     def _win_key(self, window_key: str, window_seconds: int) -> str:
         return f"win:{window_seconds}:{window_key}"
 
@@ -63,8 +64,10 @@ class TemporalWindowManager:
     ) -> None:
         """
         Add event_id at timestamp event_ts to the window.
-        Prunes events outside [event_ts - window_seconds, now] and trims
-        to max_events from the front (oldest first).
+
+        Prunes events outside [event_ts - window_seconds, now], trims to
+        max_events (oldest first), and sets an explicit key TTL so that idle
+        windows are cleaned up even when no new events arrive.
         """
         key = self._win_key(window_key, window_seconds)
         cfg = _DEFAULT_CONFIGS.get(window_seconds, WindowConfig(window_seconds))
@@ -81,6 +84,11 @@ class TemporalWindowManager:
         if count > cfg.max_events:
             excess = count - cfg.max_events
             await self._client.zremrangebyrank(key, 0, excess - 1)
+
+        # Always set TTL so idle windows are evicted automatically.
+        # Use 2× the window so a window full of old events has time to be
+        # pruned on the next add() before Redis deletes the key.
+        await self._client.expire(key, window_seconds * 2)
 
     async def count_in_window(
         self,

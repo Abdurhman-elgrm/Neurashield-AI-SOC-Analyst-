@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -17,6 +18,12 @@ from app.threat_intel.service import ThreatIntelService
 from app.ueba.service import UEBAService
 
 logger = structlog.get_logger(__name__)
+
+# Reject events timestamped more than this far into the future (clock skew tolerance).
+_MAX_FUTURE_SECS = 3600          # 1 hour
+# Warn (but do NOT reject) on events older than this — old events are still
+# valid for re-ingestion and historical analysis.
+_WARN_PAST_DAYS = 7
 
 
 class NormalizationWorker:
@@ -47,38 +54,73 @@ class NormalizationWorker:
         tenant_id_str = payload.get("tenant_id", self._tenant_id)
 
         async with database_manager.session() as db:
-            normalized = NormalizationService.normalize(payload)
+            try:
+                normalized = NormalizationService.normalize(payload)
 
-            # Enrich source IP with GeoIP + Threat Intel (non-blocking, cached)
-            redis = redis_manager.get_client()
-            enrichment = await ThreatIntelService.enrich_ip(normalized.source_ip, redis)
+                # ── Timestamp validation ──────────────────────────────────────
+                now = datetime.now(tz=timezone.utc)
+                if normalized.timestamp:
+                    future_delta = (normalized.timestamp - now).total_seconds()
+                    if future_delta > _MAX_FUTURE_SECS:
+                        logger.warning(
+                            "event_timestamp_too_far_in_future",
+                            msg_id=msg_id,
+                            event_ts=normalized.timestamp.isoformat(),
+                            delta_secs=future_delta,
+                        )
+                        # Clamp to current time — don't discard the event, but
+                        # don't let a rogue agent poison UEBA/correlation windows.
+                        normalized.timestamp = now
 
-            # UEBA behavioral analysis (never raises)
-            ueba_result = await UEBAService.analyze(
-                normalized, enrichment, redis, tenant_id_str
-            )
+                    past_delta = (now - normalized.timestamp).total_seconds()
+                    if past_delta > _WARN_PAST_DAYS * 86400:
+                        logger.warning(
+                            "event_timestamp_very_old",
+                            msg_id=msg_id,
+                            event_ts=normalized.timestamp.isoformat(),
+                            age_days=past_delta / 86400,
+                        )
+                        # Allow old events through (re-ingestion / backfill use case)
+                        # but log so ops can investigate if this is unexpected.
 
-            event = await NormalizationService.persist_event(
-                db, normalized, stream_id=msg_id,
-                enrichment=enrichment, ueba_result=ueba_result,
-            )
+                # Enrich source IP with GeoIP + Threat Intel (non-blocking, cached)
+                redis = redis_manager.get_client()
+                enrichment = await ThreatIntelService.enrich_ip(normalized.source_ip, redis)
 
-            pipeline_client = TenantRedisClient(redis, tenant_id_str, stream_names.SUBSYSTEM)
+                # UEBA behavioral analysis (never raises)
+                ueba_result = await UEBAService.analyze(
+                    normalized, enrichment, redis, tenant_id_str
+                )
 
-            from app.pipeline.publisher import StreamPublisher
-            publisher = StreamPublisher(pipeline_client)
-            norm_payload: dict[str, Any] = normalized.to_dict()
-            norm_payload["event_db_id"] = str(event.id)
-            norm_payload["stream_id"] = msg_id
+                event = await NormalizationService.persist_event(
+                    db, normalized, stream_id=msg_id,
+                    enrichment=enrichment, ueba_result=ueba_result,
+                )
 
-            # Entity extraction + correlation metadata — runs synchronously,
-            # no DB access required; fault-tolerant (never raises).
-            extraction = extract_entities(normalized, event_db_id=str(event.id))
-            enrich_normalized_payload(norm_payload, extraction)
+                pipeline_client = TenantRedisClient(redis, tenant_id_str, stream_names.SUBSYSTEM)
 
-            await publisher.publish_normalized_event(norm_payload)
+                from app.pipeline.publisher import StreamPublisher
+                publisher = StreamPublisher(pipeline_client)
+                norm_payload: dict[str, Any] = normalized.to_dict()
+                norm_payload["event_db_id"] = str(event.id)
+                norm_payload["stream_id"] = msg_id
 
-            await db.commit()
+                # Entity extraction + correlation metadata — runs synchronously,
+                # no DB access required; fault-tolerant (never raises).
+                extraction = extract_entities(normalized, event_db_id=str(event.id))
+                enrich_normalized_payload(norm_payload, extraction)
+
+                await publisher.publish_normalized_event(norm_payload)
+
+                await db.commit()
+
+            except Exception:
+                # Explicit rollback ensures the DB session is clean even if the
+                # context manager's __aexit__ doesn't call rollback on all
+                # exception types.  Without this, a partially-written event row
+                # can be left in the session and committed by a later call.
+                await db.rollback()
+                raise
 
         logger.debug(
             "event_normalized",
