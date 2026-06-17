@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   RefreshCw, Download, X, Activity,
   Cpu, Wifi, FileText, Key, Database, Globe, Settings, Copy, FolderSearch,
+  ShieldAlert, MapPin,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { SevBadge } from '@/components/ui/SevBadge'
@@ -223,13 +224,18 @@ function EventRow({ event, onClick }: { event: EventResponse; onClick: () => voi
 
       {/* Summary */}
       <td style={{ padding: '7px 12px', maxWidth: 400 }}>
-        <span style={{
-          fontSize: 12, color: '#8B95A7',
-          overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', display: 'block',
-        }}>
-          {summary}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {event.is_threat_ip && (
+            <ShieldAlert size={11} style={{ color: '#F87171', flexShrink: 0 }} title="Malicious IP" />
+          )}
+          <span style={{
+            fontSize: 12, color: '#8B95A7',
+            overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {summary}
+          </span>
+        </div>
       </td>
 
       {/* Agent ID (short) */}
@@ -418,6 +424,92 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
               ].filter(([, v]) => v).map(([k, v]) => (
                 <DetailRow key={String(k)} label={String(k)} value={String(v)} mono />
               ))}
+            </Section>
+          )}
+
+          {/* GeoIP */}
+          {(event.geo_country || event.geo_city) && (
+            <Section title="Geolocation">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <MapPin size={11} style={{ color: '#34D399', flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: '#F5F7FA', fontWeight: 600 }}>
+                  {[event.geo_city, event.geo_country].filter(Boolean).join(', ')}
+                  {event.geo_country_code && (
+                    <span style={{
+                      marginLeft: 6, fontSize: 10, padding: '1px 5px',
+                      background: 'rgba(52,211,153,0.1)',
+                      border: '1px solid rgba(52,211,153,0.2)',
+                      borderRadius: 3, color: '#34D399',
+                    }}>
+                      {event.geo_country_code}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {[
+                ['ISP',       event.geo_isp],
+                ['Latitude',  event.geo_latitude  != null ? String(event.geo_latitude)  : null],
+                ['Longitude', event.geo_longitude != null ? String(event.geo_longitude) : null],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <DetailRow key={String(k)} label={String(k)} value={String(v)} />
+              ))}
+            </Section>
+          )}
+
+          {/* Threat Intel */}
+          {(event.is_threat_ip || event.abuse_confidence > 0 || event.threat_intel_flags.length > 0) && (
+            <Section title="Threat Intelligence">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <ShieldAlert size={12} style={{ color: event.is_threat_ip ? '#F87171' : '#FBBF24', flexShrink: 0 }} />
+                <span style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: event.is_threat_ip ? '#F87171' : '#FBBF24',
+                }}>
+                  {event.is_threat_ip ? 'MALICIOUS IP DETECTED' : 'SUSPICIOUS IP'}
+                </span>
+              </div>
+              {event.abuse_confidence > 0 && (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 9, color: '#5C6373', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 4 }}>
+                    Abuse Confidence
+                  </div>
+                  <div style={{
+                    height: 6, borderRadius: 3,
+                    background: 'rgba(255,255,255,0.06)',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${event.abuse_confidence}%`,
+                      borderRadius: 3,
+                      background: event.abuse_confidence >= 75
+                        ? '#F87171'
+                        : event.abuse_confidence >= 25
+                          ? '#FBBF24'
+                          : '#34D399',
+                      transition: 'width 400ms ease',
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: '#8B95A7', marginTop: 3 }}>
+                    {event.abuse_confidence}% abuse score
+                  </div>
+                </div>
+              )}
+              {event.threat_intel_flags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {event.threat_intel_flags.map(flag => (
+                    <span key={flag} style={{
+                      fontSize: 10, padding: '2px 6px', borderRadius: 3,
+                      background: 'rgba(248,113,113,0.08)',
+                      border: '1px solid rgba(248,113,113,0.2)',
+                      color: '#F87171',
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}>
+                      {flag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </Section>
           )}
 

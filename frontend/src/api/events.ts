@@ -50,6 +50,17 @@ export interface EventResponse {
   process_tree_id: string | null
   event_chain_id: string | null
   raw?: Record<string, unknown> | null
+  // GeoIP enrichment (Phase 1)
+  geo_country: string | null
+  geo_country_code: string | null
+  geo_city: string | null
+  geo_latitude: number | null
+  geo_longitude: number | null
+  geo_isp: string | null
+  // Threat Intel enrichment (Phase 1)
+  abuse_confidence: number
+  is_threat_ip: boolean
+  threat_intel_flags: string[]
 }
 
 // ─── Search request (mirrors backend EventSearchRequest) ─────────────────────

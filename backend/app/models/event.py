@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,6 +75,19 @@ class Event(Base):
     process_tree_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     event_chain_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # GeoIP enrichment (Phase 1 — Threat Intel)
+    geo_country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    geo_country_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    geo_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    geo_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geo_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geo_isp: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Threat Intel enrichment (Phase 1)
+    abuse_confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_threat_ip: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    threat_intel_flags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
     # Structured normalized payload (ECS-inspired)
     process: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     user: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -99,6 +112,8 @@ class Event(Base):
         Index("idx_event_tenant_session_id", "tenant_id", "session_id"),
         Index("idx_event_tenant_process_tree_id", "tenant_id", "process_tree_id"),
         Index("idx_event_tenant_event_chain_id", "tenant_id", "event_chain_id"),
+        Index("idx_event_tenant_geo_country", "tenant_id", "geo_country"),
+        Index("idx_event_is_threat_ip", "tenant_id", "is_threat_ip"),
     )
 
     def __repr__(self) -> str:

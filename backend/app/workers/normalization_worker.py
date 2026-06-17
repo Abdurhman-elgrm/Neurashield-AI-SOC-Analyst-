@@ -13,6 +13,7 @@ from app.correlation.enrichment import enrich_normalized_payload, entity_counts
 from app.normalization.service import NormalizationService
 from app.pipeline import stream_names
 from app.pipeline.consumer import StreamConsumer
+from app.threat_intel.service import ThreatIntelService
 
 logger = structlog.get_logger(__name__)
 
@@ -47,9 +48,14 @@ class NormalizationWorker:
         async with database_manager.session() as db:
             normalized = NormalizationService.normalize(payload)
 
-            event = await NormalizationService.persist_event(db, normalized, stream_id=msg_id)
-
+            # Enrich source IP with GeoIP + Threat Intel (non-blocking, cached)
             redis = redis_manager.get_client()
+            enrichment = await ThreatIntelService.enrich_ip(normalized.source_ip, redis)
+
+            event = await NormalizationService.persist_event(
+                db, normalized, stream_id=msg_id, enrichment=enrichment
+            )
+
             pipeline_client = TenantRedisClient(redis, tenant_id_str, stream_names.SUBSYSTEM)
 
             from app.pipeline.publisher import StreamPublisher

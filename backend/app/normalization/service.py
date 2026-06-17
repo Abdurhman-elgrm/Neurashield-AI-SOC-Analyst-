@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event import Event, EventCategory
 from app.normalization.mapper import map_stream_message_to_normalized
 from app.normalization.models import NormalizedEvent
+from app.threat_intel.service import EnrichmentResult
 
 logger = structlog.get_logger(__name__)
 
@@ -26,6 +27,7 @@ class NormalizationService:
         db: AsyncSession,
         normalized: NormalizedEvent,
         stream_id: str | None = None,
+        enrichment: EnrichmentResult | None = None,
     ) -> Event:
         """
         Persists a NormalizedEvent to the events table and returns the ORM object.
@@ -40,6 +42,8 @@ class NormalizationService:
         net_dict = dataclasses.asdict(normalized.network) if normalized.network else None
         file_dict = dataclasses.asdict(normalized.file) if normalized.file else None
         user_dict = dataclasses.asdict(normalized.user) if normalized.user else None
+
+        enr = enrichment or EnrichmentResult()
 
         event = Event(
             tenant_id=UUID(normalized.tenant_id),
@@ -63,6 +67,17 @@ class NormalizationService:
             normalized=normalized.to_dict(),
             raw_payload=normalized.raw,
             tags=normalized.tags,
+            # GeoIP
+            geo_country=enr.geo_country,
+            geo_country_code=enr.geo_country_code,
+            geo_city=enr.geo_city,
+            geo_latitude=enr.geo_latitude,
+            geo_longitude=enr.geo_longitude,
+            geo_isp=enr.geo_isp,
+            # Threat Intel
+            abuse_confidence=enr.abuse_confidence,
+            is_threat_ip=enr.is_threat_ip,
+            threat_intel_flags=enr.threat_intel_flags,
         )
 
         db.add(event)
@@ -73,6 +88,8 @@ class NormalizationService:
             event_id=str(event.id),
             category=category.value,
             tenant_id=normalized.tenant_id,
+            is_threat_ip=enr.is_threat_ip,
+            geo_country=enr.geo_country,
         )
 
         return event

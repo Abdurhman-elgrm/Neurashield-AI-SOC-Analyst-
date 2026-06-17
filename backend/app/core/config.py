@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
+    # ─── Threat Intelligence ──────────────────────────────────────────────────
+    ABUSEIPDB_API_KEY: str = ""
+    ALIENVAULT_API_KEY: str = ""
+    VIRUSTOTAL_API_KEY: str = ""
+
     # ─── Email / SMTP ─────────────────────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

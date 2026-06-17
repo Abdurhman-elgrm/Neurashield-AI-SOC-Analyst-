@@ -34,6 +34,17 @@ class EventResponse(BaseModel):
     session_id: str | None = None
     process_tree_id: str | None = None
     event_chain_id: str | None = None
+    # GeoIP enrichment (Phase 1)
+    geo_country: str | None = None
+    geo_country_code: str | None = None
+    geo_city: str | None = None
+    geo_latitude: float | None = None
+    geo_longitude: float | None = None
+    geo_isp: str | None = None
+    # Threat Intel enrichment (Phase 1)
+    abuse_confidence: int = 0
+    is_threat_ip: bool = False
+    threat_intel_flags: list[str] = []
 
 
 class EventFilterParams(BaseModel):
