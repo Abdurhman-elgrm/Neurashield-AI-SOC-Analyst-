@@ -7,6 +7,7 @@ from app.api.v1 import api_keys
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
 from app.ingestion.router import router as ingestion_router
+from app.connectors.router import router as connectors_router
 from app.realtime.router import router as ws_router
 
 api_router = APIRouter()
@@ -24,6 +25,9 @@ api_router.include_router(members.router)
 
 # ─── Phase 2: Ingestion (agent self-auth) ─────────────────────────────────────
 api_router.include_router(ingestion_router)
+
+# ─── Phase 3: External Connectors (API-key auth) ──────────────────────────────
+api_router.include_router(connectors_router)
 
 # ─── Phase 2: Agent management (tenant member auth) ───────────────────────────
 api_router.include_router(agents.router)
