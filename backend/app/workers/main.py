@@ -117,15 +117,6 @@ async def main() -> None:
     await database_manager.initialize()
     await redis_manager.initialize()
 
-    # Disable RDB persistence so managed Redis never enters MISCONF write-blocked state.
-    try:
-        _r = redis_manager.get_client()
-        await _r.config_set("stop-writes-on-bgsave-error", "no")
-        await _r.config_set("save", "")
-        logger.info("redis_rdb_persistence_disabled")
-    except Exception as _e:
-        logger.warning("redis_config_set_failed", error=str(_e))
-
     stop_event = asyncio.Event()
 
     def _shutdown(sig: int) -> None:

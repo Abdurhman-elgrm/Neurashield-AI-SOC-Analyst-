@@ -79,13 +79,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # A missing or unreachable Redis must never prevent the app from starting.
     try:
         await redis_manager.initialize()
-
-        # Disable RDB persistence to prevent MISCONF errors when the disk is full.
-        # Managed Redis (Railway) resets runtime config on restart, so we re-apply here.
-        _redis = redis_manager.get_client()
-        await _redis.config_set("stop-writes-on-bgsave-error", "no")
-        await _redis.config_set("save", "")
-        logger.info("redis_rdb_persistence_disabled")
     except Exception as redis_exc:
         logger.warning(
             "redis_unavailable_at_startup",

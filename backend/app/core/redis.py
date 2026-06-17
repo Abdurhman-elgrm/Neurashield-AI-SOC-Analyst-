@@ -29,6 +29,15 @@ class RedisManager:
 
     async def _verify_connection(self) -> None:
         assert self._client is not None
+        # Apply config before PING: Railway managed Redis blocks even PING when
+        # stop-writes-on-bgsave-error=yes and the RDB disk is full. CONFIG SET
+        # is exempt from that block, so we fix it first on every startup.
+        try:
+            await self._client.config_set("stop-writes-on-bgsave-error", "no")
+            await self._client.config_set("save", "")
+            logger.info("redis_rdb_persistence_disabled")
+        except Exception as cfg_exc:
+            logger.warning("redis_config_set_skipped", error=str(cfg_exc))
         await self._client.ping()
 
     async def close(self) -> None:
