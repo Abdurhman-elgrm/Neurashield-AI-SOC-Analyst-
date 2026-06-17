@@ -85,6 +85,7 @@ class NormalizationService:
             anomaly_score=ueba.anomaly_score,
             is_anomaly=ueba.is_anomaly,
             ueba_flags=ueba.ueba_flags,
+            ueba_reasons=ueba.ueba_reasons,
         )
 
         db.add(event)

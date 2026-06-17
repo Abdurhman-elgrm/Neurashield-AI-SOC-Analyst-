@@ -27,22 +27,31 @@ class AnomalyResult:
     anomaly_score: float = 0.0
     is_anomaly: bool = False
     ueba_flags: list[str] = field(default_factory=list)
+    ueba_reasons: dict[str, str] = field(default_factory=dict)
 
 
 def compute_anomaly(
     baseline_flags: list[str],
     attack_chain_flags: list[str],
     is_threat_ip: bool = False,
+    reasons: dict[str, str] | None = None,
 ) -> AnomalyResult:
     active = list(baseline_flags) + list(attack_chain_flags)
     if is_threat_ip:
         active.append("threat_ip_confirmed")
 
-    score = sum(_WEIGHTS.get(f, 0.0) for f in active)
-    score = min(1.0, score)
+    score = min(1.0, sum(_WEIGHTS.get(f, 0.0) for f in active))
+
+    all_reasons: dict[str, str] = dict(reasons or {})
+    if is_threat_ip:
+        all_reasons.setdefault(
+            "threat_ip_confirmed",
+            "Source IP matched a known threat intelligence database",
+        )
 
     return AnomalyResult(
         anomaly_score=round(score, 4),
         is_anomaly=score >= _ANOMALY_THRESHOLD,
         ueba_flags=active,
+        ueba_reasons=all_reasons,
     )

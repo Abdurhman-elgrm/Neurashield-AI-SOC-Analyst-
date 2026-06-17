@@ -49,6 +49,7 @@ class EventResponse(BaseModel):
     anomaly_score: float = 0.0
     is_anomaly: bool = False
     ueba_flags: list[str] = []
+    ueba_reasons: dict[str, str] = {}
     # Original raw agent payload (raw_payload column → exposed as "raw" for frontend)
     raw: dict[str, Any] | None = Field(None, validation_alias="raw_payload")
 

@@ -51,6 +51,16 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.category = "registry"
         base.registry = _extract_registry_windows(raw)
 
+    # WMI Activity — provider host started/failed
+    elif event_id in ("5857", 5857):
+        base.category = "process"
+        provider = raw.get("ProviderName") or raw.get("NamespaceName")
+        pid = _to_int(raw.get("ProcessID") or raw.get("HostingProcessId"))
+        if provider:
+            base.process = NormalizedProcess(name=provider, pid=pid)
+        elif pid:
+            base.process = NormalizedProcess(pid=pid)
+
     # Windows Security log — process creation
     elif event_id in ("4688", 4688):  # Process Create (Security log)
         base.category = "process"

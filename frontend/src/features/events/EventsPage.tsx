@@ -520,6 +520,8 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
                   {event.anomaly_score >= 0.7 ? 'HIGH RISK ANOMALY' : 'BEHAVIORAL ANOMALY'}
                 </span>
               </div>
+
+              {/* Anomaly score bar */}
               <div>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between',
@@ -544,20 +546,46 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
                   }} />
                 </div>
               </div>
+
+              {/* Flags + reasons */}
               {event.ueba_flags.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                   {event.ueba_flags.map(flag => {
-                    const isHigh = ['impossible_travel', 'brute_force_success', 'lateral_movement'].includes(flag)
+                    const isHigh = ['impossible_travel', 'brute_force_success', 'lateral_movement', 'threat_ip_confirmed'].includes(flag)
+                    const reason = event.ueba_reasons?.[flag]
                     return (
-                      <span key={flag} style={{
-                        fontSize: 9, padding: '2px 6px', borderRadius: 3,
-                        background: isHigh ? 'rgba(248,113,113,0.08)' : 'rgba(251,191,36,0.08)',
-                        border: `1px solid ${isHigh ? 'rgba(248,113,113,0.2)' : 'rgba(251,191,36,0.2)'}`,
-                        color: isHigh ? '#F87171' : '#FBBF24',
-                        fontFamily: "'JetBrains Mono', monospace",
+                      <div key={flag} style={{
+                        background: isHigh ? 'rgba(248,113,113,0.05)' : 'rgba(251,191,36,0.05)',
+                        border: `1px solid ${isHigh ? 'rgba(248,113,113,0.15)' : 'rgba(251,191,36,0.15)'}`,
+                        borderRadius: 5, padding: '6px 8px',
                       }}>
-                        {flag.replace(/_/g, ' ')}
-                      </span>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 5, marginBottom: reason ? 4 : 0,
+                        }}>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
+                            fontFamily: "'JetBrains Mono', monospace",
+                            color: isHigh ? '#F87171' : '#FBBF24',
+                            textTransform: 'uppercase',
+                          }}>
+                            {flag.replace(/_/g, '_')}
+                          </span>
+                          <span style={{
+                            fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                            background: isHigh ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)',
+                            color: isHigh ? '#F87171' : '#FBBF24',
+                          }}>
+                            {isHigh ? 'HIGH' : 'MEDIUM'}
+                          </span>
+                        </div>
+                        {reason && (
+                          <p style={{
+                            margin: 0, fontSize: 10, color: '#7A8699', lineHeight: 1.5,
+                          }}>
+                            {reason}
+                          </p>
+                        )}
+                      </div>
                     )
                   })}
                 </div>

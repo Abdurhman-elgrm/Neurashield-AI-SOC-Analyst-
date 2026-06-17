@@ -65,6 +65,7 @@ export interface EventResponse {
   anomaly_score: number
   is_anomaly: boolean
   ueba_flags: string[]
+  ueba_reasons: Record<string, string>
 }
 
 // ─── Search request (mirrors backend EventSearchRequest) ─────────────────────

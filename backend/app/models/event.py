@@ -92,6 +92,7 @@ class Event(Base):
     anomaly_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     is_anomaly: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     ueba_flags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    ueba_reasons: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # Structured normalized payload (ECS-inspired)
     process: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
