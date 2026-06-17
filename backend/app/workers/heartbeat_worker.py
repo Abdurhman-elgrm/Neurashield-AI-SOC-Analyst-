@@ -64,7 +64,6 @@ class HeartbeatWorker:
                     )
                     # Email notification — non-blocking background task
                     from app.services.notification_service import notify_agent_offline_email
-                    from datetime import timezone
                     last_seen = (
                         row.last_seen_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
                         if row.last_seen_at
