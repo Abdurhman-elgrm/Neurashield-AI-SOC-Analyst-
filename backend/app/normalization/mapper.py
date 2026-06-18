@@ -49,23 +49,39 @@ def _enrich_from_raw_message(message: dict[str, Any]) -> dict[str, Any]:
       "EventID 4688: Subject Account Name: ahmed\\nNew Process Name: C:\\cmd.exe"
     and injects the extracted fields back into the message dict so that
     normalize_windows_event() can process them normally.
-    """
-    # Already has structured fields — nothing to do
-    if message.get("event_id_windows") or message.get("EventID"):
-        return message
 
+    Also promotes windows_event_id and source_name from the raw sub-dict to the
+    top level so normalize_windows_event() can always find them, even when the
+    agent places them only inside the nested raw object.
+    """
     raw_sub = message.get("raw")
     if not isinstance(raw_sub, dict):
         return message
 
+    # Promote windows_event_id and source_name from raw sub-dict regardless of
+    # whether we end up parsing the message body — these are always useful.
+    promoted: dict[str, Any] = {}
+    if raw_sub.get("source_name") and not message.get("source_name"):
+        promoted["source_name"] = raw_sub["source_name"]
+    if (
+        raw_sub.get("windows_event_id")
+        and not message.get("event_id_windows")
+        and not message.get("EventID")
+    ):
+        promoted["event_id_windows"] = raw_sub["windows_event_id"]
+
+    # Already has structured fields — only add the promoted enrichments.
+    if message.get("event_id_windows") or message.get("EventID"):
+        return {**message, **promoted} if promoted else message
+
     raw_msg: str = raw_sub.get("message", "")
     if not raw_msg:
-        return message
+        return {**message, **promoted} if promoted else message
 
     # ── Extract EventID ────────────────────────────────────────────────────────
     m = re.match(r"EventID\s+(\d+)[:\s]", raw_msg)
     if not m:
-        return message
+        return {**message, **promoted} if promoted else message
 
     eid = int(m.group(1))
     extra: dict[str, Any] = {"event_id_windows": eid}
@@ -101,7 +117,8 @@ def _enrich_from_raw_message(message: dict[str, Any]) -> dict[str, Any]:
     if src_ip and src_ip not in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
         extra["source_ip"] = src_ip
 
-    return {**message, **extra}
+    # promoted fields are lower priority than text-parsed fields
+    return {**message, **promoted, **extra}
 
 
 def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent:

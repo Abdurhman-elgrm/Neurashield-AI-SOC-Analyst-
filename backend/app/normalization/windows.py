@@ -19,17 +19,174 @@ def _win_basename(path: str | None) -> str | None:
     return name or None
 
 
+# Human-readable titles for Windows Event IDs.
+# Injected into event.tags so the UI displays meaningful names instead of "EventID XXXX".
+_WIN_EVENT_TITLES: dict[str, str] = {
+    # Authentication & Logon
+    "4624":  "Successful User Logon",
+    "4625":  "Failed User Logon Attempt",
+    "4634":  "User Logoff",
+    "4647":  "User-Initiated Logoff",
+    "4648":  "Logon with Explicit Credentials",
+    "4672":  "Special Privileges Assigned to New Logon",
+    "4768":  "Kerberos TGT Requested",
+    "4769":  "Kerberos Service Ticket Requested",
+    "4771":  "Kerberos Pre-authentication Failed",
+    "4776":  "NTLM Credential Validation",
+    # Account Management
+    "4720":  "User Account Created",
+    "4722":  "User Account Enabled",
+    "4723":  "User Password Change Attempt",
+    "4724":  "User Password Reset",
+    "4725":  "User Account Disabled",
+    "4726":  "User Account Deleted",
+    "4728":  "Member Added to Global Security Group",
+    "4732":  "Member Added to Local Security Group",
+    "4733":  "Member Removed from Local Security Group",
+    "4740":  "User Account Locked Out",
+    "4756":  "Member Added to Universal Security Group",
+    # Policy Change & Audit
+    "4657":  "Registry Value Modified",
+    "4663":  "Object Access Attempt",
+    "4670":  "Object Permissions Changed",
+    "4719":  "System Audit Policy Changed",
+    # Process & Service
+    "4688":  "New Process Created",
+    "4689":  "Process Terminated",
+    "4698":  "Scheduled Task Created",
+    "4699":  "Scheduled Task Deleted",
+    "4702":  "Scheduled Task Updated",
+    "7040":  "Service Start Type Changed",
+    "7045":  "New Service Installed",
+    # Audit Tampering
+    "1100":  "Event Logging Service Stopped",
+    "1102":  "Security Audit Log Cleared",
+    # Credential Access
+    "5058":  "Cryptographic Key File Operation",
+    "5382":  "Vault Credentials Accessed",
+    # PowerShell (Microsoft-Windows-PowerShell/Operational)
+    "40961": "PowerShell Console Starting",
+    "40962": "PowerShell Console Ready",
+    "4100":  "PowerShell Error",
+    "4103":  "PowerShell Pipeline Execution",
+    "4104":  "PowerShell Script Block Logged",
+    "53504": "PowerShell Console Initializing",
+    # WMI Activity
+    "5857":  "WMI Provider Host Started",
+    "5858":  "WMI Provider Query Failed",
+    "5860":  "WMI Temporary Event Consumer Created",
+    "5861":  "WMI Permanent Event Consumer Created",
+    # Network & Firewall
+    "5156":  "Network Connection Allowed by Firewall",
+    "5157":  "Network Connection Blocked by Firewall",
+    "5158":  "Network Bind Allowed by Firewall",
+    "5159":  "Network Bind Blocked by Firewall",
+    # Windows Defender
+    "1006":  "Defender: Malware Scan Completed",
+    "1116":  "Defender: Malware Detected",
+    "1117":  "Defender: Action Taken on Threat",
+    "1150":  "Defender: Service Started",
+    "1151":  "Defender: Scheduled Scan",
+    # Task Scheduler
+    "106":   "Scheduled Task Registered",
+    "140":   "Scheduled Task Updated",
+    "141":   "Scheduled Task Deleted",
+    "200":   "Scheduled Task Execution Started",
+    "201":   "Scheduled Task Execution Completed",
+    # Windows Update
+    "10029": "Windows Update Download Started",
+    "16384": "Windows Update Auto-Restart Scheduled",
+    "16394": "Windows Update Reboot Required",
+    # Sysmon (Event IDs 1–26)
+    "1":  "Sysmon: Process Created",
+    "2":  "Sysmon: File Creation Time Changed",
+    "3":  "Sysmon: Network Connection",
+    "4":  "Sysmon: Service State Changed",
+    "5":  "Sysmon: Process Terminated",
+    "6":  "Sysmon: Driver Loaded",
+    "7":  "Sysmon: Image Loaded",
+    "8":  "Sysmon: Remote Thread Created",
+    "9":  "Sysmon: Raw Disk Read",
+    "10": "Sysmon: Process Access",
+    "11": "Sysmon: File Created",
+    "12": "Sysmon: Registry Key Created/Deleted",
+    "13": "Sysmon: Registry Value Set",
+    "14": "Sysmon: Registry Key/Value Renamed",
+    "15": "Sysmon: Alternate Data Stream Created",
+    "16": "Sysmon: Configuration Changed",
+    "17": "Sysmon: Named Pipe Created",
+    "18": "Sysmon: Named Pipe Connected",
+    "19": "Sysmon: WMI Event Filter Activity",
+    "20": "Sysmon: WMI Event Consumer Activity",
+    "21": "Sysmon: WMI Consumer Bound to Filter",
+    "22": "Sysmon: DNS Query",
+    "23": "Sysmon: File Deleted",
+    "24": "Sysmon: Clipboard Content Captured",
+    "25": "Sysmon: Process Tampered",
+    "26": "Sysmon: File Delete Logged",
+    # Miscellaneous System
+    "258":   "Kernel: Time Change",
+    "8224":  "Volume Shadow Copy Service Started",
+    "17890": "IIS: Worker Process Failure",
+}
+
+# Maps Windows log source names → normalized category.
+# Applied when source_name is present (promoted from the raw sub-dict by mapper.py).
+_SOURCE_CATEGORY: dict[str, str] = {
+    "Microsoft-Windows-Security-Auditing":               "auth",
+    "Microsoft-Windows-PowerShell":                      "process",
+    "Microsoft-Windows-PowerShell/Operational":          "process",
+    "Microsoft-Windows-Sysmon/Operational":              "process",
+    "Microsoft-Windows-WMI-Activity/Operational":        "other",
+    "Microsoft-Windows-Windows Defender/Operational":    "other",
+    "Microsoft-Windows-TaskScheduler/Operational":       "process",
+    "Microsoft-Windows-WindowsUpdateClient/Operational": "other",
+    "Microsoft-Windows-Bits-Client/Operational":         "network",
+    "Microsoft-Windows-DNS-Client/Operational":          "network",
+    "Microsoft-Windows-Kernel-General":                  "other",
+    "Service Control Manager":                           "process",
+}
+
+_SYSTEM_ACCOUNTS = {"-", "", "system", "local service", "network service", "anonymous logon"}
+
+# Service process names whose 4672 events are routine infrastructure noise → keep LOW.
+_SERVICE_PROCESS_NAMES = frozenset({
+    "services.exe", "lsass.exe", "svchost.exe", "wininit.exe", "winlogon.exe",
+    "csrss.exe", "smss.exe", "taskhostw.exe", "ntoskrnl.exe",
+})
+
+# Windows protocol number → name (used by firewall audit events 5156/5157).
+_PROTO_MAP = {"1": "ICMP", "6": "TCP", "17": "UDP", "58": "ICMPv6"}
+
+
+def get_win_event_title(event_id: Any) -> str | None:
+    """Return a human-readable title for a Windows Event ID, or None if unknown."""
+    return _WIN_EVENT_TITLES.get(str(event_id))
+
+
 def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> NormalizedEvent:
     """
     Maps Windows-specific event fields to the normalized schema.
-    Handles Sysmon (EventID-based) and generic Windows Security Event Log formats.
+    Handles Security Event Log, Sysmon, PowerShell, WMI, Defender, and other channels.
     """
     event_id = raw.get("event_id_windows") or raw.get("EventID")
 
-    # Persist Windows EventID into raw so the frontend can display human-readable descriptions
+    # Store EventID in raw for frontend reference and add a human-readable title tag.
     if event_id:
         base.raw["windows_event_id"] = str(event_id)
+        title = get_win_event_title(event_id)
+        if title and title not in base.tags:
+            base.tags.insert(0, title)
 
+    # Apply source_name → category mapping before per-event handlers so that
+    # specific handlers can override it if needed.
+    source = raw.get("source_name") or raw.get("SourceName")
+    if source:
+        cat = _SOURCE_CATEGORY.get(source)
+        if cat and base.category == "other":
+            base.category = cat
+
+    # Populate sub-objects from any pre-structured fields the agent included.
     if base.process is None and (proc := raw.get("process") or raw.get("Image")):
         base.process = _extract_process_windows(raw, proc if isinstance(proc, dict) else {})
 
@@ -42,35 +199,83 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
     if base.user is None:
         base.user = _extract_user_windows(raw)
 
-    # Windows Sysmon process events
-    if event_id in ("1", 1):  # Process Create
+    eid = str(event_id) if event_id is not None else ""
+
+    # ── Sysmon ────────────────────────────────────────────────────────────────
+    if eid == "1":  # Process Create
         base.category = "process"
         base.process = _extract_process_from_sysmon_create(raw)
 
-    elif event_id in ("3", 3):  # Network Connect
+    elif eid == "3":  # Network Connect
         base.category = "network"
         base.network = _extract_network_from_sysmon(raw)
 
-    elif event_id in ("11", 11):  # File Create
+    elif eid == "5":  # Process Terminated
+        base.category = "process"
+        base.severity = 1
+
+    elif eid in ("6", "7"):  # Driver/Image Loaded — can indicate DLL injection
+        base.category = "process"
+        base.severity = 2
+
+    elif eid in ("8", "10"):  # Remote Thread / Process Access — high suspicion
+        base.category = "process"
+        base.severity = 3
+
+    elif eid == "11":  # File Create
         base.category = "file"
         base.file = _extract_file_from_sysmon(raw)
 
-    elif event_id in ("13", 13, "14", 14):  # Registry value set / renamed
+    elif eid in ("12", "13", "14"):  # Registry events
         base.category = "registry"
         base.registry = _extract_registry_windows(raw)
 
-    # WMI Activity — provider host started/failed
-    elif event_id in ("5857", 5857):
-        base.category = "process"
+    elif eid == "22":  # DNS Query
+        base.category = "network"
+        base.severity = 1
+
+    elif eid == "23":  # File Deleted
+        base.category = "file"
+        base.severity = 2
+
+    # ── WMI Activity ──────────────────────────────────────────────────────────
+    elif eid == "5857":  # WMI Provider Host Started — routine infrastructure
+        base.category = "other"
+        base.severity = 1
         provider = raw.get("ProviderName") or raw.get("NamespaceName")
         pid = _to_int(raw.get("ProcessID") or raw.get("HostingProcessId"))
         if provider:
             base.process = NormalizedProcess(name=provider, pid=pid)
-        elif pid:
-            base.process = NormalizedProcess(pid=pid)
 
-    # Windows Security log — process creation
-    elif event_id in ("4688", 4688):  # Process Create (Security log)
+    elif eid == "5858":  # WMI Provider Error
+        base.category = "other"
+        base.severity = 2
+
+    elif eid in ("5860", "5861"):  # WMI Event Consumer — persistence indicator
+        base.category = "other"
+        base.severity = 3
+        if "wmi_persistence" not in base.tags:
+            base.tags.append("wmi_persistence")
+
+    # ── PowerShell ────────────────────────────────────────────────────────────
+    elif eid in ("40961", "40962", "53504"):  # Console startup — noisy, not suspicious
+        base.category = "process"
+        base.severity = 1
+
+    elif eid == "4100":  # PowerShell Error
+        base.category = "process"
+        base.severity = 2
+
+    elif eid == "4103":  # Pipeline Execution
+        base.category = "process"
+        base.severity = 2
+
+    elif eid == "4104":  # Script Block Logged — can catch obfuscated scripts
+        base.category = "process"
+        base.severity = 3
+
+    # ── Security log: Process events ──────────────────────────────────────────
+    elif eid == "4688":  # New Process Created
         base.category = "process"
         image = raw.get("Image") or raw.get("NewProcessName")
         if image:
@@ -86,72 +291,146 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
             if name and name.lower() not in _SYSTEM_ACCOUNTS:
                 base.user = NormalizedUser(name=name, domain=raw.get("SubjectDomainName"))
 
-    # Windows Security log — auth events
-    elif event_id in ("4624", 4624):  # Successful logon
+    elif eid == "4689":  # Process Terminated
+        base.category = "process"
+        base.severity = 1
+
+    elif eid in ("4698", "4702"):  # Scheduled Task Created/Updated
+        base.category = "process"
+        base.severity = 3
+
+    elif eid == "4699":  # Scheduled Task Deleted
+        base.category = "process"
+        base.severity = 2
+
+    elif eid == "7045":  # Service Installed
+        base.category = "process"
+        base.severity = 3
+
+    # ── Security log: Authentication ──────────────────────────────────────────
+    elif eid == "4624":  # Successful Logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 1
         _try_extract_src_ip(raw, base)
 
-    elif event_id in ("4625", 4625):  # Failed logon
+    elif eid == "4625":  # Failed Logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
         _try_extract_src_ip(raw, base)
 
-    elif event_id in ("4648", 4648):  # Logon with explicit credentials
+    elif eid == "4648":  # Logon with Explicit Credentials
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
         _try_extract_src_ip(raw, base)
 
-    elif event_id in ("4634", 4634):  # Logoff
+    elif eid in ("4634", "4647"):  # Logoff
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
+        base.severity = 1
 
-    elif event_id in ("4672", 4672):  # Special privileges assigned to new logon
+    elif eid == "4672":  # Special Privileges Assigned
         base.category = "auth"
         user = _extract_user_from_logon(raw)
-        user.is_privileged = True  # 4672 IS the privileged logon event — always flag
+        acct = (user.name or "").upper()
+        proc = (raw.get("Image") or raw.get("ProcessName") or "").lower()
+        is_service_acct = acct in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE")
+        is_service_proc = proc and any(proc.endswith(s) for s in _SERVICE_PROCESS_NAMES)
+        if is_service_acct or is_service_proc:
+            base.severity = 1  # Routine infrastructure logon — suppress noise
+        else:
+            user.is_privileged = True
+            base.severity = 2
         base.user = user
-        base.severity = 2
 
-    elif event_id in ("4698", 4698, "4702", 4702):  # Scheduled task created/updated
-        base.category = "process"
-        base.severity = 3
-
-    elif event_id in ("4719", 4719):  # Audit policy changed
+    elif eid in ("4768", "4769", "4776"):  # Kerberos / NTLM auth
         base.category = "auth"
-        base.severity = 3
+        base.user = _extract_user_from_logon(raw)
 
-    elif event_id in ("4720", 4720):  # User account created
+    elif eid == "4771":  # Kerberos Pre-auth Failed
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
 
-    elif event_id in ("4728", 4728, "4732", 4732):  # User added to security group
+    # ── Security log: Account Management ─────────────────────────────────────
+    elif eid == "4720":  # User Account Created
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
 
-    elif event_id in ("4768", 4768, "4769", 4769, "4776", 4776):  # Kerberos auth events
+    elif eid in ("4722", "4723", "4724", "4725", "4726"):  # Account state changes
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
+        base.severity = 2
 
-    elif event_id in ("7045", 7045):  # Service installed
-        base.category = "process"
+    elif eid == "4740":  # Account Locked Out
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
         base.severity = 3
 
-    elif event_id in ("1102", 1102):  # Audit log cleared
+    elif eid in ("4728", "4732", "4733", "4756"):  # Group membership changes
+        base.category = "auth"
+        base.user = _extract_user_from_logon(raw)
+        base.severity = 2
+
+    # ── Security log: Policy Change ───────────────────────────────────────────
+    elif eid == "4719":  # Audit Policy Changed
+        base.category = "auth"
+        base.severity = 3
+
+    elif eid == "1102":  # Audit Log Cleared
         base.category = "auth"
         base.severity = 4
 
-    elif event_id in ("4104", 4104):  # PowerShell script block logged
-        base.category = "process"
+    elif eid == "1100":  # Event Logging Service Stopped
+        base.category = "other"
         base.severity = 3
+
+    # ── Credential Access ─────────────────────────────────────────────────────
+    elif eid in ("5058", "5382"):  # Key File Op / Vault Credential Read
+        base.category = "auth"
+        base.severity = 2
+
+    # ── Network / Firewall ────────────────────────────────────────────────────
+    elif eid in ("5156", "5158"):  # Connection/bind allowed
+        base.category = "network"
+        base.severity = 1
+        _try_extract_firewall_network(raw, base)
+
+    elif eid in ("5157", "5159"):  # Connection/bind blocked
+        base.category = "network"
+        base.severity = 2
+        _try_extract_firewall_network(raw, base)
+
+    # ── Windows Defender ──────────────────────────────────────────────────────
+    elif eid in ("1150", "1151", "1006"):  # Defender service/scan events
+        base.category = "other"
+        base.severity = 1
+
+    elif eid == "1116":  # Malware Detected
+        base.category = "other"
+        base.severity = 4
+
+    elif eid == "1117":  # Defender Action on Malware
+        base.category = "other"
+        base.severity = 3
+
+    # ── Windows Update ────────────────────────────────────────────────────────
+    elif eid in ("10029", "16384", "16394"):
+        base.category = "other"
+        base.severity = 1
+
+    # ── Miscellaneous System ──────────────────────────────────────────────────
+    elif eid in ("258", "8224", "17890"):
+        base.category = "other"
+        base.severity = 1
 
     return base
 
+
+# ─── Field extraction helpers ─────────────────────────────────────────────────
 
 def _extract_process_windows(raw: dict[str, Any], proc: dict[str, Any]) -> NormalizedProcess:
     hashes = raw.get("Hashes") if isinstance(raw.get("Hashes"), dict) else {}
@@ -226,14 +505,10 @@ def _extract_file_windows(f: dict[str, Any]) -> NormalizedFile:
     )
 
 
-_SYSTEM_ACCOUNTS = {"-", "", "system", "local service", "network service", "anonymous logon"}
-
-
 def _extract_user_windows(raw: dict[str, Any]) -> NormalizedUser:
     user_raw = raw.get("user") or {}
     if not isinstance(user_raw, dict):
         user_raw = {}
-    # TargetUserName is the acting account in security events (more useful than SubjectUserName)
     name = (
         user_raw.get("name")
         or raw.get("TargetUserName")
@@ -245,7 +520,6 @@ def _extract_user_windows(raw: dict[str, Any]) -> NormalizedUser:
         or raw.get("TargetDomainName")
         or raw.get("SubjectDomainName")
     )
-    # Filter out noise: system/service accounts that don't represent real users
     if name and name.lower() in _SYSTEM_ACCOUNTS:
         name = None
     if name and "\\" in name:
@@ -300,3 +574,22 @@ def _try_extract_src_ip(raw: dict[str, Any], base: NormalizedEvent) -> None:
         base.network = NormalizedNetwork(src_ip=ip)
     elif base.network.src_ip is None:
         base.network.src_ip = ip
+
+
+def _try_extract_firewall_network(raw: dict[str, Any], base: NormalizedEvent) -> None:
+    """Populate network sub-object from Windows Firewall audit fields (5156/5157/5158/5159)."""
+    src_ip = raw.get("SourceAddress") or raw.get("source_ip")
+    dst_ip = raw.get("DestAddress") or raw.get("dest_ip")
+    if not src_ip and not dst_ip:
+        return
+    src_port = _to_int(raw.get("SourcePort"))
+    dst_port = _to_int(raw.get("DestPort"))
+    protocol = _PROTO_MAP.get(str(raw.get("Protocol", ""))) or raw.get("Protocol")
+    if base.network is None:
+        base.network = NormalizedNetwork(
+            src_ip=src_ip,
+            src_port=src_port,
+            dst_ip=dst_ip,
+            dst_port=dst_port,
+            protocol=protocol,
+        )
