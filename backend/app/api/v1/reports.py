@@ -265,8 +265,8 @@ async def get_compliance_report(
     inv_rows = await db.execute(text("""
         SELECT
             COUNT(*) FILTER (WHERE TRUE)                          AS total,
-            COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved')) AS open,
-            COUNT(*) FILTER (WHERE status IN ('closed','resolved'))     AS closed,
+            COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved','false_positive')) AS open,
+            COUNT(*) FILTER (WHERE status IN ('closed','resolved','false_positive'))     AS closed,
             COUNT(*) FILTER (WHERE confidence = 'high')               AS high_confidence,
             AVG(threat_score)                                          AS avg_score
         FROM investigations
@@ -322,7 +322,7 @@ async def get_compliance_report(
         SELECT category, COUNT(*) AS cnt
         FROM events
         WHERE tenant_id = CAST(:tid AS uuid)
-          AND occurred_at >= :period_start
+          AND event_timestamp >= :period_start
         GROUP BY category
         LIMIT 20
     """), {"tid": str(tenant_id), "period_start": period_start})

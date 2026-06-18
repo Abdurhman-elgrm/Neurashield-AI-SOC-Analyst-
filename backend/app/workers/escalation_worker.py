@@ -14,7 +14,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from app.core.database import database_manager
 from app.models.alert import Alert, AlertSeverity, AlertStatus
@@ -77,7 +77,7 @@ class AlertEscalationWorker:
                     Alert.created_at <= cutoff,
                     Alert.deleted_at.is_(None),
                     # Only escalate once — skip if the note is already present
-                    Alert.notes.not_like("%AUTO-ESCALATED%"),
+                    or_(Alert.notes.is_(None), ~Alert.notes.like("%AUTO-ESCALATED%")),
                 )
             )
             rows = result.fetchall()
@@ -96,14 +96,19 @@ class AlertEscalationWorker:
                     .where(Alert.id == row.id)
                     .values(notes=new_notes, updated_at=datetime.now(tz=timezone.utc))
                 )
+                created = row.created_at
+                if created and created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                age_minutes = (
+                    (datetime.now(tz=timezone.utc) - created).seconds // 60
+                    if created else "unknown"
+                )
                 logger.warning(
                     "alert_auto_escalated",
                     alert_id=str(row.id),
                     tenant_id=str(row.tenant_id),
                     severity=row.severity.value,
-                    age_minutes=(datetime.now(tz=timezone.utc) - row.created_at.replace(tzinfo=timezone.utc)).seconds // 60
-                    if row.created_at
-                    else "unknown",
+                    age_minutes=age_minutes,
                 )
 
             await db.commit()

@@ -125,9 +125,12 @@ async def _check_insider_threat(
         # ── Rapid resource access (many distinct resources in short window) ────
         if category in ("file", "network"):
             resource = (
-                event.network.destination_ip
+                event.network.dst_ip
                 if category == "network" and event.network
-                else str(event.raw.get("file_path", ""))
+                else (
+                    (event.file.path or event.file.name)
+                    if event.file else str(event.raw.get("file_path", ""))
+                )
             )
             if resource:
                 rapid_key = f"insider:{username}:rapid_resources"

@@ -211,7 +211,7 @@ async def test_rule_dry_run(
     rule = await DetectionService.require_by_id(db, m.tenant_id, rule_id)
 
     from datetime import timedelta as _timedelta
-    from_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - _timedelta(hours=body.from_hours)
+    from_ts = datetime.now(tz=timezone.utc) - _timedelta(hours=body.from_hours)
     events_result = await db.execute(
         select(Event)
         .where(

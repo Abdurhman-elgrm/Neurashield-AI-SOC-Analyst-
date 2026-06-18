@@ -298,6 +298,15 @@ class TenantRedisClient:
     async def sismember(self, key: str, value: str) -> bool:
         return bool(await self._redis.sismember(self._key(key), value))
 
+    async def zcard(self, key: str) -> int:
+        return await self._redis.zcard(self._key(key))  # type: ignore[return-value]
+
+    async def scan_iter(self, pattern: str):  # type: ignore[return]
+        """Yields unprefixed keys matching pattern (prefix is stripped from results)."""
+        full_pattern = self._key(pattern)
+        async for full_key in self._redis.scan_iter(full_pattern):
+            yield full_key[len(self._prefix):]
+
     # ─── Pipeline ─────────────────────────────────────────────────────────────
 
     def pipeline(self) -> Pipeline:  # type: ignore[type-arg]
