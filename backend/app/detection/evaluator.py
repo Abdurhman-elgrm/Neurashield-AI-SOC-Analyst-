@@ -42,12 +42,13 @@ class RuleEvaluator:
         """
         fired: bool
         count: int | None = None
+        window_event_ids: list[str] = []
 
         if rule.rule_type == RuleType.PATTERN:
             conditions: list[dict[str, Any]] = rule.conditions if isinstance(rule.conditions, list) else []
             fired = evaluate_conditions(conditions, event)
         elif rule.rule_type == RuleType.THRESHOLD:
-            fired, count = await self._threshold.evaluate(
+            fired, count, window_event_ids = await self._threshold.evaluate(
                 str(rule.id), rule.conditions, event
             )
         else:
@@ -81,7 +82,12 @@ class RuleEvaluator:
             title=build_alert_title(rule.name, event),
             description=rule.description,
             source_host=event.hostname or None,
-            evidence=build_alert_evidence(event, stream_id=stream_id, count=count),
+            evidence=build_alert_evidence(
+                event,
+                stream_id=stream_id,
+                count=count,
+                window_event_ids=window_event_ids or None,
+            ),
             mitre_tactics=rule.mitre_tactics,
             mitre_techniques=rule.mitre_techniques,
             suppression_key=suppress_key,

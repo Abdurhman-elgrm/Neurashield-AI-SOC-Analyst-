@@ -24,8 +24,15 @@ def build_alert_evidence(
     event: NormalizedEvent,
     stream_id: str | None = None,
     count: int | None = None,
+    window_event_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Bundles the triggering event details into the alert evidence JSONB."""
+    """
+    Bundles the triggering event details into the alert evidence JSONB.
+
+    For threshold rules, window_event_ids contains the IDs of ALL events that
+    contributed to the threshold breach — giving analysts full context instead
+    of just the final triggering event.
+    """
     import dataclasses
 
     evidence: dict[str, Any] = {
@@ -47,5 +54,7 @@ def build_alert_evidence(
         evidence["user"] = dataclasses.asdict(event.user)
     if count is not None:
         evidence["threshold_count"] = count
+    if window_event_ids:
+        evidence["window_event_ids"] = window_event_ids
 
     return evidence

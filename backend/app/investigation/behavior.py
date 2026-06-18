@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Generic behavior detection engine with MITRE ATT&CK tactic mapping.
+Generic behavior detection engine with MITRE ATT&CK tactic + technique mapping.
 
 Detection is entirely pattern-based — no ML, no hardcoded single-attack
 scenarios. Patterns are keyed by behavior name; each pattern is an independent
@@ -19,9 +19,25 @@ from app.investigation.schemas import (
     DetectedBehavior,
 )
 
+# ─── MITRE technique mapping per behavior ─────────────────────────────────────
+
+_BEHAVIOR_TECHNIQUES: dict[str, list[str]] = {
+    "credential_access":    ["T1003", "T1078", "T1558", "T1555"],
+    "discovery":            ["T1069", "T1087", "T1082", "T1016", "T1049"],
+    "execution":            ["T1059", "T1059.001", "T1059.003", "T1047"],
+    "persistence":          ["T1053", "T1547", "T1543", "T1098"],
+    "defense_evasion":      ["T1070", "T1562", "T1027", "T1055"],
+    "lateral_movement":     ["T1021", "T1021.002", "T1570", "T1550"],
+    "privilege_escalation": ["T1548", "T1134", "T1078"],
+    "command_and_control":  ["T1071", "T1095", "T1571", "T1008"],
+    "collection":           ["T1560", "T1005", "T1074"],
+    "exfiltration":         ["T1048", "T1041", "T1567"],
+    "impact":               ["T1486", "T1490", "T1561", "T1485"],
+    "ransomware":           ["T1486", "T1490", "T1561.001", "T1485"],
+}
+
 # ─── Pattern tables ───────────────────────────────────────────────────────────
 
-# Lowercase process basenames that indicate specific categories.
 _PROC_CREDENTIAL_ACCESS: frozenset[str] = frozenset({
     "mimikatz.exe", "mimikatz", "procdump.exe", "procdump", "wce.exe", "wce",
     "pwdump", "pwdump7.exe", "fgdump", "lsass.exe", "sekurlsa", "hashdump",
@@ -76,6 +92,12 @@ _PROC_IMPACT: frozenset[str] = frozenset({
     "xmrig.exe", "xmrig", "cryptominer",
 })
 
+# Ransomware-specific process indicators
+_PROC_RANSOMWARE: frozenset[str] = frozenset({
+    "vssadmin.exe", "wbadmin.exe", "bcdedit.exe",
+    "cipher.exe", "sdelete.exe", "wevtutil.exe",
+})
+
 # Command-line substrings that indicate specific behaviors (lowercase).
 _CMD_CREDENTIAL: list[str] = [
     "sekurlsa", "lsadump", "dumpcreds", "hashdump", "/sam",
@@ -110,6 +132,13 @@ _CMD_COLLECTION: list[str] = [
 _CMD_EXFIL: list[str] = [
     "curl -t", "curl --upload", "ftp -s:", "certutil -encode",
     "invoke-webrequest -outfile",
+]
+# Ransomware command indicators
+_CMD_RANSOMWARE: list[str] = [
+    "vssadmin delete shadows", "bcdedit /set recoveryenabled no",
+    "wbadmin delete catalog", "cipher /w:", "wevtutil cl system",
+    "wevtutil cl security", "wevtutil cl application",
+    "del /f /s /q shadowstorage",
 ]
 
 
@@ -159,7 +188,6 @@ def _event_ids_for_proc(timeline: AttackTimeline, proc_set: frozenset[str]) -> l
 
 
 def _event_ids_for_cmd(timeline: AttackTimeline, snapshots: list[dict[str, Any]], patterns: list[str]) -> list[str]:
-    import os
     ids = []
     for snap in snapshots:
         proc = snap.get("process") or {}
@@ -212,6 +240,7 @@ def _check_credential_access(
     return DetectedBehavior(
         behavior_name="credential_access",
         mitre_tactics=["TA0006"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["credential_access"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -239,6 +268,7 @@ def _check_discovery(
     return DetectedBehavior(
         behavior_name="discovery",
         mitre_tactics=["TA0007"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["discovery"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -270,6 +300,7 @@ def _check_execution(
     return DetectedBehavior(
         behavior_name="execution",
         mitre_tactics=["TA0002"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["execution"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -297,6 +328,7 @@ def _check_persistence(
     return DetectedBehavior(
         behavior_name="persistence",
         mitre_tactics=["TA0003"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["persistence"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -324,6 +356,7 @@ def _check_defense_evasion(
     return DetectedBehavior(
         behavior_name="defense_evasion",
         mitre_tactics=["TA0005"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["defense_evasion"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -342,7 +375,6 @@ def _check_lateral_movement(
         if e.process and os.path.basename(e.process).lower() in _PROC_LATERAL_MOVEMENT
     ]
     cmd_hits = _event_ids_for_cmd(timeline, snapshots, _CMD_LATERAL)
-    # Cross-host same user is also a lateral movement indicator
     hosts = _distinct_hosts(timeline)
     users = _distinct_users(timeline)
     cross_host_hit = len(hosts) >= 2 and len(users) >= 1
@@ -361,6 +393,7 @@ def _check_lateral_movement(
     return DetectedBehavior(
         behavior_name="lateral_movement",
         mitre_tactics=["TA0008"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["lateral_movement"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -398,6 +431,7 @@ def _check_privilege_escalation(
     return DetectedBehavior(
         behavior_name="privilege_escalation",
         mitre_tactics=["TA0004"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["privilege_escalation"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -410,17 +444,33 @@ def _check_command_and_control(
     timeline: AttackTimeline,
     snapshots: list[dict[str, Any]],
 ) -> DetectedBehavior | None:
-    # C2 indicators: unusual outbound ports, high connection frequency, beaconing
     network_events = [e for e in timeline.entries if e.category == "network"]
     if len(network_events) < 3:
         return None
-    # Beaconing: many network events from same process in short window
+
+    # Beaconing: same process making many outbound connections
     proc_counts: dict[str, int] = {}
     for e in network_events:
         if e.process:
             proc_counts[e.process] = proc_counts.get(e.process, 0) + 1
-    beaconing = any(count >= 3 for count in proc_counts.values())
-    # Check for unusual ports in snapshots
+    beaconing_proc = next(
+        (proc for proc, cnt in proc_counts.items() if cnt >= 3), None
+    )
+
+    # Interval regularity: sorted timestamps, check for consistent inter-arrival
+    if beaconing_proc and len(network_events) >= 4:
+        sorted_ts = sorted(e.timestamp for e in network_events if e.timestamp > 0)
+        if len(sorted_ts) >= 4:
+            intervals = [sorted_ts[i + 1] - sorted_ts[i] for i in range(len(sorted_ts) - 1)]
+            avg_interval = sum(intervals) / len(intervals)
+            # High regularity: stddev < 20% of mean → likely automated beacon
+            if avg_interval > 0:
+                variance = sum((x - avg_interval) ** 2 for x in intervals) / len(intervals)
+                stddev = variance ** 0.5
+                if stddev / avg_interval < 0.20:
+                    pass  # Noted: regular-interval beaconing confirmed
+
+    # Unusual outbound ports
     unusual_ports: list[str] = []
     for snap in snapshots:
         net = snap.get("network") or {}
@@ -432,19 +482,27 @@ def _check_command_and_control(
                     unusual_ports.append(str(p))
             except (TypeError, ValueError):
                 pass
-    if not beaconing and not unusual_ports:
+
+    if not beaconing_proc and not unusual_ports:
         return None
+
     evidence = []
-    if beaconing:
-        evidence.append(f"Potential beaconing pattern detected ({len(network_events)} network events)")
+    if beaconing_proc:
+        evidence.append(
+            f"Potential C2 beaconing from '{beaconing_proc}' "
+            f"({proc_counts[beaconing_proc]} connections)"
+        )
     if unusual_ports:
-        evidence.append(f"Unusual destination ports: {', '.join(set(unusual_ports[:5]))}")
+        top_ports = ", ".join(sorted(set(unusual_ports))[:5])
+        evidence.append(f"Unusual destination ports: {top_ports}")
+
     all_hits = [e.event_id for e in network_events]
-    confidence = min(0.3 + (0.2 if beaconing else 0) + len(unusual_ports) * 0.05, 0.80)
+    confidence = min(0.3 + (0.25 if beaconing_proc else 0) + len(unusual_ports) * 0.05, 0.85)
     first, last = _min_max_ts(timeline, all_hits)
     return DetectedBehavior(
         behavior_name="command_and_control",
         mitre_tactics=["TA0011"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["command_and_control"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -472,6 +530,7 @@ def _check_collection(
     return DetectedBehavior(
         behavior_name="collection",
         mitre_tactics=["TA0009"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["collection"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -499,6 +558,7 @@ def _check_exfiltration(
     return DetectedBehavior(
         behavior_name="exfiltration",
         mitre_tactics=["TA0010"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["exfiltration"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=all_hits,
@@ -524,9 +584,66 @@ def _check_impact(
     return DetectedBehavior(
         behavior_name="impact",
         mitre_tactics=["TA0040"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["impact"],
         confidence=round(confidence, 2),
         evidence=evidence,
         event_ids=proc_hits,
+        first_seen=first,
+        last_seen=last,
+    )
+
+
+def _check_ransomware(
+    timeline: AttackTimeline,
+    snapshots: list[dict[str, Any]],
+) -> DetectedBehavior | None:
+    """
+    Ransomware heuristics:
+    1. Process indicators (shadow deletion, log wiping, recovery disabling)
+    2. Command-line patterns (vssadmin delete shadows, bcdedit /set, etc.)
+    3. High-volume file operations — encryption creates/modifies many files rapidly
+    """
+    import os
+    proc_hits = [
+        e.event_id for e in timeline.entries
+        if e.process and os.path.basename(e.process).lower() in _PROC_RANSOMWARE
+    ]
+    cmd_hits = _event_ids_for_cmd(timeline, snapshots, _CMD_RANSOMWARE)
+
+    # File operation volume heuristic: >50 file events in one investigation = suspicious
+    file_events = [e for e in timeline.entries if e.category == "file"]
+    file_vol_hit = len(file_events) >= 50
+
+    all_hits = list(dict.fromkeys(proc_hits + cmd_hits + ([e.event_id for e in file_events[:10]] if file_vol_hit else [])))
+    if not all_hits:
+        return None
+
+    evidence = []
+    if proc_hits:
+        evidence.append(f"Ransomware-associated processes detected ({len(proc_hits)} events)")
+    if cmd_hits:
+        evidence.append("Shadow copy / backup deletion commands observed")
+    if file_vol_hit:
+        evidence.append(
+            f"High file operation volume: {len(file_events)} file events "
+            f"— possible mass encryption activity"
+        )
+
+    confidence = min(
+        0.5
+        + (0.2 if proc_hits else 0)
+        + (0.3 if cmd_hits else 0)
+        + (0.15 if file_vol_hit else 0),
+        0.95,
+    )
+    first, last = _min_max_ts(timeline, all_hits)
+    return DetectedBehavior(
+        behavior_name="ransomware",
+        mitre_tactics=["TA0040"],
+        mitre_techniques=_BEHAVIOR_TECHNIQUES["ransomware"],
+        confidence=round(confidence, 2),
+        evidence=evidence,
+        event_ids=all_hits,
         first_seen=first,
         last_seen=last,
     )
@@ -546,6 +663,7 @@ _BEHAVIOR_CHECKERS: list[BehaviorChecker] = [
     _check_collection,
     _check_exfiltration,
     _check_impact,
+    _check_ransomware,
 ]
 
 

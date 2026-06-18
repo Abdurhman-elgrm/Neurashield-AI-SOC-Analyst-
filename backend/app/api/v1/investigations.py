@@ -28,10 +28,14 @@ Routes:
   POST   /investigations/{id}/pivot           entity pivot
 """
 
+import csv
+import io
+import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -260,6 +264,81 @@ async def get_timeline(
     )
     await db.commit()
     return APIResponse.ok(result)
+
+
+# ─── Forensic timeline export ─────────────────────────────────────────────────
+
+@router.get("/{investigation_id}/export/timeline")
+async def export_timeline(
+    investigation_id: str,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: str = Query(default="json", pattern="^(json|csv)$"),
+) -> StreamingResponse:
+    """
+    Export the full investigation timeline as JSON or CSV.
+    Useful for forensic handoff, SIEM ingestion, or compliance evidence packages.
+    """
+    from app.models.tenant_member import TenantMember
+    from app.analyst.cases import CaseService
+
+    m: TenantMember = member  # type: ignore[assignment]
+    inv = await CaseService.get_investigation(db, m.tenant_id, investigation_id)
+
+    timeline_data: list[dict] = []
+    if inv.timeline_json:
+        raw_timeline = inv.timeline_json
+        entries = raw_timeline.get("entries", []) if isinstance(raw_timeline, dict) else []
+        for entry in entries:
+            timeline_data.append({
+                "event_id":   entry.get("event_id", ""),
+                "timestamp":  entry.get("timestamp", ""),
+                "hostname":   entry.get("hostname", ""),
+                "username":   entry.get("username", ""),
+                "category":   entry.get("category", ""),
+                "process":    entry.get("process", ""),
+                "action":     entry.get("action", ""),
+                "outcome":    entry.get("outcome", ""),
+                "severity":   entry.get("severity", ""),
+                "rule_match": ", ".join(entry.get("rule_match", [])),
+            })
+
+    filename_base = f"investigation_{investigation_id[:8]}_timeline"
+
+    if format == "csv":
+        output = io.StringIO()
+        if timeline_data:
+            writer = csv.DictWriter(output, fieldnames=list(timeline_data[0].keys()))
+            writer.writeheader()
+            writer.writerows(timeline_data)
+        else:
+            output.write("no_events\n")
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.csv"'},
+        )
+
+    # JSON format
+    payload = {
+        "investigation_id": investigation_id,
+        "exported_by":      str(m.user_id),
+        "entry_count":      len(timeline_data),
+        "entries":          timeline_data,
+        "behaviors":        inv.behaviors_json or {},
+        "score":            {
+            "threat_score": inv.threat_score,
+            "confidence":   inv.confidence,
+            "tp_probability": inv.tp_probability,
+            "fp_probability": inv.fp_probability,
+        },
+    }
+    return StreamingResponse(
+        iter([json.dumps(payload, indent=2, default=str)]),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.json"'},
+    )
 
 
 # ─── Graph ────────────────────────────────────────────────────────────────────

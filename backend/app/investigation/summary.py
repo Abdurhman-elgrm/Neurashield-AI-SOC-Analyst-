@@ -55,6 +55,13 @@ _CONTAINMENT_BY_BEHAVIOR: dict[str, list[str]] = {
         "Classify and assess what data may have been exfiltrated.",
         "Enable DLP monitoring on affected endpoints.",
     ],
+    "ransomware": [
+        "IMMEDIATELY isolate all affected systems from the network.",
+        "Do NOT restart affected systems — memory forensics may be possible.",
+        "Initiate backup restoration from the last known-good snapshot.",
+        "Engage incident response team and consider law enforcement notification.",
+        "Preserve all available shadow copies before any recovery attempt.",
+    ],
     "impact": [
         "Isolate affected systems immediately.",
         "Initiate backup restoration procedures.",
@@ -63,20 +70,57 @@ _CONTAINMENT_BY_BEHAVIOR: dict[str, list[str]] = {
 }
 
 # ─── Recommended actions by MITRE tactic ─────────────────────────────────────
+# Each value is a LIST of action strings (not a single string).
 
-_ACTIONS_BY_TACTIC: dict[str, str] = {
-    "TA0001": "Investigate the initial access vector and patch exposed vulnerabilities.",
-    "TA0002": "Review script interpreter usage logs and restrict PowerShell execution policy.",
-    "TA0003": "Audit persistence mechanisms and remove unauthorized entries.",
-    "TA0004": "Review privilege assignments and apply least-privilege principle.",
-    "TA0005": "Review defense evasion techniques and ensure logging is intact.",
-    "TA0006": "Reset compromised credentials and enable privileged account MFA.",
-    "TA0007": "Identify reconnaissance scope and assess what was enumerated.",
-    "TA0008": "Contain lateral movement by isolating affected hosts.",
-    "TA0009": "Identify staged data and assess impact.",
-    "TA0010": "Identify and block exfiltration channels.",
-    "TA0011": "Block identified C2 infrastructure.",
-    "TA0040": "Initiate disaster recovery procedures as appropriate.",
+_ACTIONS_BY_TACTIC: dict[str, list[str]] = {
+    "TA0001": [
+        "Investigate the initial access vector and patch exposed vulnerabilities.",
+        "Review perimeter firewall and VPN access logs for the period.",
+    ],
+    "TA0002": [
+        "Review script interpreter usage logs and restrict PowerShell execution policy.",
+        "Enable script block logging (PowerShell) and AMSI if not already active.",
+    ],
+    "TA0003": [
+        "Audit persistence mechanisms and remove unauthorized entries.",
+        "Review scheduled tasks, services, and startup registry keys on affected hosts.",
+    ],
+    "TA0004": [
+        "Review privilege assignments and apply least-privilege principle.",
+        "Audit local administrator group membership on affected hosts.",
+    ],
+    "TA0005": [
+        "Confirm event logging is intact; restore if tampered.",
+        "Review defense evasion techniques and update detection rules.",
+    ],
+    "TA0006": [
+        "Reset compromised credentials and enable privileged account MFA.",
+        "Run a full credential audit and force rotation for all domain accounts.",
+    ],
+    "TA0007": [
+        "Identify reconnaissance scope and assess what was enumerated.",
+        "Review Active Directory query logs for unusual LDAP requests.",
+    ],
+    "TA0008": [
+        "Contain lateral movement by isolating affected hosts.",
+        "Review SMB, RDP, and WMI connection logs across the environment.",
+    ],
+    "TA0009": [
+        "Identify staged data and assess impact.",
+        "Locate and remove any data archives created on compromised systems.",
+    ],
+    "TA0010": [
+        "Identify and block exfiltration channels.",
+        "Review proxy and DNS logs for unusual outbound data transfers.",
+    ],
+    "TA0011": [
+        "Block identified C2 infrastructure at the perimeter and DNS level.",
+        "Perform full memory dump on beaconing hosts for IOC extraction.",
+    ],
+    "TA0040": [
+        "Initiate disaster recovery procedures as appropriate.",
+        "Assess scope of data destruction or encryption before recovery.",
+    ],
 }
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -138,6 +182,16 @@ def _build_executive_summary(
     first      = _format_ts(timeline.first_seen)
     last       = _format_ts(timeline.last_seen)
 
+    # Check for ransomware — always escalate to critical language
+    behavior_names = {b.behavior_name for b in behaviors.detected_behaviors}
+    if "ransomware" in behavior_names:
+        return (
+            f"CRITICAL: Ransomware activity has been detected involving {entity_sum}. "
+            f"Indicators include shadow deletion, backup removal, and/or high-volume "
+            f"file operations. Immediate isolation and incident response engagement are required. "
+            f"Activity first observed at {first}."
+        )
+
     if score.confidence == "high":
         return (
             f"A high-confidence security incident has been detected involving {entity_sum}. "
@@ -173,13 +227,14 @@ def _build_technical_summary(
         f"{timeline.distinct_ips} IP(s), {timeline.distinct_processes} distinct process(es).",
     ]
     if behaviors.detected_behaviors:
+        behavior_detail = "; ".join(
+            f"{b.behavior_name} (confidence={b.confidence:.0%}, "
+            f"events={len(b.event_ids)}, "
+            f"techniques={','.join(b.mitre_techniques[:3])})"
+            for b in behaviors.detected_behaviors
+        )
         lines.append(
-            f"Behaviors detected ({behaviors.behavior_count}): "
-            + "; ".join(
-                f"{b.behavior_name} (confidence={b.confidence:.0%}, "
-                f"events={len(b.event_ids)})"
-                for b in behaviors.detected_behaviors
-            ) + "."
+            f"Behaviors detected ({behaviors.behavior_count}): {behavior_detail}."
         )
     if context.suspicious_processes:
         lines.append(
@@ -220,11 +275,12 @@ def _build_attack_progression(
     # Phase 2: Mid-stage behavior
     if behaviors.detected_behaviors:
         for b in behaviors.detected_behaviors[:5]:
+            techniques_str = f" [{', '.join(b.mitre_techniques[:3])}]" if b.mitre_techniques else ""
             progression.append(
                 f"[{b.behavior_name.replace('_', ' ').title()}] "
                 f"Detected from {_format_ts(b.first_seen)} to {_format_ts(b.last_seen)} "
                 f"({len(b.event_ids)} event(s), confidence={b.confidence:.0%}). "
-                f"MITRE: {', '.join(b.mitre_tactics)}."
+                f"MITRE: {', '.join(b.mitre_tactics)}{techniques_str}."
             )
 
     # Phase 3: Spread / multi-host
@@ -253,6 +309,12 @@ def _build_root_cause(
 ) -> str:
     behavior_names = {b.behavior_name for b in behaviors.detected_behaviors}
 
+    if "ransomware" in behavior_names:
+        return (
+            "Ransomware activity detected. The threat actor likely gained initial access "
+            "via phishing or exposed credentials, then deployed ransomware to encrypt files "
+            "and deleted backups/shadow copies to prevent recovery."
+        )
     if "credential_access" in behavior_names and "lateral_movement" in behavior_names:
         return (
             "Suspected compromised credentials used to perform lateral movement. "
@@ -299,9 +361,9 @@ def _build_recommended_actions(
     _add("Assign this investigation to a Tier 2 analyst for immediate review.")
 
     for b in behaviors.detected_behaviors:
-        for action in _ACTIONS_BY_TACTIC.get(
-            b.mitre_tactics[0] if b.mitre_tactics else "", []
-        ):
+        # Look up tactic-specific actions (values are list[str] — iterate correctly)
+        tactic = b.mitre_tactics[0] if b.mitre_tactics else ""
+        for action in _ACTIONS_BY_TACTIC.get(tactic, []):
             _add(action)
 
     if score.threat_score >= 70:
@@ -350,6 +412,14 @@ def _build_analyst_notes(
         notes.append(
             "No specific behaviors were identified. This may indicate a novel technique "
             "or require manual behavioral analysis."
+        )
+    # Highlight MITRE technique coverage
+    all_techniques: list[str] = list(
+        dict.fromkeys(t for b in behaviors.detected_behaviors for t in b.mitre_techniques)
+    )
+    if all_techniques:
+        notes.append(
+            f"MITRE ATT&CK techniques mapped: {', '.join(all_techniques[:10])}."
         )
     return notes
 

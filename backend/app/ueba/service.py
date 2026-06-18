@@ -180,6 +180,11 @@ class UEBAService:
             reasons["credential_stuffing"] = (
                 f"IP {source_ip} targeted multiple distinct usernames within 5 minutes"
             )
+        if "lateral_movement_xdomain" in chain_flags and source_ip:
+            reasons["lateral_movement_xdomain"] = (
+                f"IP {source_ip} authenticated successfully as 3+ distinct user accounts "
+                f"within 15 minutes — possible Pass-the-Hash or harvested credential reuse"
+            )
 
         # ── 5. Final anomaly score ─────────────────────────────────────────────
         result = compute_anomaly(

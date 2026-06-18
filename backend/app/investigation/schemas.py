@@ -148,13 +148,14 @@ class AttackGraph(BaseModel):
 # ─── Behavior analysis ────────────────────────────────────────────────────────
 
 class DetectedBehavior(BaseModel):
-    behavior_name:  str
-    mitre_tactics:  list[str] = Field(default_factory=list)
-    confidence:     float = 0.0
-    evidence:       list[str] = Field(default_factory=list)
-    event_ids:      list[str] = Field(default_factory=list)
-    first_seen:     float = 0.0
-    last_seen:      float = 0.0
+    behavior_name:    str
+    mitre_tactics:    list[str] = Field(default_factory=list)
+    mitre_techniques: list[str] = Field(default_factory=list)  # e.g. ["T1003", "T1558"]
+    confidence:       float = 0.0
+    evidence:         list[str] = Field(default_factory=list)
+    event_ids:        list[str] = Field(default_factory=list)
+    first_seen:       float = 0.0
+    last_seen:        float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()

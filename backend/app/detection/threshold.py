@@ -42,14 +42,16 @@ class ThresholdEvaluator:
         rule_id: str,
         conditions: dict[str, Any],
         event: NormalizedEvent,
-    ) -> tuple[bool, int]:
+    ) -> tuple[bool, int, list[str]]:
         """
-        Returns (fired, current_count).
+        Returns (fired, current_count, window_event_ids).
         fired=True means the sliding-window count crossed the threshold after this event.
+        window_event_ids contains the members (event IDs or timestamps) currently in the
+        window — gives analysts full context of all contributing events, not just the last.
         """
         filters: list[dict[str, Any]] = conditions.get("filters", [])
         if filters and not evaluate_conditions(filters, event):
-            return False, 0
+            return False, 0, []
 
         field_path: str = conditions.get("field", "hostname")
         group_by: str | None = conditions.get("group_by")
@@ -58,7 +60,7 @@ class ThresholdEvaluator:
 
         field_value = _get_field(event, field_path)
         if field_value is None:
-            return False, 0
+            return False, 0, []
 
         group_value = _get_field(event, group_by) if group_by else "global"
         zset_key = f"threshold:{rule_id}:{group_value or 'global'}"
@@ -68,16 +70,19 @@ class ThresholdEvaluator:
         # Use event_id for deduplication if available, otherwise high-res timestamp
         member = str(event.event_id) if event.event_id else f"{now:.9f}"
 
-        # Atomic pipeline: add → prune expired → count current window → refresh TTL.
+        # Atomic pipeline: add → prune expired → count → fetch members → refresh TTL.
         # No race condition possible — all ops are sequential in a single pipeline.
         pipe = self._client.pipeline()
         full_key = self._client._key(zset_key)
         pipe.zadd(full_key, {member: now})
         pipe.zremrangebyscore(full_key, "-inf", cutoff)
         pipe.zcount(full_key, cutoff, "+inf")
-        pipe.expire(full_key, window_secs + 60)  # TTL slightly longer than window
+        pipe.zrangebyscore(full_key, cutoff, "+inf")  # retrieve members for evidence
+        pipe.expire(full_key, window_secs + 60)        # TTL slightly longer than window
         results = await pipe.execute()
-        count = int(results[2])  # zcount result
+        count = int(results[2])
+        # Members are event IDs (or high-res timestamps) — cap at 25 for evidence
+        window_members: list[str] = list(results[3])[:25]
 
         fired = count >= threshold
 
@@ -91,7 +96,7 @@ class ThresholdEvaluator:
                 group_value=str(group_value),
             )
 
-        return fired, count
+        return fired, count, window_members
 
     async def get_count(self, rule_id: str, group_value: str = "global") -> int:
         """Returns current sliding-window count without incrementing."""

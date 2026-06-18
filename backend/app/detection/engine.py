@@ -19,6 +19,12 @@ logger = structlog.get_logger(__name__)
 # dozens of overlapping threshold rules all fire on the same event.
 _MAX_ALERTS_PER_EVENT = 10
 
+# Per-rule rate limiting: max alerts a single rule can emit per minute.
+# Prevents a misconfigured or overly-sensitive rule from flooding the alert queue.
+# Individual rules may override this via conditions["max_alerts_per_minute"].
+_RULE_RATE_LIMIT_DEFAULT = 20
+_RULE_RATE_LIMIT_WINDOW  = 60  # seconds
+
 
 class DetectionEngine:
     """
@@ -58,6 +64,11 @@ class DetectionEngine:
         raw_alerts: list[Alert] = []
         for rule in rules:
             try:
+                # Per-rule rate limit: skip evaluation entirely if the rule has
+                # already fired too many times this minute.
+                if await self._is_rate_limited(rule):
+                    continue
+
                 alert = await self._evaluator.evaluate(
                     rule, event, event_id=event_db_id, stream_id=stream_id
                 )
@@ -85,6 +96,29 @@ class DetectionEngine:
             alerts = alerts[:_MAX_ALERTS_PER_EVENT]
 
         return alerts
+
+    async def _is_rate_limited(self, rule: DetectionRule) -> bool:
+        """
+        Returns True if this rule has exceeded its per-minute alert cap.
+        Uses a simple INCR/EXPIRE counter — acceptable race condition (soft limit).
+        """
+        conditions = rule.conditions if isinstance(rule.conditions, dict) else {}
+        max_per_min = int(conditions.get("max_alerts_per_minute", _RULE_RATE_LIMIT_DEFAULT))
+
+        rl_key = self._client._key(f"rl:{rule.id}")
+        count = await self._client.incr(rl_key)
+        if count == 1:
+            await self._client.expire(rl_key, _RULE_RATE_LIMIT_WINDOW)
+
+        if count > max_per_min:
+            logger.warning(
+                "rule_rate_limited",
+                rule_id=str(rule.id),
+                count=count,
+                limit=max_per_min,
+            )
+            return True
+        return False
 
     async def _load_enabled_rules(self) -> list[DetectionRule]:
         result = await self._db.execute(

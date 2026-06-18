@@ -3,14 +3,19 @@ Impossible-travel detection using haversine distance.
 
 Flags auth events where the same user appears in two locations whose
 physical distance cannot be covered in the elapsed time at any realistic speed.
+
+Thresholds are configurable via environment variables:
+  UEBA_MAX_SPEED_KMH      — max plausible travel speed (default: 900 km/h, ~aircraft)
+  UEBA_MIN_DISTANCE_KM    — minimum distance to flag (default: 500 km, ignore intra-region)
 """
 from __future__ import annotations
 
 import math
+import os
 
 _EARTH_RADIUS_KM = 6_371.0
-_MAX_SPEED_KMH = 900.0    # commercial aircraft cruising speed
-_MIN_DISTANCE_KM = 500.0  # ignore travel within the same region
+_MAX_SPEED_KMH   = float(os.getenv("UEBA_MAX_SPEED_KMH",   "900"))   # commercial aircraft
+_MIN_DISTANCE_KM = float(os.getenv("UEBA_MIN_DISTANCE_KM", "500"))   # ignore intra-region
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

@@ -11,6 +11,14 @@ from app.normalization.models import (
 )
 
 
+def _win_basename(path: str | None) -> str | None:
+    """Extract the filename from a Windows or POSIX path, handling both separators."""
+    if not path:
+        return None
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return name or None
+
+
 def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> NormalizedEvent:
     """
     Maps Windows-specific event fields to the normalized schema.
@@ -67,7 +75,7 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         image = raw.get("Image") or raw.get("NewProcessName")
         if image:
             base.process = NormalizedProcess(
-                name=image.split("\\")[-1] if image else None,
+                name=_win_basename(image),
                 executable=image or None,
                 command_line=raw.get("CommandLine"),
                 pid=_to_int(raw.get("NewProcessId")),
@@ -101,9 +109,11 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
 
-    elif event_id in ("4672", 4672):  # Special privileges assigned
+    elif event_id in ("4672", 4672):  # Special privileges assigned to new logon
         base.category = "auth"
-        base.user = _extract_user_from_logon(raw)
+        user = _extract_user_from_logon(raw)
+        user.is_privileged = True  # 4672 IS the privileged logon event — always flag
+        base.user = user
         base.severity = 2
 
     elif event_id in ("4698", 4698, "4702", 4702):  # Scheduled task created/updated
@@ -144,15 +154,17 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
 
 
 def _extract_process_windows(raw: dict[str, Any], proc: dict[str, Any]) -> NormalizedProcess:
+    hashes = raw.get("Hashes") if isinstance(raw.get("Hashes"), dict) else {}
+    image = raw.get("Image", "")
     return NormalizedProcess(
         pid=_to_int(proc.get("pid") or raw.get("ProcessId")),
         ppid=_to_int(proc.get("ppid") or raw.get("ParentProcessId")),
-        name=proc.get("name") or raw.get("Image", "").split("\\")[-1],
-        executable=proc.get("executable") or raw.get("Image"),
+        name=proc.get("name") or _win_basename(image),
+        executable=proc.get("executable") or image or None,
         command_line=proc.get("command_line") or raw.get("CommandLine"),
         user=proc.get("user") or raw.get("User"),
-        hash_md5=proc.get("hash_md5") or raw.get("Hashes", {}).get("MD5") if isinstance(raw.get("Hashes"), dict) else None,
-        hash_sha256=proc.get("hash_sha256") or raw.get("Hashes", {}).get("SHA256") if isinstance(raw.get("Hashes"), dict) else None,
+        hash_md5=proc.get("hash_md5") or hashes.get("MD5"),
+        hash_sha256=proc.get("hash_sha256") or hashes.get("SHA256"),
     )
 
 
@@ -162,7 +174,7 @@ def _extract_process_from_sysmon_create(raw: dict[str, Any]) -> NormalizedProces
     return NormalizedProcess(
         pid=_to_int(raw.get("ProcessId")),
         ppid=_to_int(raw.get("ParentProcessId")),
-        name=image.split("\\")[-1] if image else None,
+        name=_win_basename(image),
         executable=image or None,
         command_line=raw.get("CommandLine"),
         user=raw.get("User"),
@@ -184,7 +196,7 @@ def _extract_network_from_sysmon(raw: dict[str, Any]) -> NormalizedNetwork:
 
 def _extract_file_from_sysmon(raw: dict[str, Any]) -> NormalizedFile:
     path = raw.get("TargetFilename", "")
-    name = path.split("\\")[-1] if path else None
+    name = _win_basename(path)
     ext = name.rsplit(".", 1)[-1] if name and "." in name else None
     return NormalizedFile(path=path or None, name=name, extension=ext)
 
@@ -201,7 +213,7 @@ def _extract_network_windows(net: dict[str, Any]) -> NormalizedNetwork:
 
 def _extract_file_windows(f: dict[str, Any]) -> NormalizedFile:
     path = f.get("path") or f.get("TargetFilename", "")
-    name = f.get("name") or (path.split("\\")[-1] if path else None)
+    name = f.get("name") or _win_basename(path)
     ext = f.get("extension") or (name.rsplit(".", 1)[-1] if name and "." in name else None)
     return NormalizedFile(
         path=path or None,

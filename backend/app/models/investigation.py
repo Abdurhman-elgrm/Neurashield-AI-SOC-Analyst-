@@ -94,6 +94,12 @@ class Investigation(Base, TimestampMixin):
     # AI analysis enrichment (Phase 2)
     ai_analysis_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
 
+    # Alert → investigation linkage: which alert IDs triggered this investigation.
+    # Populated by the correlation worker when an alert score causes group creation.
+    triggering_alert_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+
     __table_args__ = (
         Index("idx_investigation_tenant_score",   "tenant_id", "threat_score"),
         Index("idx_investigation_tenant_created",  "tenant_id", "created_at"),
