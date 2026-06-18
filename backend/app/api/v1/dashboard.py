@@ -1,0 +1,807 @@
+"""
+Dashboard API — real-time security operations metrics.
+
+All endpoints are scoped to the calling member's tenant and accept a
+`time_range` query parameter to control the look-back window.
+
+Endpoints:
+  GET /dashboard/summary             — KPI cards (alerts, investigations, ingestion, agents)
+  GET /dashboard/ingestion-rate      — event/sec time-series
+  GET /dashboard/detection-health    — rule health + top firing rules
+  GET /dashboard/mitre-coverage      — MITRE ATT&CK heatmap data from real alerts
+  GET /dashboard/correlation-activity — active investigations + recent correlations
+  GET /dashboard/ai-operations       — AI analysis queue + verdict statistics
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Any, Literal
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.dependencies import require_permission
+from app.rbac.permissions import Permission
+from app.schemas.common import APIResponse
+
+router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# ─── Time-range helpers ───────────────────────────────────────────────────────
+
+DashboardTimeRange = Literal["last_15m", "last_1h", "last_6h", "last_24h", "last_7d"]
+
+_TR_MINUTES: dict[str, int] = {
+    "last_15m": 15,
+    "last_1h":  60,
+    "last_6h":  360,
+    "last_24h": 1440,
+    "last_7d":  10080,
+}
+
+# Bucket size (seconds) for ingestion-rate time-series.
+# Chosen so each range produces ~15–50 data points.
+_TR_BUCKET_SECS: dict[str, int] = {
+    "last_15m": 60,     # 15 x 1-min buckets
+    "last_1h":  120,    # 30 x 2-min buckets
+    "last_6h":  600,    # 36 x 10-min buckets
+    "last_24h": 1800,   # 48 x 30-min buckets
+    "last_7d":  14400,  # 42 x 4-hour buckets
+}
+
+# A rule is "noisy" if it fires more than this many times per 24 h.
+_NOISY_RULE_THRESHOLD = 50
+
+
+def _window(time_range: str) -> tuple[datetime, datetime, int]:
+    """Return (period_start, now, bucket_secs) for a time-range string."""
+    now = datetime.now(tz=timezone.utc)
+    minutes = _TR_MINUTES.get(time_range, 1440)
+    bucket = _TR_BUCKET_SECS.get(time_range, 1800)
+    return now - timedelta(minutes=minutes), now, bucket
+
+
+# ─── Response schemas (mirror frontend TypeScript interfaces exactly) ─────────
+
+class AlertKPI(BaseModel):
+    total: int = 0
+    open: int = 0
+    critical: int = 0
+    high: int = 0
+    delta24h: int = 0
+    criticalDelta24h: int = 0
+
+
+class InvestigationKPI(BaseModel):
+    active: int = 0
+    correlated: int = 0
+    aiPending: int = 0
+    delta24h: int = 0
+
+
+class IngestionKPI(BaseModel):
+    epsNow: float = 0.0
+    epsPeak: float = 0.0
+    totalEvents: int = 0
+    deltaPercent: float = 0.0
+
+
+class AgentKPI(BaseModel):
+    online: int = 0
+    total: int = 0
+    offline: int = 0
+
+
+class DetectionKPI(BaseModel):
+    rulesTriggered: int = 0
+    activeRules: int = 0
+    noisyRules: int = 0
+    delta24h: int = 0
+
+
+class DashboardSummary(BaseModel):
+    alerts: AlertKPI = AlertKPI()
+    investigations: InvestigationKPI = InvestigationKPI()
+    ingestion: IngestionKPI = IngestionKPI()
+    agents: AgentKPI = AgentKPI()
+    detection: DetectionKPI = DetectionKPI()
+    generatedAt: str = ""
+
+
+class IngestionRatePoint(BaseModel):
+    timestamp: str
+    eps: float
+    normalizedEps: float
+    alertsCreated: int
+
+
+class IngestionRateSeries(BaseModel):
+    points: list[IngestionRatePoint] = []
+    averageEps: float = 0.0
+    peakEps: float = 0.0
+
+
+class DetectionRuleHealth(BaseModel):
+    ruleId: str
+    ruleName: str
+    triggeredCount: int
+    alertsCreated: int
+    suppressedCount: int = 0
+    lastTriggeredAt: str | None
+    avgLatencyMs: float = 0.0
+    status: Literal["active", "noisy", "disabled", "error"]
+
+
+class DetectionHealthData(BaseModel):
+    activeRules: int = 0
+    disabledRules: int = 0
+    noisyRules: int = 0
+    errorRules: int = 0
+    avgLatencyMs: float = 0.0
+    ingestionToDetectionMs: float = 0.0
+    topRules: list[DetectionRuleHealth] = []
+
+
+class TechniqueStat(BaseModel):
+    techniqueId: str
+    count: int
+    criticalCount: int
+    highCount: int
+    mediumCount: int
+    latestAt: str
+
+
+class MitreCoverageData(BaseModel):
+    techniqueCounts: dict[str, TechniqueStat] = {}
+    totalAlerts: int = 0
+    coveredTechniques: int = 0
+    topTechnique: str | None = None
+    generatedAt: str = ""
+
+
+class CorrelationEvent(BaseModel):
+    id: str
+    investigationId: str
+    investigationTitle: str
+    alertCount: int
+    entityCount: int
+    behaviorMatches: list[str]
+    severity: str
+    correlatedAt: str
+
+
+class CorrelationActivityData(BaseModel):
+    activeInvestigations: int = 0
+    totalGroupedAlerts: int = 0
+    totalEntities: int = 0
+    recentCorrelations: list[CorrelationEvent] = []
+
+
+class AIVerdict(BaseModel):
+    verdict: str
+    confidence: float
+    investigationId: str
+    title: str
+    analyzedAt: str | None
+
+
+class AIOperationsData(BaseModel):
+    queueDepth: int = 0
+    analyzedLast24h: int = 0
+    truePositiveCount: int = 0
+    falsePositiveCount: int = 0
+    pendingCount: int = 0
+    avgConfidence: float = 0.0
+    recentVerdicts: list[AIVerdict] = []
+
+
+# ─── Score → severity helper ──────────────────────────────────────────────────
+
+def _score_to_severity(score: int) -> str:
+    if score >= 76:
+        return "critical"
+    if score >= 51:
+        return "high"
+    if score >= 26:
+        return "medium"
+    return "low"
+
+
+# ─── /dashboard/summary ───────────────────────────────────────────────────────
+
+@router.get("/summary", response_model=APIResponse[DashboardSummary])
+async def get_dashboard_summary(
+    member: Annotated[object, require_permission(Permission.EVENTS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[DashboardSummary]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, _ = _window(time_range)
+    prev_start = period_start - (now - period_start)  # equal-length previous period
+
+    # ── Alerts: current + previous period ────────────────────────────────────
+    alert_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE created_at >= :ps)                       AS total,
+            COUNT(*) FILTER (WHERE created_at >= :ps AND status = 'open')   AS open,
+            COUNT(*) FILTER (WHERE created_at >= :ps AND severity = 'critical') AS critical,
+            COUNT(*) FILTER (WHERE created_at >= :ps AND severity = 'high') AS high,
+            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps) AS prev_total,
+            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps AND severity = 'critical') AS prev_critical
+        FROM alerts
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND deleted_at IS NULL
+    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+
+    alerts = AlertKPI(
+        total=alert_row.total or 0,
+        open=alert_row.open or 0,
+        critical=alert_row.critical or 0,
+        high=alert_row.high or 0,
+        delta24h=(alert_row.total or 0) - (alert_row.prev_total or 0),
+        criticalDelta24h=(alert_row.critical or 0) - (alert_row.prev_critical or 0),
+    )
+
+    # ── Investigations ────────────────────────────────────────────────────────
+    inv_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved','false_positive') AND created_at >= :ps) AS active,
+            COUNT(*) FILTER (WHERE confidence IN ('high','confirmed') AND created_at >= :ps)                   AS correlated,
+            COUNT(*) FILTER (WHERE ai_analysis_json IS NULL AND status NOT IN ('closed','resolved','false_positive') AND created_at >= :ps) AS ai_pending,
+            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps AND status NOT IN ('closed','resolved','false_positive')) AS prev_active
+        FROM investigations
+        WHERE tenant_id = CAST(:tid AS uuid)
+    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+
+    inv_active = inv_row.active or 0
+    investigations = InvestigationKPI(
+        active=inv_active,
+        correlated=inv_row.correlated or 0,
+        aiPending=inv_row.ai_pending or 0,
+        delta24h=inv_active - (inv_row.prev_active or 0),
+    )
+
+    # ── Events / ingestion ────────────────────────────────────────────────────
+    ev_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE event_timestamp >= :ps)                AS total,
+            COUNT(*) FILTER (WHERE event_timestamp >= :prev_ps AND event_timestamp < :ps) AS prev_total
+        FROM events
+        WHERE tenant_id = CAST(:tid AS uuid)
+    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+
+    total_events = ev_row.total or 0
+    prev_events = ev_row.prev_total or 0
+    period_secs = max((now - period_start).total_seconds(), 1)
+    eps_now = round(total_events / period_secs, 3)
+    delta_pct = round(((total_events - prev_events) / max(prev_events, 1)) * 100, 1) if prev_events else 0.0
+
+    ingestion = IngestionKPI(
+        epsNow=eps_now,
+        epsPeak=eps_now,   # updated per-bucket in ingestion-rate endpoint
+        totalEvents=total_events,
+        deltaPercent=delta_pct,
+    )
+
+    # ── Agents ────────────────────────────────────────────────────────────────
+    ag_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'online')  AS online,
+            COUNT(*) FILTER (WHERE status = 'offline') AS offline
+        FROM agents
+        WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
+    """), {"tid": tid})).fetchone()
+
+    agents = AgentKPI(
+        total=ag_row.total or 0,
+        online=ag_row.online or 0,
+        offline=ag_row.offline or 0,
+    )
+
+    # ── Detection rules ───────────────────────────────────────────────────────
+    noisy_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE cnt > :threshold) AS noisy,
+            COUNT(*) AS triggered_rules
+        FROM (
+            SELECT rule_id, COUNT(*) AS cnt
+            FROM alerts
+            WHERE tenant_id = CAST(:tid AS uuid) AND created_at >= :ps AND deleted_at IS NULL AND rule_id IS NOT NULL
+            GROUP BY rule_id
+        ) sub
+    """), {"tid": tid, "ps": period_start, "threshold": _NOISY_RULE_THRESHOLD})).fetchone()
+
+    rule_base = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE enabled)     AS active,
+            COUNT(*) FILTER (WHERE NOT enabled) AS disabled
+        FROM detection_rules
+        WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
+    """), {"tid": tid})).fetchone()
+
+    detection = DetectionKPI(
+        activeRules=rule_base.active or 0,
+        rulesTriggered=noisy_row.triggered_rules or 0,
+        noisyRules=noisy_row.noisy or 0,
+        delta24h=0,
+    )
+
+    return APIResponse.ok(DashboardSummary(
+        alerts=alerts,
+        investigations=investigations,
+        ingestion=ingestion,
+        agents=agents,
+        detection=detection,
+        generatedAt=now.isoformat(),
+    ))
+
+
+# ─── /dashboard/ingestion-rate ────────────────────────────────────────────────
+
+@router.get("/ingestion-rate", response_model=APIResponse[IngestionRateSeries])
+async def get_ingestion_rate(
+    member: Annotated[object, require_permission(Permission.EVENTS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[IngestionRateSeries]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, bucket_secs = _window(time_range)
+
+    # Events bucketed by custom interval via epoch arithmetic
+    ev_rows = (await db.execute(text("""
+        SELECT
+            to_timestamp(
+                (EXTRACT(EPOCH FROM event_timestamp)::bigint / :bsecs) * :bsecs
+            ) AS bucket_ts,
+            COUNT(*) AS event_count
+        FROM events
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND event_timestamp >= :ps
+          AND event_timestamp <= :now
+        GROUP BY 1
+        ORDER BY 1
+    """), {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs})).fetchall()
+
+    # Alerts bucketed the same way
+    al_rows = (await db.execute(text("""
+        SELECT
+            to_timestamp(
+                (EXTRACT(EPOCH FROM created_at)::bigint / :bsecs) * :bsecs
+            ) AS bucket_ts,
+            COUNT(*) AS alert_count
+        FROM alerts
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND created_at >= :ps
+          AND created_at <= :now
+          AND deleted_at IS NULL
+        GROUP BY 1
+        ORDER BY 1
+    """), {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs})).fetchall()
+
+    alert_map: dict[str, int] = {
+        str(r.bucket_ts): (r.alert_count or 0) for r in al_rows
+    }
+
+    points: list[IngestionRatePoint] = []
+    for r in ev_rows:
+        eps = round((r.event_count or 0) / bucket_secs, 4)
+        ts = r.bucket_ts.isoformat() if r.bucket_ts else ""
+        points.append(IngestionRatePoint(
+            timestamp=ts,
+            eps=eps,
+            normalizedEps=eps,
+            alertsCreated=alert_map.get(str(r.bucket_ts), 0),
+        ))
+
+    eps_values = [p.eps for p in points]
+    peak_eps = max(eps_values) if eps_values else 0.0
+    avg_eps = round(sum(eps_values) / len(eps_values), 4) if eps_values else 0.0
+
+    # Normalize eps values now that we know the peak
+    if peak_eps > 0:
+        for p in points:
+            p.normalizedEps = round(p.eps / peak_eps * 100, 1)
+
+    return APIResponse.ok(IngestionRateSeries(
+        points=points,
+        averageEps=avg_eps,
+        peakEps=peak_eps,
+    ))
+
+
+# ─── /dashboard/detection-health ─────────────────────────────────────────────
+
+@router.get("/detection-health", response_model=APIResponse[DetectionHealthData])
+async def get_detection_health(
+    member: Annotated[object, require_permission(Permission.RULES_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[DetectionHealthData]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, _ = _window(time_range)
+
+    # Rule counts
+    counts_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE enabled)     AS active,
+            COUNT(*) FILTER (WHERE NOT enabled) AS disabled
+        FROM detection_rules
+        WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
+    """), {"tid": tid})).fetchone()
+
+    # Per-rule alert stats in period
+    rule_rows = (await db.execute(text("""
+        SELECT
+            r.id        AS rule_id,
+            r.name      AS rule_name,
+            r.enabled   AS enabled,
+            COUNT(a.id) AS alert_count,
+            MAX(a.created_at) AS last_triggered_at,
+            AVG(
+                EXTRACT(EPOCH FROM (a.created_at - e.event_timestamp)) * 1000.0
+            ) FILTER (WHERE e.event_timestamp IS NOT NULL) AS avg_latency_ms
+        FROM detection_rules r
+        LEFT JOIN alerts a
+            ON  a.rule_id   = r.id
+            AND a.tenant_id = r.tenant_id
+            AND a.created_at >= :ps
+            AND a.deleted_at IS NULL
+        LEFT JOIN events e
+            ON e.id = a.triggering_event_id
+        WHERE r.tenant_id = CAST(:tid AS uuid)
+          AND r.deleted_at IS NULL
+        GROUP BY r.id, r.name, r.enabled
+        ORDER BY alert_count DESC
+        LIMIT 20
+    """), {"tid": tid, "ps": period_start})).fetchall()
+
+    noisy_count = 0
+    top_rules: list[DetectionRuleHealth] = []
+    all_latencies: list[float] = []
+
+    for r in rule_rows:
+        cnt = r.alert_count or 0
+        latency = round(float(r.avg_latency_ms), 1) if r.avg_latency_ms else 0.0
+        if latency > 0:
+            all_latencies.append(latency)
+
+        if not r.enabled:
+            status: str = "disabled"
+        elif cnt >= _NOISY_RULE_THRESHOLD:
+            status = "noisy"
+            noisy_count += 1
+        else:
+            status = "active"
+
+        last_at = r.last_triggered_at.isoformat() if r.last_triggered_at else None
+        top_rules.append(DetectionRuleHealth(
+            ruleId=str(r.rule_id),
+            ruleName=r.rule_name,
+            triggeredCount=cnt,
+            alertsCreated=cnt,
+            suppressedCount=0,
+            lastTriggeredAt=last_at,
+            avgLatencyMs=latency,
+            status=status,  # type: ignore[arg-type]
+        ))
+
+    avg_latency = round(sum(all_latencies) / len(all_latencies), 1) if all_latencies else 0.0
+
+    return APIResponse.ok(DetectionHealthData(
+        activeRules=counts_row.active or 0,
+        disabledRules=counts_row.disabled or 0,
+        noisyRules=noisy_count,
+        errorRules=0,
+        avgLatencyMs=avg_latency,
+        ingestionToDetectionMs=avg_latency,
+        topRules=top_rules[:10],
+    ))
+
+
+# ─── /dashboard/mitre-coverage ────────────────────────────────────────────────
+
+@router.get("/mitre-coverage", response_model=APIResponse[MitreCoverageData])
+async def get_mitre_coverage(
+    member: Annotated[object, require_permission(Permission.EVENTS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[MitreCoverageData]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, _ = _window(time_range)
+
+    # Expand JSONB array of technique IDs per alert and aggregate counts per technique
+    rows = (await db.execute(text("""
+        SELECT
+            technique,
+            COUNT(*)                                            AS total,
+            COUNT(*) FILTER (WHERE severity = 'critical')      AS critical_count,
+            COUNT(*) FILTER (WHERE severity = 'high')          AS high_count,
+            COUNT(*) FILTER (WHERE severity = 'medium')        AS medium_count,
+            MAX(created_at)                                     AS latest_at
+        FROM (
+            SELECT
+                jsonb_array_elements_text(mitre_techniques) AS technique,
+                severity,
+                created_at
+            FROM alerts
+            WHERE tenant_id   = CAST(:tid AS uuid)
+              AND created_at  >= :ps
+              AND deleted_at  IS NULL
+              AND mitre_techniques IS NOT NULL
+              AND mitre_techniques != 'null'::jsonb
+              AND jsonb_array_length(mitre_techniques) > 0
+        ) sub
+        WHERE technique IS NOT NULL AND technique != ''
+        GROUP BY technique
+        ORDER BY total DESC
+        LIMIT 100
+    """), {"tid": tid, "ps": period_start})).fetchall()
+
+    # Total alerts with any MITRE data in period
+    total_row = (await db.execute(text("""
+        SELECT COUNT(*) AS total
+        FROM alerts
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND created_at >= :ps
+          AND deleted_at IS NULL
+    """), {"tid": tid, "ps": period_start})).fetchone()
+
+    technique_counts: dict[str, TechniqueStat] = {}
+    top_technique: str | None = None
+    top_count = 0
+
+    for r in rows:
+        tid_str = r.technique
+        cnt = r.total or 0
+        technique_counts[tid_str] = TechniqueStat(
+            techniqueId=tid_str,
+            count=cnt,
+            criticalCount=r.critical_count or 0,
+            highCount=r.high_count or 0,
+            mediumCount=r.medium_count or 0,
+            latestAt=r.latest_at.isoformat() if r.latest_at else now.isoformat(),
+        )
+        if cnt > top_count:
+            top_count = cnt
+            top_technique = tid_str
+
+    return APIResponse.ok(MitreCoverageData(
+        techniqueCounts=technique_counts,
+        totalAlerts=total_row.total or 0,
+        coveredTechniques=len(technique_counts),
+        topTechnique=top_technique,
+        generatedAt=now.isoformat(),
+    ))
+
+
+# ─── /dashboard/correlation-activity ─────────────────────────────────────────
+
+@router.get("/correlation-activity", response_model=APIResponse[CorrelationActivityData])
+async def get_correlation_activity(
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[CorrelationActivityData]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, _ = _window(time_range)
+    _TERMINAL = ("closed", "resolved", "false_positive")
+
+    # Aggregate counts for active investigations
+    agg_row = (await db.execute(text("""
+        SELECT
+            COUNT(*)                                                         AS active,
+            COALESCE(SUM(jsonb_array_length(triggering_alert_ids)), 0)       AS grouped_alerts,
+            -- Count entities inside context_json->entities array if present
+            COALESCE(SUM(
+                CASE
+                    WHEN context_json IS NOT NULL
+                         AND context_json ? 'entities'
+                         AND jsonb_typeof(context_json->'entities') = 'array'
+                    THEN jsonb_array_length(context_json->'entities')
+                    ELSE 0
+                END
+            ), 0)                                                            AS total_entities
+        FROM investigations
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND status NOT IN ('closed', 'resolved', 'false_positive')
+    """), {"tid": tid})).fetchone()
+
+    # Recent investigations as correlation events (up to 10)
+    inv_rows = (await db.execute(text("""
+        SELECT
+            id,
+            title,
+            executive_summary,
+            threat_score,
+            triggering_alert_ids,
+            behaviors_json,
+            context_json,
+            created_at
+        FROM investigations
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND created_at >= :ps
+        ORDER BY created_at DESC
+        LIMIT 10
+    """), {"tid": tid, "ps": period_start})).fetchall()
+
+    recent: list[CorrelationEvent] = []
+    for r in inv_rows:
+        # Human-readable title
+        title = (
+            r.title
+            or (r.executive_summary[:80] if r.executive_summary else None)
+            or "Untitled Investigation"
+        )
+
+        # Alert count from triggering_alert_ids JSONB array
+        alert_ids = r.triggering_alert_ids or []
+        alert_count = len(alert_ids) if isinstance(alert_ids, list) else 0
+
+        # Entity count from context_json
+        ctx = r.context_json or {}
+        entity_count = len(ctx.get("entities", [])) if isinstance(ctx, dict) else 0
+
+        # Behavior names from behaviors_json
+        behaviors: list[str] = []
+        bj = r.behaviors_json or {}
+        if isinstance(bj, dict):
+            for b in bj.get("detected_behaviors", []):
+                name = b.get("behavior_name") if isinstance(b, dict) else None
+                if name:
+                    behaviors.append(name)
+
+        recent.append(CorrelationEvent(
+            id=str(r.id),
+            investigationId=str(r.id),
+            investigationTitle=title,
+            alertCount=alert_count,
+            entityCount=entity_count,
+            behaviorMatches=behaviors[:5],
+            severity=_score_to_severity(r.threat_score or 0),
+            correlatedAt=r.created_at.isoformat() if r.created_at else now.isoformat(),
+        ))
+
+    return APIResponse.ok(CorrelationActivityData(
+        activeInvestigations=agg_row.active or 0,
+        totalGroupedAlerts=int(agg_row.grouped_alerts or 0),
+        totalEntities=int(agg_row.total_entities or 0),
+        recentCorrelations=recent,
+    ))
+
+
+# ─── /dashboard/ai-operations ────────────────────────────────────────────────
+
+@router.get("/ai-operations", response_model=APIResponse[AIOperationsData])
+async def get_ai_operations(
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: DashboardTimeRange = Query(default="last_24h"),
+) -> APIResponse[AIOperationsData]:
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    tid = str(m.tenant_id)
+
+    period_start, now, _ = _window(time_range)
+    cutoff_24h = now - timedelta(hours=24)
+
+    # Aggregate AI stats
+    stats_row = (await db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (
+                WHERE ai_analysis_json IS NOT NULL
+                  AND created_at >= :cutoff24
+            )                                                   AS analyzed_24h,
+            COUNT(*) FILTER (
+                WHERE verdict = 'true_positive'
+                  AND created_at >= :ps
+            )                                                   AS true_positive,
+            COUNT(*) FILTER (
+                WHERE (verdict = 'false_positive' OR status = 'false_positive')
+                  AND created_at >= :ps
+            )                                                   AS false_positive,
+            COUNT(*) FILTER (
+                WHERE ai_analysis_json IS NULL
+                  AND status NOT IN ('closed', 'resolved', 'false_positive')
+            )                                                   AS pending,
+            AVG(
+                CAST(
+                    ai_analysis_json->>'confidence_score' AS float
+                )
+            ) FILTER (
+                WHERE ai_analysis_json IS NOT NULL
+                  AND ai_analysis_json->>'confidence_score' IS NOT NULL
+                  AND created_at >= :ps
+            )                                                   AS avg_confidence
+        FROM investigations
+        WHERE tenant_id = CAST(:tid AS uuid)
+    """), {"tid": tid, "ps": period_start, "cutoff24": cutoff_24h})).fetchone()
+
+    # Recent verdicts from investigations with AI analysis
+    verdict_rows = (await db.execute(text("""
+        SELECT
+            id,
+            title,
+            executive_summary,
+            verdict,
+            tp_probability,
+            fp_probability,
+            ai_analysis_json,
+            created_at
+        FROM investigations
+        WHERE tenant_id = CAST(:tid AS uuid)
+          AND created_at >= :ps
+          AND (verdict IS NOT NULL OR ai_analysis_json IS NOT NULL)
+        ORDER BY created_at DESC
+        LIMIT 10
+    """), {"tid": tid, "ps": period_start})).fetchall()
+
+    pending = stats_row.pending or 0
+    recent_verdicts: list[AIVerdict] = []
+    for r in verdict_rows:
+        # Determine verdict: use explicit verdict column, fall back to AI analysis
+        ai = r.ai_analysis_json or {}
+        v = r.verdict or ai.get("verdict") or "pending"
+        # Normalize verdict to frontend enum values
+        if v in ("true_positive",):
+            verdict_str = "true_positive"
+        elif v in ("false_positive",):
+            verdict_str = "false_positive"
+        elif v in ("benign",):
+            verdict_str = "benign"
+        else:
+            verdict_str = "pending"
+
+        # Confidence: prefer ai_analysis confidence_score (0-100), else derive from tp_probability
+        raw_conf = ai.get("confidence_score")
+        if raw_conf is not None:
+            confidence = float(raw_conf)
+        elif r.tp_probability is not None:
+            confidence = round(float(r.tp_probability) * 100, 1)
+        else:
+            confidence = 0.0
+
+        title = (
+            r.title
+            or (r.executive_summary[:60] if r.executive_summary else None)
+            or "Investigation"
+        )
+
+        analyzed_at = r.created_at.isoformat() if r.ai_analysis_json and r.created_at else None
+
+        recent_verdicts.append(AIVerdict(
+            verdict=verdict_str,
+            confidence=confidence,
+            investigationId=str(r.id),
+            title=title,
+            analyzedAt=analyzed_at,
+        ))
+
+    avg_conf = round(float(stats_row.avg_confidence), 1) if stats_row.avg_confidence else 0.0
+
+    return APIResponse.ok(AIOperationsData(
+        queueDepth=pending,
+        analyzedLast24h=stats_row.analyzed_24h or 0,
+        truePositiveCount=stats_row.true_positive or 0,
+        falsePositiveCount=stats_row.false_positive or 0,
+        pendingCount=pending,
+        avgConfidence=avg_conf,
+        recentVerdicts=recent_verdicts,
+    ))
