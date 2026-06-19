@@ -31,6 +31,7 @@ from app.workers.escalation_worker import AlertEscalationWorker
 from app.workers.heartbeat_worker import HeartbeatWorker
 from app.workers.installer_worker import InstallerTokenWorker
 from app.workers.realtime_worker import RealtimeWorker
+from app.workers.retention_worker import DataRetentionWorker
 from app.realtime.broadcast import RealtimeListener
 
 logger = structlog.get_logger(__name__)
@@ -168,6 +169,10 @@ async def main() -> None:
     # UEBA baseline snapshot/restore (global — warm Redis after pod restarts)
     baseline_worker = BaselineSnapshotWorker()
     tasks.append(asyncio.create_task(baseline_worker.run(stop_event), name="baseline-snapshot"))
+
+    # Data retention sweeper (global — enforces per-tenant retention policies)
+    retention_worker = DataRetentionWorker()
+    tasks.append(asyncio.create_task(retention_worker.run(stop_event), name="data-retention"))
 
     # Realtime Redis pub/sub listener (global, one per process)
     rt_listener = RealtimeListener(redis_manager.get_client())

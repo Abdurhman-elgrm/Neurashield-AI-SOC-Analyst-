@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -24,6 +24,10 @@ class Tenant(Base, TimestampMixin, SoftDeleteMixin):
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+
+    # ─── Data retention policies ───────────────────────────────────────────────
+    event_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
+    alert_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
 
     # ─── Relationships ────────────────────────────────────────────────────────
     members: Mapped[list["TenantMember"]] = relationship(  # type: ignore[name-defined]

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -23,7 +24,6 @@ _REGISTER_RATE_WINDOW = 3600  # 1 hour
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    """Store the refresh token in an httpOnly cookie (never readable by JS)."""
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -48,9 +48,8 @@ async def _check_rate_limit(
     limit: int,
     window: int,
 ) -> None:
-    """Increment an IP-scoped counter; raise RateLimitError when exceeded."""
     if redis is None:
-        return  # Redis unavailable — degrade gracefully
+        return
     try:
         from redis.asyncio import Redis as RedisType
         r: RedisType = redis  # type: ignore[assignment]
@@ -65,7 +64,11 @@ async def _check_rate_limit(
     except RateLimitError:
         raise
     except Exception:
-        pass  # Redis error — degrade gracefully
+        pass
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
 
 
 @router.post(
@@ -81,10 +84,6 @@ async def register(
     db: AsyncSession = Depends(get_db),
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[TokenPair]:
-    """
-    Creates a new global user account and returns an initial token pair.
-    Email addresses are case-insensitively unique across the platform.
-    """
     ip = _extract_client_ip(request)
     await _check_rate_limit(redis, f"auth_register_ip:{ip}", _REGISTER_RATE_LIMIT, _REGISTER_RATE_WINDOW)
 
@@ -137,10 +136,6 @@ async def refresh_tokens(
     payload: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[TokenPair]:
-    """
-    Validates the refresh token, revokes it, and issues a new token pair.
-    Accepts the token from the httpOnly cookie or the request body.
-    """
     refresh_token = payload.refresh_token
     if not refresh_token:
         refresh_token = request.cookies.get("refresh_token", "")
@@ -163,10 +158,6 @@ async def logout(
     payload: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[EmptyResponse]:
-    """
-    Revokes the provided refresh token server-side.
-    Accepts the token from the httpOnly cookie or the request body.
-    """
     refresh_token = payload.refresh_token
     if not refresh_token:
         refresh_token = request.cookies.get("refresh_token", "")
@@ -182,3 +173,37 @@ async def logout(
 )
 async def get_me(current_user: CurrentUser) -> APIResponse[UserResponse]:
     return APIResponse.ok(UserResponse.model_validate(current_user))
+
+
+@router.get(
+    "/verify-email",
+    response_model=APIResponse[EmptyResponse],
+    summary="Verify email address using one-time token",
+)
+async def verify_email(
+    token: str = Query(..., min_length=10, description="Email verification token"),
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[EmptyResponse]:
+    await AuthService.verify_email(db, token)
+    return APIResponse.ok(EmptyResponse())
+
+
+@router.post(
+    "/resend-verification",
+    response_model=APIResponse[EmptyResponse],
+    summary="Resend email verification link",
+)
+async def resend_verification(
+    payload: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Annotated[object | None, Depends(get_redis_optional)] = None,
+) -> APIResponse[EmptyResponse]:
+    # Rate-limit by email address
+    await _check_rate_limit(
+        redis,
+        f"auth_resend_verify:{payload.email.lower()}",
+        limit=3,
+        window=3600,
+    )
+    await AuthService.resend_verification(db, payload.email)
+    return APIResponse.ok(EmptyResponse())

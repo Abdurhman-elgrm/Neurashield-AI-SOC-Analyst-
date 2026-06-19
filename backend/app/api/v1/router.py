@@ -4,6 +4,7 @@ from app.api.v1 import auth, health, members, tenants, users
 from app.api.v1 import agents, alerts, events, rules, installer
 from app.api.v1 import investigations, entities
 from app.api.v1 import api_keys, reports, dashboard
+from app.api.v1 import notification_channels, suppressions
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
 from app.ingestion.router import router as ingestion_router
@@ -64,6 +65,12 @@ api_router.include_router(invitations_router)
 # ─── Notification preferences ─────────────────────────────────────────────────
 from app.api.v1.notifications import router as notifications_router
 api_router.include_router(notifications_router)
+
+# ─── Outbound notification channels (Slack/Teams/webhook/PagerDuty/email) ────
+api_router.include_router(notification_channels.router)
+
+# ─── Alert suppression rules ─────────────────────────────────────────────────
+api_router.include_router(suppressions.router)
 
 # ─── Phase 2: WebSocket (registered at root level, no prefix) ────────────────
 api_router.include_router(ws_router)

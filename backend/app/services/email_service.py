@@ -169,6 +169,54 @@ async def _send_email(
 
 # ─── Public email functions ───────────────────────────────────────────────────
 
+async def send_verification_email(
+    to_email: str,
+    full_name: str,
+    verify_url: str,
+) -> bool:
+    subject = "Verify your NEURASHIELD account"
+
+    body_text = f"""Hi {full_name},
+
+Welcome to NEURASHIELD SOC Platform!
+
+Please verify your email address to activate your account:
+{verify_url}
+
+This link expires in 24 hours.
+
+If you did not create this account, you can safely ignore this email.
+
+-- NEURASHIELD SOC Platform
+"""
+
+    content_html = f"""
+<p style="color:#B8C0CC;font-size:14px;line-height:1.7;margin:0 0 20px;">
+  Hi <strong style="color:#F5F7FA;">{full_name}</strong>,<br>
+  Welcome to NEURASHIELD SOC Platform. Please verify your email address
+  to complete your account setup.
+</p>
+<div style="background:rgba(99,102,241,0.08);
+            border:1px solid rgba(99,102,241,0.2);
+            border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+  <div style="font-size:11px;color:#5C6373;text-transform:uppercase;
+              letter-spacing:1px;margin-bottom:4px;">Account email</div>
+  <div style="font-size:14px;font-weight:600;color:#F5F7FA;">{to_email}</div>
+</div>
+<p style="color:#5C6373;font-size:12px;line-height:1.6;margin:0;">
+  This link expires in 24 hours.<br>
+  If you did not create this account, you can safely ignore this email.
+</p>
+"""
+    body_html = _html_wrapper(
+        title="Verify your email address",
+        content=content_html,
+        cta_url=verify_url,
+        cta_text="Verify Email Address",
+    )
+    return await _send_email(to_email, subject, body_text, body_html)
+
+
 async def send_invitation_email(
     to_email: str,
     invited_by_name: str,

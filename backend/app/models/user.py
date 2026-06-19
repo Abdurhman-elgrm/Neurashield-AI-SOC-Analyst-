@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -28,6 +28,16 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+
+    # ─── Email verification ───────────────────────────────────────────────────
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    email_verification_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email_verification_sent_at: Mapped[str | None] = mapped_column(nullable=True)
+
+    # ─── Extended profile ─────────────────────────────────────────────────────
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    job_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ─── Relationships ────────────────────────────────────────────────────────
     memberships: Mapped[list["TenantMember"]] = relationship(  # type: ignore[name-defined]

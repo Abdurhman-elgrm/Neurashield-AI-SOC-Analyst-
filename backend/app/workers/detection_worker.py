@@ -96,8 +96,11 @@ class DetectionWorker:
                 # Email notifications for HIGH/CRITICAL alerts — non-blocking
                 from app.models.alert import AlertSeverity
                 from app.services.notification_service import notify_alert_email
+                from app.services.outbound_notification_service import dispatch_alert_to_channels
+
                 for alert in alerts:
                     if alert.severity in (AlertSeverity.HIGH, AlertSeverity.CRITICAL):
+                        # Email to opted-in tenant members
                         asyncio.create_task(notify_alert_email(
                             alert_id=str(alert.id),
                             tenant_id=tenant_uuid,
@@ -105,6 +108,16 @@ class DetectionWorker:
                             severity=alert.severity.value,
                             source_host=alert.source_host,
                             ai_metadata=alert.ai_metadata,
+                        ))
+                        # Outbound channels (Slack, Teams, webhook, PagerDuty, email lists)
+                        asyncio.create_task(dispatch_alert_to_channels(
+                            tenant_id=tenant_uuid,
+                            alert_id=str(alert.id),
+                            title=alert.title or "Security Alert",
+                            severity=alert.severity.value,
+                            source_host=alert.source_host,
+                            mitre_techniques=alert.mitre_techniques,
+                            created_at=alert.created_at,
                         ))
 
                 # Fan out to WebSocket clients

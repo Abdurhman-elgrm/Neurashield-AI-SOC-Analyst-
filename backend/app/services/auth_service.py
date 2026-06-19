@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import ConflictError, ServiceUnavailableError, UnauthorizedError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ServiceUnavailableError, UnauthorizedError
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -25,6 +26,13 @@ from app.services.user_service import UserService
 
 logger = structlog.get_logger(__name__)
 
+_VERIFICATION_TOKEN_BYTES = 32
+_VERIFICATION_EXPIRY_HOURS = 24
+
+
+def _generate_verification_token() -> str:
+    return secrets.token_urlsafe(_VERIFICATION_TOKEN_BYTES)
+
 
 class AuthService:
 
@@ -39,12 +47,23 @@ class AuthService:
         """
         Registers a new global user account.
         Raises ConflictError if the email is already in use.
+        Sends a verification email; the account is functional immediately
+        but login will be blocked after the first session until verified.
         """
         if await UserService.email_exists(db, email):
             raise ConflictError("An account with this email address already exists")
 
         password_hash = hash_password(password)
-        user = await UserService.create(db, email, password_hash, full_name)
+        verification_token = _generate_verification_token()
+
+        user = await UserService.create(
+            db,
+            email,
+            password_hash,
+            full_name,
+            email_verified=False,
+            email_verification_token=verification_token,
+        )
 
         token_pair = await AuthService._issue_token_pair(db, user)
 
@@ -56,6 +75,19 @@ class AuthService:
             resource_id=user.id,
             ip_address=ip_address,
         )
+
+        # Send verification email in background — never block registration
+        try:
+            from app.services.email_service import send_verification_email
+            verify_url = (
+                f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+            )
+            import asyncio
+            asyncio.create_task(
+                send_verification_email(user.email, user.full_name, verify_url)
+            )
+        except Exception:
+            logger.warning("verification_email_schedule_failed", user_id=str(user.id))
 
         return user, token_pair
 
@@ -70,11 +102,11 @@ class AuthService:
         Authenticates a user by email/password.
         Always takes the same time path regardless of whether the user exists
         to prevent user enumeration via timing attacks.
+        Raises ForbiddenError if the email has not been verified.
         """
         user = await UserService.get_by_email(db, email)
 
         if user is None:
-            # Perform a dummy hash to normalize timing
             hash_password(password)
             raise UnauthorizedError("Invalid email or password")
 
@@ -92,7 +124,13 @@ class AuthService:
         if not user.is_active:
             raise UnauthorizedError("Account is disabled")
 
-        # Upgrade hash if parameters changed (transparent to user)
+        if not user.email_verified:
+            raise ForbiddenError(
+                "Please verify your email address before logging in. "
+                "Check your inbox or request a new verification link.",
+                details={"code": "EMAIL_NOT_VERIFIED"},
+            )
+
         if needs_rehash(user.password_hash):
             user.password_hash = hash_password(password)
             await db.flush([user])
@@ -111,6 +149,79 @@ class AuthService:
         return user, token_pair
 
     @staticmethod
+    async def verify_email(db: AsyncSession, token: str) -> User:
+        """
+        Verifies the email address associated with the given token.
+        Raises NotFoundError if the token is invalid or expired.
+        """
+        user = await UserService.get_by_verification_token(db, token)
+        if user is None:
+            raise NotFoundError("Verification link is invalid or has already been used")
+
+        # Check expiry (24 hours)
+        if user.email_verification_sent_at:
+            sent_at = user.email_verification_sent_at
+            if isinstance(sent_at, str):
+                sent_at = datetime.fromisoformat(sent_at)
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=_VERIFICATION_EXPIRY_HOURS):
+                raise NotFoundError("Verification link has expired. Please request a new one.")
+
+        user.email_verified = True
+        user.email_verification_token = None
+        user.email_verification_sent_at = None
+        await db.flush([user])
+
+        await AuditService.log(
+            db,
+            action="user.email_verified",
+            actor_id=user.id,
+            resource_type="user",
+            resource_id=user.id,
+        )
+
+        logger.info("email_verified", user_id=str(user.id), email=user.email)
+        return user
+
+    @staticmethod
+    async def resend_verification(db: AsyncSession, email: str) -> None:
+        """
+        Generates a new verification token and resends the verification email.
+        Silently succeeds even if the email is not found (prevents enumeration).
+        """
+        user = await UserService.get_by_email(db, email)
+        if user is None or user.email_verified:
+            return
+
+        # Rate limit: don't resend if last email was sent < 5 minutes ago
+        if user.email_verification_sent_at:
+            sent_at = user.email_verification_sent_at
+            if isinstance(sent_at, str):
+                sent_at = datetime.fromisoformat(sent_at)
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+                return
+
+        new_token = _generate_verification_token()
+        user.email_verification_token = new_token
+        user.email_verification_sent_at = datetime.now(tz=timezone.utc)
+        await db.flush([user])
+
+        try:
+            from app.services.email_service import send_verification_email
+            verify_url = (
+                f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
+            )
+            import asyncio
+            asyncio.create_task(
+                send_verification_email(user.email, user.full_name, verify_url)
+            )
+        except Exception:
+            logger.warning("resend_verification_email_failed", user_id=str(user.id))
+
+    @staticmethod
     async def refresh(
         db: AsyncSession,
         refresh_token_str: str,
@@ -126,7 +237,6 @@ class AuthService:
         except ValueError:
             raise UnauthorizedError("Malformed refresh token")
 
-        # Look up the persisted token record by JTI
         if payload.jti is None:
             raise UnauthorizedError("Refresh token missing JTI")
         stored = await AuthService._get_refresh_token_by_jti(db, payload.jti)
@@ -137,7 +247,6 @@ class AuthService:
         if user is None or not user.is_active:
             raise UnauthorizedError("User not found or inactive")
 
-        # Revoke the old token before issuing new one (token rotation)
         stored.revoke()
         await db.flush([stored])
 
@@ -154,11 +263,10 @@ class AuthService:
         try:
             payload = decode_refresh_token(refresh_token_str)
         except Exception:
-            # Invalid or expired token — nothing to revoke
             return
 
         if payload.jti is None:
-            return  # No JTI to look up
+            return
 
         jti = payload.jti
         try:
@@ -171,7 +279,6 @@ class AuthService:
                 "refresh_token_revocation_failed",
                 jti=jti,
                 error=str(exc),
-                note="Token may still be valid — user should be advised to re-login",
             )
             raise ServiceUnavailableError("Logout failed — please try again")
 
@@ -179,7 +286,6 @@ class AuthService:
 
     @staticmethod
     async def _issue_token_pair(db: AsyncSession, user: User) -> TokenPair:
-        """Creates and persists a new access + refresh token pair."""
         access_token = create_access_token(subject=str(user.id))
         refresh_token_str, jti = create_refresh_token(subject=str(user.id))
 

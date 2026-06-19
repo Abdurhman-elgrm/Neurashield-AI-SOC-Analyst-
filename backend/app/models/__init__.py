@@ -26,6 +26,8 @@ from app.models.analyst import (
 )
 from app.models.chat import ChatMessage
 from app.models.rag_chunk import RAGChunk
+from app.models.notification_channel import NotificationChannel
+from app.models.suppression_rule import SuppressionRule
 
 __all__ = [
     "Base",
@@ -51,4 +53,6 @@ __all__ = [
     "SavedHunt",
     "ChatMessage",
     "RAGChunk",
+    "NotificationChannel",
+    "SuppressionRule",
 ]

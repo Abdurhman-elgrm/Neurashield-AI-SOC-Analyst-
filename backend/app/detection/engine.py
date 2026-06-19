@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import fnmatch
+from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
@@ -10,20 +12,23 @@ from app.core.redis import TenantRedisClient
 from app.detection.evaluator import RuleEvaluator
 from app.models.alert import Alert, AlertSeverity
 from app.models.detection_rule import DetectionRule, RuleType
+from app.models.suppression_rule import SuppressionRule
 from app.normalization.models import NormalizedEvent
 from app.pipeline.publisher import StreamPublisher
 
 logger = structlog.get_logger(__name__)
 
-# Maximum alerts emitted per single event.  Protects against rule storms where
-# dozens of overlapping threshold rules all fire on the same event.
 _MAX_ALERTS_PER_EVENT = 10
-
-# Per-rule rate limiting: max alerts a single rule can emit per minute.
-# Prevents a misconfigured or overly-sensitive rule from flooding the alert queue.
-# Individual rules may override this via conditions["max_alerts_per_minute"].
 _RULE_RATE_LIMIT_DEFAULT = 20
 _RULE_RATE_LIMIT_WINDOW  = 60  # seconds
+
+_SEVERITY_RANK: dict[str, int] = {
+    "critical": 4,
+    "high":     3,
+    "medium":   2,
+    "low":      1,
+    "info":     0,
+}
 
 
 class DetectionEngine:
@@ -61,11 +66,12 @@ class DetectionEngine:
         if not rules:
             return []
 
+        # Load user-defined suppression rules once per event evaluation
+        suppression_rules = await self._load_suppression_rules()
+
         raw_alerts: list[Alert] = []
         for rule in rules:
             try:
-                # Per-rule rate limit: skip evaluation entirely if the rule has
-                # already fired too many times this minute.
                 if await self._is_rate_limited(rule):
                     continue
 
@@ -73,6 +79,15 @@ class DetectionEngine:
                     rule, event, event_id=event_db_id, stream_id=stream_id
                 )
                 if alert:
+                    if suppression_rules and _is_suppressed(alert, event, suppression_rules):
+                        logger.debug(
+                            "alert_suppressed_by_rule",
+                            rule_id=str(rule.id),
+                            hostname=event.hostname,
+                        )
+                        # Remove alert from session since it was flushed but shouldn't be committed
+                        await self._db.delete(alert)
+                        continue
                     raw_alerts.append(alert)
             except Exception as exc:
                 logger.error(
@@ -82,9 +97,6 @@ class DetectionEngine:
                     exc_info=True,
                 )
 
-        # ── Deduplication ─────────────────────────────────────────────────────
-        # Group alerts by entity key (host + category).  Keep only the
-        # highest-severity alert per group.  Apply hard cap last.
         alerts = _deduplicate_alerts(raw_alerts)
         if len(alerts) > _MAX_ALERTS_PER_EVENT:
             logger.warning(
@@ -98,15 +110,9 @@ class DetectionEngine:
         return alerts
 
     async def _is_rate_limited(self, rule: DetectionRule) -> bool:
-        """
-        Returns True if this rule has exceeded its per-minute alert cap.
-        Uses a pipeline INCR + EXPIRE — atomic enough for a soft rate limit.
-        """
         conditions = rule.conditions if isinstance(rule.conditions, dict) else {}
         max_per_min = int(conditions.get("max_alerts_per_minute", _RULE_RATE_LIMIT_DEFAULT))
 
-        # Use pipeline on the full key directly (TenantRedisClient._key() pre-computes
-        # the tenant-prefixed key; pipeline bypasses the auto-prefix wrappers).
         full_key = self._client._key(f"rl:{rule.id}")
         pipe = self._client.pipeline()
         pipe.incr(full_key)
@@ -130,6 +136,18 @@ class DetectionEngine:
                 DetectionRule.tenant_id == self._tenant_id,
                 DetectionRule.enabled.is_(True),
                 DetectionRule.deleted_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def _load_suppression_rules(self) -> list[SuppressionRule]:
+        now = datetime.now(tz=timezone.utc)
+        result = await self._db.execute(
+            select(SuppressionRule).where(
+                SuppressionRule.tenant_id == self._tenant_id,
+                SuppressionRule.enabled.is_(True),
+                SuppressionRule.deleted_at.is_(None),
+                SuppressionRule.expires_at > now,
             )
         )
         return list(result.scalars().all())
@@ -158,38 +176,67 @@ class DetectionEngine:
                 )
 
 
+# ─── Suppression check ────────────────────────────────────────────────────────
+
+def _is_suppressed(
+    alert: Alert,
+    event: NormalizedEvent,
+    rules: list[SuppressionRule],
+) -> bool:
+    """Return True if the alert matches any active suppression rule."""
+    for rule in rules:
+        if _matches_suppression(alert, event, rule):
+            logger.info(
+                "alert_suppressed",
+                alert_rule_id=str(alert.rule_id),
+                suppression_rule=rule.name,
+                hostname=alert.source_host,
+            )
+            return True
+    return False
+
+
+def _matches_suppression(
+    alert: Alert,
+    event: NormalizedEvent,
+    rule: SuppressionRule,
+) -> bool:
+    """Return True if ALL non-null criteria of the suppression rule match."""
+    # Detection rule filter
+    if rule.detection_rule_id is not None:
+        if str(rule.detection_rule_id) != str(alert.rule_id):
+            return False
+
+    # Hostname wildcard match (fnmatch: * matches any sequence, ? matches one char)
+    if rule.hostname_pattern is not None:
+        hostname = alert.source_host or ""
+        if not fnmatch.fnmatch(hostname.lower(), rule.hostname_pattern.lower()):
+            return False
+
+    # Category filter
+    if rule.category is not None:
+        if event.category != rule.category:
+            return False
+
+    # Severity threshold (suppress only if alert severity >= min_severity)
+    if rule.min_severity is not None:
+        alert_rank = _SEVERITY_RANK.get(alert.severity.value, 0)
+        min_rank = _SEVERITY_RANK.get(rule.min_severity, 0)
+        if alert_rank < min_rank:
+            return False
+
+    return True
+
+
 # ─── Deduplication helpers ────────────────────────────────────────────────────
 
-_SEVERITY_RANK: dict[str, int] = {
-    "critical": 4,
-    "high":     3,
-    "medium":   2,
-    "low":      1,
-    "info":     0,
-}
-
-
 def _alert_entity_key(alert: Alert) -> str:
-    """
-    Stable key that identifies the security entity this alert is about.
-    Two alerts with the same entity key are considered duplicates when
-    they fire on the same event; only the higher-severity one is kept.
-    """
     host = alert.source_host or ""
-    # Use the first MITRE tactic as the alert "category" for dedup grouping.
-    # Falls back to empty string so tactical alerts group with each other.
     tactic = (alert.mitre_tactics or [None])[0] or ""
     return f"{host}:{tactic}"
 
 
 def _deduplicate_alerts(alerts: list[Alert]) -> list[Alert]:
-    """
-    Within a single event evaluation, suppress lower-severity alerts that
-    describe the same entity as a higher-severity alert.
-
-    Example: "3 failed logins → medium" and "5 failed logins → high" both fire
-    on the same event for the same host.  Only the high-severity one is emitted.
-    """
     if len(alerts) <= 1:
         return alerts
 
@@ -200,7 +247,6 @@ def _deduplicate_alerts(alerts: list[Alert]) -> list[Alert]:
         if existing is None:
             best[key] = alert
         else:
-            # Keep the higher-severity alert.
             curr_rank = _SEVERITY_RANK.get(alert.severity.value, 0)
             prev_rank = _SEVERITY_RANK.get(existing.severity.value, 0)
             if curr_rank > prev_rank:
