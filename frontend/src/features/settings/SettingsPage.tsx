@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   User, Building2, Key, Users, Bell,
   Plus, Copy, Check, Trash2, CheckCircle,
-  Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle,
+  Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle, Lock, Camera, Loader,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
@@ -44,6 +44,122 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
+// ─── Avatar helpers ───────────────────────────────────────────────────────────
+
+function resizeToDataUrl(file: File, size = 96, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { reject(new Error('Canvas not supported')); return }
+      const s = Math.min(img.naturalWidth, img.naturalHeight)
+      const sx = (img.naturalWidth - s) / 2
+      const sy = (img.naturalHeight - s) / 2
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')) }
+    img.src = url
+  })
+}
+
+function AvatarEditor({ src, initials, onChange }: {
+  src?: string | null; initials: string; onChange: (dataUrl: string) => void
+}) {
+  const inputRef            = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const displaySrc = preview ?? src ?? null
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLoading(true); setError(null)
+    try {
+      const dataUrl = await resizeToDataUrl(file)
+      setPreview(dataUrl)
+      onChange(dataUrl)
+    } catch {
+      setError('Could not process image — try a different file.')
+    } finally {
+      setLoading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div>
+      <div
+        onClick={() => !loading && inputRef.current?.click()}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title="Click to change profile picture"
+        style={{ position: 'relative', display: 'inline-block', cursor: loading ? 'default' : 'pointer', borderRadius: '50%' }}
+      >
+        {/* Avatar */}
+        <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(59,130,246,0.3)', flexShrink: 0 }}>
+          {displaySrc ? (
+            <img
+              src={displaySrc}
+              alt="Profile"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              background: 'rgba(59,130,246,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 26, fontWeight: 800, color: '#60A5FA',
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}>
+              {initials}
+            </div>
+          )}
+        </div>
+
+        {/* Hover overlay */}
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+          opacity: (hovered || loading) ? 1 : 0,
+          transition: 'opacity 150ms',
+          pointerEvents: 'none',
+        }}>
+          {loading
+            ? <Loader size={18} style={{ color: '#fff', animation: 'spin 1s linear infinite' }} />
+            : <>
+                <Camera size={16} style={{ color: '#fff' }} />
+                <span style={{ fontSize: 9, color: '#fff', fontWeight: 700, letterSpacing: '0.5px' }}>EDIT</span>
+              </>
+          }
+        </div>
+      </div>
+
+      {error && (
+        <p style={{ marginTop: 6, fontSize: 11, color: '#FCA5A5' }}>{error}</p>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+      />
+    </div>
+  )
+}
+
 // ─── Profile Tab ─────────────────────────────────────────────────────────────
 
 function ProfileTab() {
@@ -55,10 +171,18 @@ function ProfileTab() {
   const [timezone, setTimezone] = useState('UTC')
   const [jobTitle, setJobTitle] = useState('')
   const [bio,      setBio]      = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
   const [verifySent, setVerifySent] = useState(false)
   const [verifyLoading, setVerifyLoading] = useState(false)
+
+  // Change password
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw,     setNewPw]     = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwMsg,     setPwMsg]     = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   useEffect(() => {
     settingsApi.getProfile().then(p => {
@@ -67,6 +191,7 @@ function ProfileTab() {
       setTimezone(p.timezone ?? storeUser?.timezone ?? 'UTC')
       setJobTitle(p.job_title ?? '')
       setBio(p.bio ?? '')
+      setAvatarUrl(p.avatar_url ?? '')
     }).catch(console.error)
   }, [])
 
@@ -78,6 +203,7 @@ function ProfileTab() {
         timezone,
         job_title: jobTitle || null,
         bio: bio || null,
+        avatar_url: avatarUrl || null,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -100,6 +226,22 @@ function ProfileTab() {
     }
   }
 
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPw !== confirmPw) { setPwMsg({ type: 'err', text: 'Passwords do not match' }); return }
+    setPwLoading(true); setPwMsg(null)
+    try {
+      await authApi.changePassword(currentPw, newPw)
+      setCurrentPw(''); setNewPw(''); setConfirmPw('')
+      setPwMsg({ type: 'ok', text: 'Password changed successfully.' })
+      setTimeout(() => setPwMsg(null), 4000)
+    } catch (err) {
+      setPwMsg({ type: 'err', text: extractApiError(err) })
+    } finally {
+      setPwLoading(false)
+    }
+  }
+
   const initials = profile?.full_name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) ?? '?'
   const avatarSrc = profile?.avatar_url || profile?.gravatar_url
 
@@ -107,35 +249,24 @@ function ProfileTab() {
     <div style={{ maxWidth: 520 }}>
       <SectionHeader title="Profile" description="Update your personal information" />
 
-      {/* Avatar + email verification */}
+      {/* Avatar + identity */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20,
+        display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20,
         padding: '14px 16px', borderRadius: 8,
         background: '#111111', border: '1px solid rgba(255,255,255,0.06)',
       }}>
-        {avatarSrc ? (
-          <img
-            src={avatarSrc}
-            alt={profile?.full_name}
-            style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(59,130,246,0.3)' }}
-          />
-        ) : (
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: 'rgba(59,130,246,0.15)', border: '2px solid rgba(59,130,246,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontWeight: 800, color: '#60A5FA',
-            fontFamily: "'Space Grotesk', sans-serif", flexShrink: 0,
-          }}>
-            {initials}
-          </div>
-        )}
+        <AvatarEditor
+          src={avatarUrl || avatarSrc}
+          initials={initials}
+          onChange={url => setAvatarUrl(url)}
+        />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F7FA' }}>{profile?.full_name}</div>
           <div style={{ fontSize: 11, color: '#8B95A7', marginTop: 2 }}>{profile?.email}</div>
           {profile?.job_title && (
             <div style={{ fontSize: 10, color: '#5C6373', marginTop: 1 }}>{profile.job_title}</div>
           )}
+          <div style={{ fontSize: 10, color: '#3A4150', marginTop: 4 }}>Click avatar to upload a new photo</div>
         </div>
         <div>
           {profile?.email_verified ? (
@@ -236,6 +367,76 @@ function ProfileTab() {
       <Button variant="primary" loading={saving} onClick={handleSave}>
         {saved ? <><Check size={13} /> Saved</> : 'Save Changes'}
       </Button>
+
+      {/* ── Change Password ────────────────────────────────────────────────── */}
+      <SectionHeader title="Change Password" description="Update your account password" />
+
+      <form onSubmit={handlePasswordChange}>
+        <FormField label="Current Password">
+          <div style={{ position: 'relative' }}>
+            <Lock size={12} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#5C6373', pointerEvents: 'none' }} />
+            <input
+              type="password"
+              className="inp"
+              style={{ width: '100%', paddingLeft: 28 }}
+              placeholder="Your current password"
+              value={currentPw}
+              onChange={e => setCurrentPw(e.target.value)}
+              required
+              disabled={pwLoading}
+              autoComplete="current-password"
+            />
+          </div>
+        </FormField>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <FormField label="New Password">
+            <input
+              type="password"
+              className="inp"
+              style={{ width: '100%' }}
+              placeholder="Min. 8 characters"
+              minLength={8}
+              value={newPw}
+              onChange={e => setNewPw(e.target.value)}
+              required
+              disabled={pwLoading}
+              autoComplete="new-password"
+            />
+          </FormField>
+          <FormField label="Confirm New Password">
+            <input
+              type="password"
+              className="inp"
+              style={{
+                width: '100%',
+                borderColor: confirmPw && confirmPw !== newPw ? 'rgba(248,113,113,0.5)' : undefined,
+              }}
+              placeholder="Repeat new password"
+              value={confirmPw}
+              onChange={e => setConfirmPw(e.target.value)}
+              required
+              disabled={pwLoading}
+              autoComplete="new-password"
+            />
+          </FormField>
+        </div>
+
+        {pwMsg && (
+          <div style={{
+            marginBottom: 12, padding: '8px 12px', borderRadius: 6, fontSize: 12,
+            background: pwMsg.type === 'ok' ? 'rgba(16,185,129,0.08)' : 'rgba(248,113,113,0.08)',
+            border: `1px solid ${pwMsg.type === 'ok' ? 'rgba(16,185,129,0.2)' : 'rgba(248,113,113,0.2)'}`,
+            color: pwMsg.type === 'ok' ? '#10B981' : '#F87171',
+          }}>
+            {pwMsg.text}
+          </div>
+        )}
+
+        <Button type="submit" variant="primary" loading={pwLoading}>
+          Update Password
+        </Button>
+      </form>
     </div>
   )
 }

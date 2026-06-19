@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, Search, LogOut, User, Settings, Plus, Loader } from "lucide-react";
+import { ChevronDown, Search, LogOut, Settings, Plus, Loader } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -112,13 +112,9 @@ function UserMenu() {
             <p className="text-xs text-text-muted truncate">{user.email}</p>
           )}
         </div>
-        <DropdownMenuItem onSelect={() => navigate("/profile")}>
-          <User className="w-3.5 h-3.5" />
-          Profile
-        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigate("/settings")}>
           <Settings className="w-3.5 h-3.5" />
-          Settings
+          Settings &amp; Profile
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

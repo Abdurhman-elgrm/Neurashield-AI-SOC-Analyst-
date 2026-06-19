@@ -39,7 +39,7 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     password_reset_sent_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # ─── Extended profile ─────────────────────────────────────────────────────
-    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     job_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
 

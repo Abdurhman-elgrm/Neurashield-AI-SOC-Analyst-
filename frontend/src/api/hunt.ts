@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client'
+import { apiGet, apiPost, apiDelete } from './client'
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
@@ -135,4 +135,7 @@ export const huntApi = {
 
   listSaved: () =>
     apiGet<SavedHunt[]>('/investigations/hunt/saved'),
+
+  deleteSavedHunt: (huntId: string) =>
+    apiDelete(`/investigations/hunt/saved/${huntId}`),
 }

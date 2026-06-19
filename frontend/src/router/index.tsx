@@ -154,9 +154,6 @@ const ResetPasswordPage = lazyPage(() =>
 const VerifyEmailPage = lazyPage(() =>
   import("@/features/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
 );
-const ProfilePage = lazyPage(() =>
-  import("@/features/profile/ProfilePage").then((m) => ({ default: m.ProfilePage }))
-);
 const PlaybooksPage = lazyPage(() =>
   import("@/features/playbooks/PlaybooksPage").then((m) => ({ default: m.PlaybooksPage }))
 );
@@ -227,8 +224,6 @@ const router = createBrowserRouter([
       // viewer+ (read-only for non-admins, admin-only actions blocked in UI)
       { path: "rules",              element: <S><RulesPage /></S> },
       { path: "graph",              element: <S><GraphPage /></S> },
-      // profile
-      { path: "profile",            element: <S><ProfilePage /></S> },
       // playbooks
       { path: "playbooks",          element: <S><RequireRole min="analyst"><PlaybooksPage /></RequireRole></S> },
       { path: "playbooks/:id",      element: <S><RequireRole min="analyst"><PlaybookDetailPage /></RequireRole></S> },

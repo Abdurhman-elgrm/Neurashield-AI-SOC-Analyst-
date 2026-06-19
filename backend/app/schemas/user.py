@@ -31,7 +31,7 @@ class UserResponse(BaseModel):
 class UserUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     timezone: str | None = Field(default=None, max_length=64)
-    avatar_url: str | None = Field(default=None, max_length=512)
+    avatar_url: str | None = Field(default=None)
     job_title: str | None = Field(default=None, max_length=128)
     bio: str | None = Field(default=None, max_length=2000)
 
@@ -45,6 +45,13 @@ class UserUpdateRequest(BaseModel):
     @field_validator("avatar_url")
     @classmethod
     def validate_avatar_url(cls, v: str | None) -> str | None:
-        if v is not None and v.strip() == "":
+        if v is None:
             return None
-        return v
+        v = v.strip()
+        if v == "":
+            return None
+        if v.startswith("data:image/"):
+            return v
+        if v.startswith("http://") or v.startswith("https://"):
+            return v
+        return None

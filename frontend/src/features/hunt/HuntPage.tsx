@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Play, Plus, Trash2, Save, ChevronDown, Search, Crosshair,
-  Cpu, FileSearch, AlertTriangle, Globe, Shield, Activity,
+  Cpu, FileSearch, AlertTriangle, Globe, Shield, Activity, X, ExternalLink,
 } from 'lucide-react'
 import { huntApi } from '@/api/hunt'
 import type {
@@ -13,20 +13,21 @@ import { formatRelativeTime, extractApiError } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type HuntMode = 'investigation' | 'event'
-type FieldType = 'number' | 'text' | 'status' | 'confidence' | 'verdict'
+type HuntMode    = 'investigation' | 'event'
+type FieldType   = 'number' | 'text' | 'status' | 'confidence' | 'verdict'
+type EvtField    = 'text' | 'number'
 
 // ─── Investigation Hunt Constants ─────────────────────────────────────────────
 
 const INV_HUNT_FIELDS: Array<{ label: string; value: string; type: FieldType }> = [
-  { label: 'Threat Score',       value: 'threat_score',       type: 'number'     },
-  { label: 'Status',             value: 'status',             type: 'status'     },
-  { label: 'Confidence',         value: 'confidence',         type: 'confidence' },
-  { label: 'Verdict',            value: 'verdict',            type: 'verdict'    },
-  { label: 'Title / Summary',    value: 'title',              type: 'text'       },
+  { label: 'Threat Score',    value: 'threat_score',       type: 'number'     },
+  { label: 'Status',          value: 'status',             type: 'status'     },
+  { label: 'Confidence',      value: 'confidence',         type: 'confidence' },
+  { label: 'Verdict',         value: 'verdict',            type: 'verdict'    },
+  { label: 'Title / Summary', value: 'title',              type: 'text'       },
 ]
 
-const INV_OPERATORS_BY_TYPE: Record<FieldType, Array<{ label: string; value: HuntFilter['operator'] }>> = {
+const INV_OPS_BY_TYPE: Record<FieldType, Array<{ label: string; value: HuntFilter['operator'] }>> = {
   number:     [
     { label: '>=', value: 'gte' }, { label: '<=', value: 'lte' },
     { label: '>',  value: 'gt'  }, { label: '<',  value: 'lt'  },
@@ -48,20 +49,18 @@ const VERDICT_OPTIONS    = ['true_positive', 'false_positive', 'benign_positive'
 
 // ─── Event Hunt Constants ─────────────────────────────────────────────────────
 
-type EventFieldType = 'text' | 'number'
-
-const EVT_HUNT_FIELDS: Array<{ label: string; value: string; type: EventFieldType; placeholder?: string }> = [
-  { label: 'Hostname',       value: 'host_name',      type: 'text',   placeholder: 'e.g. DESKTOP-01 or *srv*' },
-  { label: 'Username',       value: 'username',       type: 'text',   placeholder: 'e.g. john.doe or SYSTEM'  },
-  { label: 'Process Name',   value: 'process_name',   type: 'text',   placeholder: 'e.g. powershell.exe'      },
-  { label: 'Source IP',      value: 'source_ip',      type: 'text',   placeholder: 'e.g. 192.168.1.100'       },
-  { label: 'Dest IP',        value: 'dest_ip',        type: 'text',   placeholder: 'e.g. 10.0.0.1'            },
-  { label: 'Country',        value: 'geo_country',    type: 'text',   placeholder: 'e.g. CN, RU'              },
-  { label: 'Correlation ID', value: 'correlation_id', type: 'text',   placeholder: 'correlation group ID'     },
-  { label: 'Severity',       value: 'severity',       type: 'number', placeholder: '1–4'                      },
+const EVT_HUNT_FIELDS: Array<{ label: string; value: string; type: EvtField; placeholder?: string }> = [
+  { label: 'Hostname',       value: 'host_name',      type: 'text',   placeholder: 'e.g. DESKTOP-01 or *srv*'    },
+  { label: 'Username',       value: 'username',       type: 'text',   placeholder: 'e.g. john.doe or SYSTEM'     },
+  { label: 'Process Name',   value: 'process_name',   type: 'text',   placeholder: 'e.g. powershell.exe'         },
+  { label: 'Source IP',      value: 'source_ip',      type: 'text',   placeholder: 'e.g. 192.168.1.100'          },
+  { label: 'Dest IP',        value: 'dest_ip',        type: 'text',   placeholder: 'e.g. 10.0.0.1'               },
+  { label: 'Country',        value: 'geo_country',    type: 'text',   placeholder: 'e.g. CN, RU'                 },
+  { label: 'Correlation ID', value: 'correlation_id', type: 'text',   placeholder: 'group correlation ID'        },
+  { label: 'Severity',       value: 'severity',       type: 'number', placeholder: '1 = low … 4 = critical'      },
 ]
 
-const EVT_OPERATORS_BY_TYPE: Record<EventFieldType, Array<{ label: string; value: EventHuntFilter['operator'] }>> = {
+const EVT_OPS_BY_TYPE: Record<EvtField, Array<{ label: string; value: EventHuntFilter['operator'] }>> = {
   text:   [
     { label: 'contains',    value: 'contains'   },
     { label: 'equals',      value: 'eq'         },
@@ -84,11 +83,11 @@ const UEBA_FLAG_OPTIONS = [
 ]
 
 const TIME_RANGES = [
-  { label: 'Last Hour',   value: '1h'  },
-  { label: 'Last 24h',    value: '24h' },
-  { label: 'Last 7 days', value: '7d'  },
-  { label: 'Last 30 days',value: '30d' },
-  { label: 'All time',    value: ''    },
+  { label: 'Last Hour',    value: '1h'  },
+  { label: 'Last 24h',     value: '24h' },
+  { label: 'Last 7 days',  value: '7d'  },
+  { label: 'Last 30 days', value: '30d' },
+  { label: 'All time',     value: ''    },
 ]
 
 const MITRE_TACTICS = [
@@ -133,9 +132,9 @@ function getSeverityLabel(sev: number): { label: string; color: string } {
 
 function getCategoryColor(cat: string): string {
   const map: Record<string, string> = {
-    auth:     '#818CF8', process: '#34D399', network: '#60A5FA',
-    file:     '#FBBF24', registry: '#F59E0B', dns: '#A78BFA',
-    system:   '#8B95A7', other: '#6B7280',
+    auth: '#818CF8', process: '#34D399', network: '#60A5FA',
+    file: '#FBBF24', registry: '#F59E0B', dns: '#A78BFA',
+    system: '#8B95A7', other: '#6B7280',
   }
   return map[cat] ?? '#6B7280'
 }
@@ -148,12 +147,258 @@ function formatTimestamp(iso: string): string {
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: false,
     })
-  } catch {
-    return iso
-  }
+  } catch { return iso }
 }
 
-// ─── Shared sub-components ────────────────────────────────────────────────────
+// ─── Gap 4: TagChipInput ──────────────────────────────────────────────────────
+
+function TagChipInput({
+  tags, onChange, placeholder = 'Add tag, press Enter...',
+}: { tags: string[]; onChange: (t: string[]) => void; placeholder?: string }) {
+  const [input, setInput] = useState('')
+
+  const commit = () => {
+    const v = input.trim().replace(/,+$/, '')
+    if (v && !tags.includes(v)) onChange([...tags, v])
+    setInput('')
+  }
+
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
+      padding: '5px 8px', borderRadius: 6,
+      border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)',
+      minHeight: 34,
+    }}>
+      {tags.map(t => (
+        <span key={t} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '2px 8px', borderRadius: 4,
+          background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)',
+          fontSize: 11, fontWeight: 600, color: '#A78BFA',
+        }}>
+          {t}
+          <button
+            onClick={() => onChange(tags.filter(x => x !== t))}
+            style={{ background: 'none', border: 'none', color: '#A78BFA', cursor: 'pointer', lineHeight: 1, padding: 0, fontSize: 13, opacity: 0.7 }}
+          >×</button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit() }
+          if (e.key === 'Backspace' && !input && tags.length) onChange(tags.slice(0, -1))
+        }}
+        onBlur={commit}
+        placeholder={tags.length === 0 ? placeholder : ''}
+        style={{
+          background: 'transparent', border: 'none', outline: 'none',
+          fontSize: 12, color: '#F5F7FA', flexGrow: 1, minWidth: 120,
+        }}
+      />
+    </div>
+  )
+}
+
+// ─── Gap 2: EvtDetailDrawer ───────────────────────────────────────────────────
+
+function DrawerField({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
+  if (!value) return null
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#5C6373', flexShrink: 0, marginRight: 12 }}>
+        {label}
+      </span>
+      <span style={{
+        fontSize: mono ? 11 : 12, color: '#B8C0CC', textAlign: 'right',
+        fontFamily: mono ? "'JetBrains Mono', monospace" : 'inherit',
+        wordBreak: 'break-all',
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function DrawerSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function EvtDetailDrawer({
+  event, onClose, navigate,
+}: { event: EventHuntResultEntry; onClose: () => void; navigate: (path: string) => void }) {
+  const sev      = getSeverityLabel(event.severity)
+  const catColor = getCategoryColor(event.category)
+  const anomalyPct = Math.round(event.anomaly_score * 100)
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+      <div style={{
+        position: 'fixed', right: 0, top: 0, bottom: 0, width: 420, zIndex: 41,
+        background: '#0A0A0A', borderLeft: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '-20px 0 60px rgba(0,0,0,0.5)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#F5F7FA', fontFamily: "'Space Grotesk', sans-serif" }}>
+              Event Detail
+            </div>
+            <div style={{ fontSize: 10, color: '#3A4150', fontFamily: "'JetBrains Mono', monospace", marginTop: 3 }}>
+              {event.event_id}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, height: 28, borderRadius: 6,
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+            color: '#5C6373', cursor: 'pointer',
+          }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
+          {/* Classification badges */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            <span style={{
+              padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+              background: `${catColor}18`, color: catColor, border: `1px solid ${catColor}33`,
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+            }}>{event.category}</span>
+            <span style={{ padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: sev.color }}>
+              {sev.label}
+            </span>
+            {event.is_anomaly && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                background: 'rgba(245,158,11,0.1)', color: '#FBBF24', border: '1px solid rgba(245,158,11,0.25)',
+              }}>
+                <AlertTriangle size={11} /> ANOMALY
+              </span>
+            )}
+            {event.is_threat_ip && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                background: 'rgba(239,68,68,0.1)', color: '#F87171', border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+                <Shield size={11} /> THREAT IP
+              </span>
+            )}
+          </div>
+
+          <DrawerSection label="Event">
+            <DrawerField label="Timestamp" value={formatTimestamp(event.timestamp)} mono />
+            <DrawerField label="Hostname"  value={event.host_name} />
+            <DrawerField label="Username"  value={event.username} />
+            <DrawerField label="Process"   value={event.process_name} mono />
+            <DrawerField label="Source IP" value={event.source_ip} mono />
+            <DrawerField label="Dest IP"   value={event.dest_ip} mono />
+            <DrawerField label="Country"   value={event.geo_country} />
+          </DrawerSection>
+
+          {(event.is_anomaly || event.is_threat_ip || event.ueba_flags.length > 0) && (
+            <DrawerSection label="UEBA Analysis">
+              {event.anomaly_score > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 10, color: '#5C6373', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Anomaly Score</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: event.is_anomaly ? '#FBBF24' : '#5C6373', fontFamily: "'JetBrains Mono', monospace" }}>
+                      {anomalyPct}%
+                    </span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 2,
+                      width: `${Math.min(anomalyPct, 100)}%`,
+                      background: event.is_anomaly ? '#FBBF24' : '#475569',
+                      transition: 'width 400ms ease',
+                    }} />
+                  </div>
+                </div>
+              )}
+              {event.ueba_flags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {event.ueba_flags.map(flag => (
+                    <span key={flag} style={{
+                      padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                      background: 'rgba(99,102,241,0.1)', color: '#818CF8',
+                      border: '1px solid rgba(99,102,241,0.2)',
+                    }}>{flag.replace(/_/g, ' ')}</span>
+                  ))}
+                </div>
+              )}
+            </DrawerSection>
+          )}
+
+          {event.tags.length > 0 && (
+            <DrawerSection label="Tags">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {event.tags.map(tag => (
+                  <span key={tag} style={{
+                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    background: 'rgba(167,139,250,0.08)', color: '#A78BFA',
+                    border: '1px solid rgba(167,139,250,0.2)',
+                  }}>{tag}</span>
+                ))}
+              </div>
+            </DrawerSection>
+          )}
+
+          {event.match_reasons.length > 0 && (
+            <DrawerSection label="Match Reasons">
+              {event.match_reasons.map((r, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                  <span style={{ color: '#60A5FA', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>›</span>
+                  <span style={{ fontSize: 11, color: '#8B95A7', fontFamily: "'JetBrains Mono', monospace" }}>{r}</span>
+                </div>
+              ))}
+            </DrawerSection>
+          )}
+
+          {event.correlation_id && (
+            <DrawerSection label="Linked Investigation">
+              <button
+                onClick={() => navigate(`/investigations/${event.correlation_id}`)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  width: '100%', padding: '9px 14px', borderRadius: 7,
+                  background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)',
+                  color: '#60A5FA', fontSize: 12, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                }}
+              >
+                <ExternalLink size={13} />
+                Open Investigation
+                <span style={{ marginLeft: 'auto', fontSize: 10, color: '#3A4150', fontFamily: "'JetBrains Mono', monospace" }}>
+                  {event.correlation_id.slice(0, 8)}…
+                </span>
+              </button>
+            </DrawerSection>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── MitreTacticsDropdown ─────────────────────────────────────────────────────
 
 function MitreTacticsDropdown({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false)
@@ -217,6 +462,75 @@ function MitreTacticsDropdown({ selected, onChange }: { selected: string[]; onCh
   )
 }
 
+function MultiSelectDropdown({
+  label: labelText, options, selected, onChange, accentColor = '#3B82F6',
+}: {
+  label: string; options: string[]; selected: string[]
+  onChange: (v: string[]) => void; accentColor?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  const toggle = (v: string) =>
+    onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+
+  const displayLabel = selected.length === 0 ? labelText
+    : selected.length === 1 ? selected[0]
+    : `${selected.length} selected`
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(!open)} className="inp" style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        cursor: 'pointer', width: '100%', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontSize: 12, color: selected.length ? '#F5F7FA' : '#5C6373' }}>{displayLabel}</span>
+        <ChevronDown size={13} style={{ color: '#5C6373', flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+          background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 8, marginTop: 4, maxHeight: 240, overflowY: 'auto',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+        }}>
+          {options.map(opt => {
+            const checked = selected.includes(opt)
+            return (
+              <label key={opt} onClick={() => toggle(opt)} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 12px', cursor: 'pointer',
+                background: checked ? `${accentColor}0d` : 'transparent',
+                borderBottom: '1px solid rgba(255,255,255,0.03)',
+              }}>
+                <div style={{
+                  width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                  background: checked ? accentColor : 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${checked ? accentColor : 'rgba(255,255,255,0.12)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {checked && <div style={{ width: 8, height: 8, borderRadius: 1.5, background: '#fff' }} />}
+                </div>
+                <span style={{ fontSize: 12, color: checked ? '#F5F7FA' : '#8B95A7' }}>{opt}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── SaveModal ────────────────────────────────────────────────────────────────
+
 function SaveModal({ onSave, onClose }: {
   onSave: (name: string, desc: string) => Promise<void>
   onClose: () => void
@@ -247,21 +561,19 @@ function SaveModal({ onSave, onClose }: {
           Save Hunt
         </div>
         <p style={{ fontSize: 12, color: '#5C6373', marginBottom: 20 }}>Save current query for quick re-use</p>
-        {(['Name', 'Description (optional)'] as const).map((lbl, i) => {
-          const val  = i === 0 ? name : desc
-          const set  = i === 0 ? setName : setDesc
-          const ph   = i === 0 ? 'e.g. Lateral Movement — Off-hours' : 'Brief description...'
-          return (
-            <div key={lbl} style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>{lbl}</label>
-              <input className="inp" style={{ width: '100%' }} placeholder={ph}
-                value={val} onChange={e => set(e.target.value)}
-                onKeyDown={i === 0 ? e => e.key === 'Enter' && handleSave() : undefined}
-                autoFocus={i === 0}
-              />
-            </div>
-          )
-        })}
+        {[
+          { lbl: 'Name', val: name, set: setName, ph: 'e.g. Lateral Movement Off-hours', kb: true },
+          { lbl: 'Description (optional)', val: desc, set: setDesc, ph: 'Brief description...', kb: false },
+        ].map(({ lbl, val, set, ph, kb }) => (
+          <div key={lbl} style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>{lbl}</label>
+            <input className="inp" style={{ width: '100%' }} placeholder={ph}
+              value={val} onChange={e => set(e.target.value)}
+              onKeyDown={kb ? e => e.key === 'Enter' && handleSave() : undefined}
+              autoFocus={kb}
+            />
+          </div>
+        ))}
         {err && <p style={{ fontSize: 12, color: '#FCA5A5', marginBottom: 12 }}>{err}</p>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
           <button onClick={onClose} style={{
@@ -273,8 +585,7 @@ function SaveModal({ onSave, onClose }: {
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
             background: name.trim() && !saving ? '#3B82F6' : 'rgba(59,130,246,0.3)',
-            border: 'none', color: '#fff',
-            cursor: name.trim() && !saving ? 'pointer' : 'default',
+            border: 'none', color: '#fff', cursor: name.trim() && !saving ? 'pointer' : 'default',
           }}>
             <Save size={13} />
             {saving ? 'Saving...' : 'Save'}
@@ -285,23 +596,51 @@ function SaveModal({ onSave, onClose }: {
   )
 }
 
-// ─── Investigation Hunt sub-components ───────────────────────────────────────
+// ─── Summary Bar ──────────────────────────────────────────────────────────────
 
-function InvFilterRow({
-  filter, onChange, onRemove, canRemove,
-}: {
-  filter: HuntFilter
-  onChange: (f: HuntFilter) => void
-  onRemove: () => void
-  canRemove: boolean
+function SummaryBar({ summary }: { summary: EventHuntSummary }) {
+  const stats = [
+    { icon: Cpu,           label: 'Unique Hosts',  value: summary.unique_hosts,     color: '#60A5FA' },
+    { icon: Activity,      label: 'Unique Users',  value: summary.unique_users,     color: '#818CF8' },
+    { icon: Globe,         label: 'Unique IPs',    value: summary.unique_ips,       color: '#34D399' },
+    { icon: AlertTriangle, label: 'Anomalies',     value: summary.total_anomalies,  color: '#FBBF24' },
+    { icon: Shield,        label: 'Threat IPs',    value: summary.total_threat_ips, color: '#F87171' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      {stats.map(({ icon: Icon, label, value, color }) => (
+        <div key={label} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 14px', borderRadius: 8,
+          background: `${color}0d`, border: `1px solid ${color}22`,
+          flex: '1 1 auto', minWidth: 110,
+        }}>
+          <Icon size={14} style={{ color, flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "'Space Grotesk', sans-serif", lineHeight: 1 }}>
+              {value}
+            </div>
+            <div style={{ fontSize: 10, color: '#5C6373', marginTop: 2 }}>{label}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Investigation Hunt sub-components ────────────────────────────────────────
+
+function InvFilterRow({ filter, onChange, onRemove, canRemove }: {
+  filter: HuntFilter; onChange: (f: HuntFilter) => void
+  onRemove: () => void; canRemove: boolean
 }) {
-  const field = INV_HUNT_FIELDS.find(f => f.value === filter.field)
+  const field     = INV_HUNT_FIELDS.find(f => f.value === filter.field)
   const fieldType = field?.type ?? 'text'
-  const operators = INV_OPERATORS_BY_TYPE[fieldType]
+  const operators = INV_OPS_BY_TYPE[fieldType]
 
   const handleFieldChange = (fv: string) => {
     const newType = INV_HUNT_FIELDS.find(f => f.value === fv)?.type ?? 'text'
-    onChange({ field: fv, operator: INV_OPERATORS_BY_TYPE[newType][0].value, value: '' })
+    onChange({ field: fv, operator: INV_OPS_BY_TYPE[newType][0].value, value: '' })
   }
 
   let valueEl: ReactNode
@@ -419,21 +758,17 @@ function InvResultRow({ entry, onClick, isLast }: { entry: HuntResultEntry; onCl
 
 // ─── Event Hunt sub-components ────────────────────────────────────────────────
 
-function EvtFilterRow({
-  filter, onChange, onRemove, canRemove,
-}: {
-  filter: EventHuntFilter
-  onChange: (f: EventHuntFilter) => void
-  onRemove: () => void
-  canRemove: boolean
+function EvtFilterRow({ filter, onChange, onRemove, canRemove }: {
+  filter: EventHuntFilter; onChange: (f: EventHuntFilter) => void
+  onRemove: () => void; canRemove: boolean
 }) {
-  const field = EVT_HUNT_FIELDS.find(f => f.value === filter.field)
+  const field     = EVT_HUNT_FIELDS.find(f => f.value === filter.field)
   const fieldType = field?.type ?? 'text'
-  const operators = EVT_OPERATORS_BY_TYPE[fieldType]
+  const operators = EVT_OPS_BY_TYPE[fieldType]
 
   const handleFieldChange = (fv: string) => {
     const newType = EVT_HUNT_FIELDS.find(f => f.value === fv)?.type ?? 'text'
-    onChange({ field: fv, operator: EVT_OPERATORS_BY_TYPE[newType][0].value, value: '' })
+    onChange({ field: fv, operator: EVT_OPS_BY_TYPE[newType][0].value, value: '' })
   }
 
   return (
@@ -467,145 +802,37 @@ function EvtFilterRow({
   )
 }
 
-function MultiSelectDropdown({
-  label: labelText, options, selected, onChange, accentColor = '#3B82F6',
-}: {
-  label: string
-  options: string[]
-  selected: string[]
-  onChange: (v: string[]) => void
-  accentColor?: string
+// Gap 2 — EvtResultRow is now clickable ───────────────────────────────────────
+
+function EvtResultRow({ entry, onClick, isLast }: {
+  entry: EventHuntResultEntry; onClick: () => void; isLast: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [])
-
-  const toggle = (v: string) =>
-    onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
-
-  const displayLabel = selected.length === 0
-    ? labelText
-    : selected.length === 1 ? selected[0]
-    : `${selected.length} selected`
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(!open)} className="inp" style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        cursor: 'pointer', width: '100%', justifyContent: 'space-between',
-      }}>
-        <span style={{ fontSize: 12, color: selected.length ? '#F5F7FA' : '#5C6373' }}>{displayLabel}</span>
-        <ChevronDown size={13} style={{ color: '#5C6373', flexShrink: 0 }} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-          background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 8, marginTop: 4, maxHeight: 240, overflowY: 'auto',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        }}>
-          {options.map(opt => {
-            const checked = selected.includes(opt)
-            return (
-              <label key={opt} onClick={() => toggle(opt)} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '7px 12px', cursor: 'pointer',
-                background: checked ? `${accentColor}0d` : 'transparent',
-                borderBottom: '1px solid rgba(255,255,255,0.03)',
-              }}>
-                <div style={{
-                  width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-                  background: checked ? accentColor : 'rgba(255,255,255,0.08)',
-                  border: `1px solid ${checked ? accentColor : 'rgba(255,255,255,0.12)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {checked && <div style={{ width: 8, height: 8, borderRadius: 1.5, background: '#fff' }} />}
-                </div>
-                <span style={{ fontSize: 12, color: checked ? '#F5F7FA' : '#8B95A7' }}>{opt}</span>
-              </label>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SummaryBar({ summary }: { summary: EventHuntSummary }) {
-  const stats = [
-    { icon: Cpu,           label: 'Unique Hosts',  value: summary.unique_hosts,     color: '#60A5FA' },
-    { icon: Activity,      label: 'Unique Users',  value: summary.unique_users,     color: '#818CF8' },
-    { icon: Globe,         label: 'Unique IPs',    value: summary.unique_ips,       color: '#34D399' },
-    { icon: AlertTriangle, label: 'Anomalies',     value: summary.total_anomalies,  color: '#FBBF24' },
-    { icon: Shield,        label: 'Threat IPs',    value: summary.total_threat_ips, color: '#F87171' },
-  ]
-  return (
-    <div style={{
-      display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap',
-    }}>
-      {stats.map(({ icon: Icon, label, value, color }) => (
-        <div key={label} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 14px', borderRadius: 8,
-          background: `${color}0d`, border: `1px solid ${color}22`,
-          flex: '1 1 auto', minWidth: 110,
-        }}>
-          <Icon size={14} style={{ color, flexShrink: 0 }} />
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "'Space Grotesk', sans-serif", lineHeight: 1 }}>
-              {value}
-            </div>
-            <div style={{ fontSize: 10, color: '#5C6373', marginTop: 2 }}>{label}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function EvtResultRow({ entry, isLast }: { entry: EventHuntResultEntry; isLast: boolean }) {
-  const sev = getSeverityLabel(entry.severity)
+  const sev      = getSeverityLabel(entry.severity)
   const catColor = getCategoryColor(entry.category)
 
   return (
-    <div style={{
+    <div onClick={onClick} style={{
       display: 'grid',
       gridTemplateColumns: '148px 140px 140px 120px 80px 70px 1fr',
       padding: '9px 14px',
       borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
-      alignItems: 'center', fontSize: 12,
+      alignItems: 'center', fontSize: 12, cursor: 'pointer',
     }}
     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
     >
-      {/* Timestamp */}
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#5C6373' }}>
         {formatTimestamp(entry.timestamp)}
       </div>
-
-      {/* Hostname */}
       <div style={{ color: '#B8C0CC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
         {entry.host_name ?? <span style={{ color: '#3A4150' }}>—</span>}
       </div>
-
-      {/* Username */}
       <div style={{ color: '#B8C0CC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
         {entry.username ?? <span style={{ color: '#3A4150' }}>—</span>}
       </div>
-
-      {/* Process / Source IP */}
       <div style={{ color: '#8B95A7', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
         {entry.process_name ?? entry.source_ip ?? <span style={{ color: '#3A4150' }}>—</span>}
       </div>
-
-      {/* Category */}
       <div>
         <span style={{
           display: 'inline-block', padding: '2px 7px', borderRadius: 4,
@@ -613,13 +840,9 @@ function EvtResultRow({ entry, isLast }: { entry: EventHuntResultEntry; isLast: 
           background: `${catColor}18`, color: catColor, border: `1px solid ${catColor}33`,
         }}>{entry.category}</span>
       </div>
-
-      {/* Severity */}
       <div>
         <span style={{ fontSize: 9, fontWeight: 700, color: sev.color }}>{sev.label}</span>
       </div>
-
-      {/* Flags */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', overflow: 'hidden' }}>
         {entry.is_threat_ip && (
           <span style={{
@@ -627,9 +850,7 @@ function EvtResultRow({ entry, isLast }: { entry: EventHuntResultEntry; isLast: 
             padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
             background: 'rgba(239,68,68,0.1)', color: '#F87171', border: '1px solid rgba(239,68,68,0.2)',
             whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            <Shield size={9} /> THREAT IP
-          </span>
+          }}><Shield size={9} /> THREAT IP</span>
         )}
         {entry.is_anomaly && (
           <span style={{
@@ -637,9 +858,7 @@ function EvtResultRow({ entry, isLast }: { entry: EventHuntResultEntry; isLast: 
             padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
             background: 'rgba(245,158,11,0.1)', color: '#FBBF24', border: '1px solid rgba(245,158,11,0.2)',
             whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            <AlertTriangle size={9} /> ANOMALY
-          </span>
+          }}><AlertTriangle size={9} /> ANOMALY</span>
         )}
         {entry.ueba_flags.slice(0, 1).map(flag => (
           <span key={flag} style={{
@@ -664,41 +883,43 @@ function EvtResultRow({ entry, isLast }: { entry: EventHuntResultEntry; isLast: 
 export function HuntPage() {
   const navigate = useNavigate()
 
-  // ── Shared state ────────────────────────────────────────────────────────────
+  // ── Shared ──────────────────────────────────────────────────────────────────
   const [mode, setMode]               = useState<HuntMode>('event')
   const [timeRange, setTimeRange]     = useState('24h')
   const [filterLogic, setFilterLogic] = useState<FilterLogic>('and')
   const [savedHunts, setSavedHunts]   = useState<SavedHunt[]>([])
   const [showSaveModal, setShowSaveModal] = useState(false)
 
-  // ── Investigation Hunt state ─────────────────────────────────────────────────
-  const [invFilters, setInvFilters]   = useState<HuntFilter[]>([{ field: 'threat_score', operator: 'gte', value: '60' }])
+  // ── Investigation Hunt ───────────────────────────────────────────────────────
+  const [invFilters, setInvFilters]     = useState<HuntFilter[]>([{ field: 'threat_score', operator: 'gte', value: '60' }])
   const [mitreTactics, setMitreTactics] = useState<string[]>([])
-  const [invResults, setInvResults]   = useState<HuntResultEntry[]>([])
-  const [invCursor, setInvCursor]     = useState<string | null>(null)
-  const [invHasMore, setInvHasMore]   = useState(false)
-  const [invTotal, setInvTotal]       = useState<number | null>(null)
-  const [invRunning, setInvRunning]   = useState(false)
-  const [invLoadMore, setInvLoadMore] = useState(false)
-  const [invError, setInvError]       = useState<string | null>(null)
-  const [invHasRun, setInvHasRun]     = useState(false)
+  const [invResults, setInvResults]     = useState<HuntResultEntry[]>([])
+  const [invCursor, setInvCursor]       = useState<string | null>(null)
+  const [invHasMore, setInvHasMore]     = useState(false)
+  const [invTotal, setInvTotal]         = useState<number | null>(null)
+  const [invRunning, setInvRunning]     = useState(false)
+  const [invLoadMore, setInvLoadMore]   = useState(false)
+  const [invError, setInvError]         = useState<string | null>(null)
+  const [invHasRun, setInvHasRun]       = useState(false)
 
-  // ── Event Hunt state ─────────────────────────────────────────────────────────
-  const [evtFilters, setEvtFilters]   = useState<EventHuntFilter[]>([{ field: 'host_name', operator: 'contains', value: '' }])
-  const [evtCategories, setEvtCategories] = useState<string[]>([])
-  const [evtUebaFlags, setEvtUebaFlags]   = useState<string[]>([])
-  const [evtIsAnomaly, setEvtIsAnomaly]   = useState<boolean | null>(null)
-  const [evtIsThreatIp, setEvtIsThreatIp] = useState<boolean | null>(null)
+  // ── Event Hunt ───────────────────────────────────────────────────────────────
+  const [evtFilters, setEvtFilters]         = useState<EventHuntFilter[]>([{ field: 'host_name', operator: 'contains', value: '' }])
+  const [evtCategories, setEvtCategories]   = useState<string[]>([])
+  const [evtUebaFlags, setEvtUebaFlags]     = useState<string[]>([])
+  const [evtTags, setEvtTags]               = useState<string[]>([])          // Gap 4
+  const [evtIsAnomaly, setEvtIsAnomaly]     = useState<boolean | null>(null)
+  const [evtIsThreatIp, setEvtIsThreatIp]   = useState<boolean | null>(null)
   const [evtMinSeverity, setEvtMinSeverity] = useState<number | null>(null)
-  const [evtResults, setEvtResults]   = useState<EventHuntResultEntry[]>([])
-  const [evtSummary, setEvtSummary]   = useState<EventHuntSummary | null>(null)
-  const [evtCursor, setEvtCursor]     = useState<string | null>(null)
-  const [evtHasMore, setEvtHasMore]   = useState(false)
-  const [evtTotal, setEvtTotal]       = useState<number | null>(null)
-  const [evtRunning, setEvtRunning]   = useState(false)
-  const [evtLoadMore, setEvtLoadMore] = useState(false)
-  const [evtError, setEvtError]       = useState<string | null>(null)
-  const [evtHasRun, setEvtHasRun]     = useState(false)
+  const [evtResults, setEvtResults]         = useState<EventHuntResultEntry[]>([])
+  const [evtSummary, setEvtSummary]         = useState<EventHuntSummary | null>(null)
+  const [evtCursor, setEvtCursor]           = useState<string | null>(null)
+  const [evtHasMore, setEvtHasMore]         = useState(false)
+  const [evtTotal, setEvtTotal]             = useState<number | null>(null)
+  const [evtRunning, setEvtRunning]         = useState(false)
+  const [evtLoadMore, setEvtLoadMore]       = useState(false)
+  const [evtError, setEvtError]             = useState<string | null>(null)
+  const [evtHasRun, setEvtHasRun]           = useState(false)
+  const [selectedEvt, setSelectedEvt]       = useState<EventHuntResultEntry | null>(null)  // Gap 2
 
   useEffect(() => {
     huntApi.listSaved()
@@ -742,22 +963,23 @@ export function HuntPage() {
   // ── Event Hunt handlers ──────────────────────────────────────────────────────
 
   const buildEvtQuery = useCallback((cursor?: string | null): EventHuntQuery => ({
-    filters:       evtFilters.filter(f => f.value.trim() !== ''),
-    logic:         filterLogic,
-    from_ts:       getFromTs(timeRange),
-    to_ts:         null,
-    category:      evtCategories.length ? evtCategories : undefined,
-    min_severity:  evtMinSeverity ?? undefined,
-    is_anomaly:    evtIsAnomaly ?? undefined,
-    is_threat_ip:  evtIsThreatIp ?? undefined,
-    ueba_flags:    evtUebaFlags.length ? evtUebaFlags : undefined,
-    cursor:        cursor ?? null,
-    limit:         50,
-    sort:          'desc',
-  }), [evtFilters, filterLogic, timeRange, evtCategories, evtMinSeverity, evtIsAnomaly, evtIsThreatIp, evtUebaFlags])
+    filters:      evtFilters.filter(f => f.value.trim() !== ''),
+    logic:        filterLogic,
+    from_ts:      getFromTs(timeRange),
+    to_ts:        null,
+    category:     evtCategories.length ? evtCategories : undefined,
+    min_severity: evtMinSeverity ?? undefined,
+    is_anomaly:   evtIsAnomaly ?? undefined,
+    is_threat_ip: evtIsThreatIp ?? undefined,
+    ueba_flags:   evtUebaFlags.length ? evtUebaFlags : undefined,
+    tags:         evtTags.length ? evtTags : undefined,               // Gap 4
+    cursor:       cursor ?? null,
+    limit:        50,
+    sort:         'desc',
+  }), [evtFilters, filterLogic, timeRange, evtCategories, evtMinSeverity, evtIsAnomaly, evtIsThreatIp, evtUebaFlags, evtTags])
 
   const handleEvtRun = async () => {
-    setEvtRunning(true); setEvtError(null)
+    setEvtRunning(true); setEvtError(null); setSelectedEvt(null)
     try {
       const res = await huntApi.runEventHunt(buildEvtQuery())
       setEvtResults(res.entries); setEvtSummary(res.summary)
@@ -782,22 +1004,24 @@ export function HuntPage() {
 
   const loadSavedHunt = (hunt: SavedHunt) => {
     const q = hunt.query_params as {
-      mode?: HuntMode
-      filters?: HuntFilter[]; logic?: FilterLogic; mitre_tactics?: string[]
+      mode?: HuntMode; logic?: FilterLogic
+      filters?: HuntFilter[]; mitre_tactics?: string[]
       evt_filters?: EventHuntFilter[]; evt_categories?: string[]
-      evt_ueba_flags?: string[]; evt_is_anomaly?: boolean | null
-      evt_is_threat_ip?: boolean | null; evt_min_severity?: number | null
+      evt_ueba_flags?: string[]; evt_tags?: string[]
+      evt_is_anomaly?: boolean | null; evt_is_threat_ip?: boolean | null
+      evt_min_severity?: number | null
     }
     if (q.mode) setMode(q.mode)
-    if (Array.isArray(q.filters))         setInvFilters(q.filters)
     if (q.logic === 'and' || q.logic === 'or') setFilterLogic(q.logic)
-    if (Array.isArray(q.mitre_tactics))   setMitreTactics(q.mitre_tactics)
-    if (Array.isArray(q.evt_filters))     setEvtFilters(q.evt_filters)
-    if (Array.isArray(q.evt_categories))  setEvtCategories(q.evt_categories)
-    if (Array.isArray(q.evt_ueba_flags))  setEvtUebaFlags(q.evt_ueba_flags)
-    if (q.evt_is_anomaly  !== undefined)  setEvtIsAnomaly(q.evt_is_anomaly ?? null)
-    if (q.evt_is_threat_ip !== undefined) setEvtIsThreatIp(q.evt_is_threat_ip ?? null)
-    if (q.evt_min_severity !== undefined) setEvtMinSeverity(q.evt_min_severity ?? null)
+    if (Array.isArray(q.filters))          setInvFilters(q.filters)
+    if (Array.isArray(q.mitre_tactics))    setMitreTactics(q.mitre_tactics)
+    if (Array.isArray(q.evt_filters))      setEvtFilters(q.evt_filters)
+    if (Array.isArray(q.evt_categories))   setEvtCategories(q.evt_categories)
+    if (Array.isArray(q.evt_ueba_flags))   setEvtUebaFlags(q.evt_ueba_flags)
+    if (Array.isArray(q.evt_tags))         setEvtTags(q.evt_tags)             // Gap 4
+    if (q.evt_is_anomaly   !== undefined)  setEvtIsAnomaly(q.evt_is_anomaly ?? null)
+    if (q.evt_is_threat_ip !== undefined)  setEvtIsThreatIp(q.evt_is_threat_ip ?? null)
+    if (q.evt_min_severity !== undefined)  setEvtMinSeverity(q.evt_min_severity ?? null)
   }
 
   const handleSave = async (name: string, desc: string) => {
@@ -805,20 +1029,28 @@ export function HuntPage() {
       mode, logic: filterLogic,
       filters: invFilters, mitre_tactics: mitreTactics,
       evt_filters: evtFilters, evt_categories: evtCategories,
-      evt_ueba_flags: evtUebaFlags,
-      evt_is_anomaly: evtIsAnomaly,
-      evt_is_threat_ip: evtIsThreatIp,
+      evt_ueba_flags: evtUebaFlags, evt_tags: evtTags,            // Gap 4
+      evt_is_anomaly: evtIsAnomaly, evt_is_threat_ip: evtIsThreatIp,
       evt_min_severity: evtMinSeverity,
     }
     const hunt = await huntApi.saveHunt({ name, description: desc || undefined, query_params })
     setSavedHunts(prev => [hunt, ...prev])
   }
 
+  // Gap 3 — delete saved hunt ─────────────────────────────────────────────────
+  const handleDeleteSavedHunt = async (hunt: SavedHunt, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(`Delete saved hunt "${hunt.name}"?`)) return
+    try {
+      await huntApi.deleteSavedHunt(hunt.hunt_id)
+      setSavedHunts(prev => prev.filter(h => h.hunt_id !== hunt.hunt_id))
+    } catch { /* silent — already deleted or network error */ }
+  }
+
   const isRunning = mode === 'investigation' ? invRunning : evtRunning
   const handleRun = mode === 'investigation' ? handleInvRun : handleEvtRun
 
-  // ── Toggle helpers ───────────────────────────────────────────────────────────
-
+  // Gap 1 — BoolToggle without emojis ─────────────────────────────────────────
   const BoolToggle = ({ value, onChange, label }: {
     value: boolean | null; onChange: (v: boolean | null) => void; label: string
   }) => (
@@ -834,10 +1066,12 @@ export function HuntPage() {
     </button>
   )
 
+  // ────────────────────────────────────────────────────────────────────────────
+
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 50px - 40px)', overflow: 'hidden', background: '#050505' }}>
 
-      {/* ── Saved Hunts Sidebar ─────────────────────────────────────────────── */}
+      {/* ── Saved Hunts Sidebar (Gap 3 — delete button added) ─────────────── */}
       <div style={{
         width: 210, flexShrink: 0,
         borderRight: '1px solid rgba(255,255,255,0.06)',
@@ -865,20 +1099,48 @@ export function HuntPage() {
             </div>
           ) : (
             savedHunts.map(hunt => (
-              <button key={hunt.hunt_id} onClick={() => loadSavedHunt(hunt)} style={{
-                display: 'block', width: '100%', padding: '9px 14px',
-                textAlign: 'left', background: 'transparent', border: 'none',
-                borderBottom: '1px solid rgba(255,255,255,0.03)',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              <div
+                key={hunt.hunt_id}
+                onClick={() => loadSavedHunt(hunt)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '9px 10px 9px 14px',
+                  borderBottom: '1px solid rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#B8C0CC', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {hunt.name}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#B8C0CC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {hunt.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#5C6373' }}>{hunt.run_count} run{hunt.run_count !== 1 ? 's' : ''}</div>
                 </div>
-                <div style={{ fontSize: 10, color: '#5C6373' }}>{hunt.run_count} run{hunt.run_count !== 1 ? 's' : ''}</div>
-              </button>
+                {/* Gap 3 — delete button */}
+                <button
+                  onClick={e => handleDeleteSavedHunt(hunt, e)}
+                  title="Delete this hunt"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                    background: 'transparent', border: '1px solid transparent',
+                    color: '#3A4150', cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.08)'
+                    e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)'
+                    e.currentTarget.style.color = '#F87171'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.borderColor = 'transparent'
+                    e.currentTarget.style.color = '#3A4150'
+                  }}
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -899,7 +1161,7 @@ export function HuntPage() {
               </h1>
               <p style={{ fontSize: 12, color: '#5C6373', margin: '2px 0 0' }}>
                 {mode === 'event'
-                  ? 'Hunt raw events by host, user, process, IP, UEBA flag, and more'
+                  ? 'Hunt raw events by host, user, process, IP, UEBA flag, tag, and more'
                   : 'Query aggregated investigations by score, status, and MITRE tactic'}
               </p>
             </div>
@@ -910,8 +1172,8 @@ export function HuntPage() {
               border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 3,
             }}>
               {([
-                { id: 'event' as HuntMode,         icon: FileSearch, label: 'Event Hunt'         },
-                { id: 'investigation' as HuntMode,  icon: Crosshair,  label: 'Investigation Hunt' },
+                { id: 'event' as HuntMode,        icon: FileSearch, label: 'Event Hunt'         },
+                { id: 'investigation' as HuntMode, icon: Crosshair,  label: 'Investigation Hunt' },
               ] as const).map(({ id, icon: Icon, label }) => (
                 <button key={id} onClick={() => setMode(id)} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -941,10 +1203,8 @@ export function HuntPage() {
         {/* Scrollable body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
-          {/* ── Shared: Time range + AND/OR logic ──────────────────────────── */}
-          <div style={{
-            display: 'flex', gap: 12, marginBottom: 16, alignItems: 'flex-end',
-          }}>
+          {/* Shared: Time range + AND/OR logic */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>
                 Time Range
@@ -972,7 +1232,7 @@ export function HuntPage() {
             </div>
           </div>
 
-          {/* ── EVENT HUNT Query Builder ────────────────────────────────────── */}
+          {/* ── EVENT HUNT Query Builder ──────────────────────────────────────── */}
           {mode === 'event' && (
             <div style={{
               background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
@@ -982,12 +1242,10 @@ export function HuntPage() {
                 Event Query Builder
               </div>
 
-              {/* Quick filters row */}
+              {/* Gap 1 — Quick filter toggles: no emojis */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <BoolToggle value={evtIsAnomaly}   onChange={setEvtIsAnomaly}   label="⚡ Anomaly Only"   />
-                <BoolToggle value={evtIsThreatIp}  onChange={setEvtIsThreatIp}  label="🔴 Threat IP Only" />
-
-                {/* Min severity buttons */}
+                <BoolToggle value={evtIsAnomaly}  onChange={setEvtIsAnomaly}  label="Anomaly Only"   />
+                <BoolToggle value={evtIsThreatIp} onChange={setEvtIsThreatIp} label="Threat IP Only" />
                 {[1, 2, 3, 4].map(sev => {
                   const { label, color } = getSeverityLabel(sev)
                   const active = evtMinSeverity === sev
@@ -1048,23 +1306,36 @@ export function HuntPage() {
                 <Plus size={12} /> Add Filter
               </button>
 
-              {/* UEBA Flags */}
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>
-                  UEBA Flags
+              {/* Bottom row: UEBA flags + Gap 4 Tags */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>
+                    UEBA Flags
+                  </div>
+                  <MultiSelectDropdown
+                    label="Any flag"
+                    options={UEBA_FLAG_OPTIONS}
+                    selected={evtUebaFlags}
+                    onChange={setEvtUebaFlags}
+                    accentColor="#818CF8"
+                  />
                 </div>
-                <MultiSelectDropdown
-                  label="Any flag"
-                  options={UEBA_FLAG_OPTIONS}
-                  selected={evtUebaFlags}
-                  onChange={setEvtUebaFlags}
-                  accentColor="#818CF8"
-                />
+                {/* Gap 4 — Tags chip input */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 6 }}>
+                    Tags / Rule IDs
+                  </div>
+                  <TagChipInput
+                    tags={evtTags}
+                    onChange={setEvtTags}
+                    placeholder="Type tag and press Enter..."
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── INVESTIGATION HUNT Query Builder ────────────────────────────── */}
+          {/* ── INVESTIGATION HUNT Query Builder ──────────────────────────────── */}
           {mode === 'investigation' && (
             <div style={{
               background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
@@ -1074,7 +1345,6 @@ export function HuntPage() {
                 Investigation Query Builder
               </div>
 
-              {/* Filter rows */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                 {invFilters.map((filter, idx) => (
                   <div key={idx}>
@@ -1130,16 +1400,15 @@ export function HuntPage() {
               </div>
               <div style={{ fontSize: 12 }}>
                 {mode === 'event'
-                  ? 'Hunts raw events — hostname, username, process, IP, UEBA flags'
+                  ? 'Hunts raw events — hostname, username, process, IP, UEBA flags, tags'
                   : 'Searches aggregated investigations by score, status, MITRE tactic'}
               </div>
             </div>
           )}
 
-          {/* ── EVENT Results ─────────────────────────────────────────────────── */}
+          {/* ── EVENT Results (Gap 2 — click opens drawer) ────────────────────── */}
           {mode === 'event' && evtHasRun && (
             <div>
-              {/* Summary bar */}
               {evtSummary && <SummaryBar summary={evtSummary} />}
 
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
@@ -1149,6 +1418,9 @@ export function HuntPage() {
                     {evtTotal} event{evtTotal !== 1 ? 's' : ''}{evtHasMore ? '+' : ''}
                   </span>
                 )}
+                <span style={{ fontSize: 11, color: '#3A4150', marginLeft: 8 }}>
+                  — click a row to inspect
+                </span>
               </div>
 
               {evtResults.length === 0 ? (
@@ -1161,7 +1433,6 @@ export function HuntPage() {
                   background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.06)',
                   borderRadius: 10, overflow: 'hidden',
                 }}>
-                  {/* Table header */}
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: '148px 140px 140px 120px 80px 70px 1fr',
@@ -1180,6 +1451,7 @@ export function HuntPage() {
                     <EvtResultRow
                       key={entry.event_id}
                       entry={entry}
+                      onClick={() => setSelectedEvt(entry)}   // Gap 2
                       isLast={idx === evtResults.length - 1 && !evtHasMore}
                     />
                   ))}
@@ -1202,7 +1474,7 @@ export function HuntPage() {
             </div>
           )}
 
-          {/* ── INVESTIGATION Results ────────────────────────────────────────── */}
+          {/* ── INVESTIGATION Results ──────────────────────────────────────────── */}
           {mode === 'investigation' && invHasRun && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
@@ -1267,6 +1539,16 @@ export function HuntPage() {
         </div>
       </div>
 
+      {/* ── Gap 2: Event Detail Drawer ─────────────────────────────────────── */}
+      {selectedEvt && (
+        <EvtDetailDrawer
+          event={selectedEvt}
+          onClose={() => setSelectedEvt(null)}
+          navigate={navigate}
+        />
+      )}
+
+      {/* Save Modal */}
       {showSaveModal && (
         <SaveModal onSave={handleSave} onClose={() => setShowSaveModal(false)} />
       )}

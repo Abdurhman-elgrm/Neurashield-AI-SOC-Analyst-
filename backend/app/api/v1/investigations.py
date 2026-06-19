@@ -727,6 +727,20 @@ async def run_event_hunt(
     return APIResponse.ok(result)
 
 
+@router.delete("/hunt/saved/{hunt_id}", response_model=APIResponse[EmptyResponse])
+async def delete_saved_hunt(
+    hunt_id: str,
+    member: Annotated[object, require_permission(Permission.HUNT_QUERY)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[EmptyResponse]:
+    from app.models.tenant_member import TenantMember
+    from uuid import UUID as _UUID
+    m: TenantMember = member  # type: ignore[assignment]
+    await HuntEngine.delete_saved_hunt(db, m.tenant_id, _UUID(hunt_id))
+    await db.commit()
+    return APIResponse.ok(EmptyResponse())
+
+
 @router.get("/hunt/saved", response_model=APIResponse[list[SavedHuntOut]])
 async def list_saved_hunts(
     member: Annotated[object, require_permission(Permission.HUNT_QUERY)],
