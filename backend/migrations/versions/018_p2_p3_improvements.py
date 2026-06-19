@@ -1,7 +1,7 @@
 """018_p2_p3_improvements
 
 Revision ID: 018
-Revises: 017
+Revises: 017_ueba_reasons
 Create Date: 2026-06-18
 
 P2: Add triggering_alert_ids to investigations (alert → investigation linkage)
@@ -13,7 +13,7 @@ from alembic import op
 
 
 revision = "018"
-down_revision = "017"
+down_revision = "017_ueba_reasons"
 branch_labels = None
 depends_on = None
 
