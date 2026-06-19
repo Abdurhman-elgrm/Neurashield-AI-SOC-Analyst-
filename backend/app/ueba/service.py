@@ -66,6 +66,13 @@ async def _load_fp_adjusted_weights(
     except Exception:
         return {}
 
+# Built-in OS accounts that are always privileged by design.
+# Raising a privileged_user flag for these would be constant noise with zero signal value.
+_SYSTEM_ACCOUNT_WHITELIST = frozenset({
+    "system", "local service", "network service",
+    "anonymous logon", "iis apppool",
+})
+
 # Processes that are common Windows infrastructure — flagging them as
 # "new_process_on_host" would produce constant false positives.
 _SYSTEM_NOISE_PROCS = {
@@ -238,10 +245,11 @@ class UEBAService:
                 )
 
         if bfl.privileged_user and username:
-            bl_flags.append("privileged_user")
-            reasons["privileged_user"] = (
-                f"User '{username}' authenticated with elevated/privileged credentials"
-            )
+            if username.lower() not in _SYSTEM_ACCOUNT_WHITELIST:
+                bl_flags.append("privileged_user")
+                reasons["privileged_user"] = (
+                    f"User '{username}' authenticated with elevated/privileged credentials"
+                )
 
         # ── 2. Impossible travel (auth + GeoIP only) ───────────────────────────
         if username and enr.geo_latitude and enr.geo_longitude and category == "auth":

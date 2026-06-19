@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.normalization.models import (
@@ -21,6 +22,8 @@ def _win_basename(path: str | None) -> str | None:
 
 # Human-readable titles for Windows Event IDs.
 # Injected into event.tags so the UI displays meaningful names instead of "EventID XXXX".
+# NOTE: EventID 10029 is shared between WindowsUpdateClient and DistributedCOM sources —
+#       the handler below corrects the tag at runtime based on source_name.
 _WIN_EVENT_TITLES: dict[str, str] = {
     # Authentication & Logon
     "4624":  "Successful User Logon",
@@ -93,10 +96,10 @@ _WIN_EVENT_TITLES: dict[str, str] = {
     "141":   "Scheduled Task Deleted",
     "200":   "Scheduled Task Execution Started",
     "201":   "Scheduled Task Execution Completed",
-    # Windows Update
-    "10029": "Windows Update Download Started",
-    "16384": "Windows Update Auto-Restart Scheduled",
-    "16394": "Windows Update Reboot Required",
+    # Windows Update (WindowsUpdateClient source only — see DCOM note above)
+    "10029": "Windows Update: Download Started",
+    "16384": "Windows Update: Auto-Restart Scheduled",
+    "16394": "Windows Update: Reboot Required",
     # Sysmon (Event IDs 1–26)
     "1":  "Sysmon: Process Created",
     "2":  "Sysmon: File Creation Time Changed",
@@ -149,7 +152,7 @@ _SOURCE_CATEGORY: dict[str, str] = {
 
 _SYSTEM_ACCOUNTS = {"-", "", "system", "local service", "network service", "anonymous logon"}
 
-# Service process names whose 4672 events are routine infrastructure noise → keep LOW.
+# Service process names whose 4672 events are routine infrastructure noise.
 _SERVICE_PROCESS_NAMES = frozenset({
     "services.exe", "lsass.exe", "svchost.exe", "wininit.exe", "winlogon.exe",
     "csrss.exe", "smss.exe", "taskhostw.exe", "ntoskrnl.exe",
@@ -157,6 +160,53 @@ _SERVICE_PROCESS_NAMES = frozenset({
 
 # Windows protocol number → name (used by firewall audit events 5156/5157).
 _PROTO_MAP = {"1": "ICMP", "6": "TCP", "17": "UDP", "58": "ICMPv6"}
+
+# ── Logon type classification (EventID 4624 / 4625 / 4648) ───────────────────
+# Maps the numeric LogonType field to a short label injected as a tag,
+# e.g. "logon:rdp", "logon:network", "logon:interactive".
+_LOGON_TYPE_NAMES: dict[str, str] = {
+    "2":  "interactive",        # Local console keyboard/mouse session
+    "3":  "network",            # Network share, SMB, WMI, scheduled task over network
+    "4":  "batch",              # Batch job / scheduled task
+    "5":  "service",            # Service start
+    "7":  "unlock",             # Workstation unlock
+    "8":  "network-cleartext",  # Credentials sent in cleartext (e.g. IIS Basic Auth)
+    "9":  "new-credentials",    # RunAs /netonly — uses cached creds locally, new for net
+    "10": "rdp",                # Remote Desktop / Terminal Services interactive session
+    "11": "cached-interactive", # Domain logon with cached credentials (offline)
+    "12": "cached-rdp",         # RDP logon with cached credentials
+    "13": "cached-unlock",      # Workstation unlock with cached credentials
+}
+
+# Logon types that establish a remote session — worth tagging and escalating
+# when a non-local source IP is present.
+_REMOTE_LOGON_TYPES  = frozenset({"10", "12"})       # RDP / cached-RDP
+_NETWORK_LOGON_TYPES = frozenset({"3", "8", "9"})    # Network / cleartext / new-credentials
+
+# ── Privilege risk classification (EventID 4672) ──────────────────────────────
+# Presence of these privileges for a non-system user account is a meaningful
+# detection signal that warrants elevated severity and explicit tagging.
+_HIGH_RISK_PRIVILEGES = frozenset({
+    "SeDebugPrivilege",              # Read/write any process memory — enables LSASS dump
+    "SeImpersonatePrivilege",        # Impersonate any logged-on user token
+    "SeTcbPrivilege",                # Act as part of the operating system
+    "SeLoadDriverPrivilege",         # Load/unload kernel-mode drivers (rootkit potential)
+    "SeTakeOwnershipPrivilege",      # Take ownership of any securable object
+    "SeCreateTokenPrivilege",        # Create arbitrary access tokens
+    "SeAssignPrimaryTokenPrivilege", # Assign a primary token to a process
+})
+
+_MEDIUM_RISK_PRIVILEGES = frozenset({
+    "SeBackupPrivilege",     # Bypass file ACLs for backup — enables sensitive file reads
+    "SeRestorePrivilege",    # Bypass file ACLs for restore — allows overwriting system files
+    "SeSecurityPrivilege",   # Manage audit/security log — can clear event logs
+    "SeSystemtimePrivilege", # Modify system clock — disrupts timestamp-based detections
+})
+
+# IPs that are never interesting as "external" source IPs.
+_LOCAL_IP_ADDRESSES = frozenset({
+    "-", "", "::1", "127.0.0.1", "0.0.0.0", "::ffff:127.0.0.1",
+})
 
 
 def get_win_event_title(event_id: Any) -> str | None:
@@ -254,8 +304,7 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
     elif eid in ("5860", "5861"):  # WMI Event Consumer — persistence indicator
         base.category = "other"
         base.severity = 3
-        if "wmi_persistence" not in base.tags:
-            base.tags.append("wmi_persistence")
+        _add_tag(base, "wmi_persistence")
 
     # ── PowerShell ────────────────────────────────────────────────────────────
     elif eid in ("40961", "40962", "53504"):  # Console startup — noisy, not suspicious
@@ -313,18 +362,26 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.user = _extract_user_from_logon(raw)
         base.severity = 1
         _try_extract_src_ip(raw, base)
+        _apply_logon_type(raw, base)
+        # Machine accounts (e.g. WORKSTATION01$) performing network logons are normal
+        # domain traffic — cap severity at INFO and mark explicitly.
+        if _is_machine_account(base.user.name if base.user else None):
+            _add_tag(base, "machine-account")
+            base.severity = min(base.severity, 1)
 
     elif eid == "4625":  # Failed Logon
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
         _try_extract_src_ip(raw, base)
+        _apply_logon_type(raw, base)
 
     elif eid == "4648":  # Logon with Explicit Credentials
         base.category = "auth"
         base.user = _extract_user_from_logon(raw)
         base.severity = 2
         _try_extract_src_ip(raw, base)
+        _apply_logon_type(raw, base)
 
     elif eid in ("4634", "4647"):  # Logoff
         base.category = "auth"
@@ -334,15 +391,37 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
     elif eid == "4672":  # Special Privileges Assigned
         base.category = "auth"
         user = _extract_user_from_logon(raw)
-        acct = (user.name or "").upper()
+        # Read the raw account name rather than user.name: _extract_user_from_logon
+        # now suppresses system accounts to None, so user.name would be empty for
+        # SYSTEM/LOCAL SERVICE/NETWORK SERVICE and the service-account check would miss them.
+        raw_acct = (raw.get("TargetUserName") or raw.get("SubjectUserName") or "").upper()
         proc = (raw.get("Image") or raw.get("ProcessName") or "").lower()
-        is_service_acct = acct in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE")
-        is_service_proc = proc and any(proc.endswith(s) for s in _SERVICE_PROCESS_NAMES)
-        if is_service_acct or is_service_proc:
-            base.severity = 1  # Routine infrastructure logon — suppress noise
+        is_service_acct = raw_acct in ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE")
+        is_service_proc  = bool(proc and any(proc.endswith(s) for s in _SERVICE_PROCESS_NAMES))
+        is_machine_acct  = _is_machine_account(raw_acct)
+
+        if is_service_acct or is_service_proc or is_machine_acct:
+            # Built-in OS accounts and computer accounts are always privileged by design.
+            # Clear is_privileged so UEBA does not raise a false positive signal.
+            user.is_privileged = False
+            base.severity = 1
         else:
             user.is_privileged = True
-            base.severity = 2
+            privs     = _extract_privileges_4672(raw)
+            high_risk = [p for p in privs if p in _HIGH_RISK_PRIVILEGES]
+            med_risk  = [p for p in privs if p in _MEDIUM_RISK_PRIVILEGES]
+
+            if high_risk:
+                # A real user holding these privileges is worth active investigation.
+                base.severity = 3
+                for priv in high_risk:
+                    _add_tag(base, f"priv:{priv}")
+                _add_tag(base, "dangerous-privileges")
+            elif med_risk:
+                base.severity = 2
+            else:
+                base.severity = 2
+
         base.user = user
 
     elif eid in ("4768", "4769", "4776"):  # Kerberos / NTLM auth
@@ -417,8 +496,19 @@ def normalize_windows_event(raw: dict[str, Any], base: NormalizedEvent) -> Norma
         base.category = "other"
         base.severity = 3
 
-    # ── Windows Update ────────────────────────────────────────────────────────
-    elif eid in ("10029", "16384", "16394"):
+    # ── Windows Update / DCOM ─────────────────────────────────────────────────
+    elif eid == "10029":
+        # EventID 10029 is shared between two distinct sources:
+        #   WindowsUpdateClient → "A download has been started"      (routine)
+        #   DistributedCOM      → "Server did not register with DCOM" (system noise)
+        # Both are severity 1, but the tag must accurately reflect the actual source.
+        base.category = "other"
+        base.severity = 1
+        source_name = raw.get("source_name") or ""
+        if "DCOM" in source_name or "DistributedCOM" in source_name:
+            _replace_tag(base, "Windows Update: Download Started", "DCOM: Server Registration Timeout")
+
+    elif eid in ("16384", "16394"):
         base.category = "other"
         base.severity = 1
 
@@ -530,19 +620,49 @@ def _extract_user_windows(raw: dict[str, Any]) -> NormalizedUser:
 
 
 def _extract_user_from_logon(raw: dict[str, Any]) -> NormalizedUser:
-    return NormalizedUser(
-        name=raw.get("TargetUserName") or raw.get("SubjectUserName"),
-        domain=raw.get("TargetDomainName") or raw.get("SubjectDomainName"),
-        id=raw.get("TargetUserSid"),
-        is_privileged=raw.get("TargetUserName", "").upper() in ("ADMINISTRATOR", "SYSTEM"),
-    )
+    name   = raw.get("TargetUserName") or raw.get("SubjectUserName")
+    domain = raw.get("TargetDomainName") or raw.get("SubjectDomainName")
+    sid    = raw.get("TargetUserSid")
+
+    # Suppress built-in OS / anonymous accounts so they don't produce UEBA noise.
+    # _SYSTEM_ACCOUNTS covers: SYSTEM, LOCAL SERVICE, NETWORK SERVICE, ANONYMOUS LOGON, etc.
+    # Machine accounts (ending '$') are left intact for the caller to handle via
+    # _is_machine_account(); they carry separate semantics from system accounts.
+    if name and name.lower() in _SYSTEM_ACCOUNTS:
+        name = None
+
+    # Only real human "administrator" accounts get the privileged flag here.
+    # The 4672 handler applies finer-grained privilege analysis and overrides this.
+    is_machine    = _is_machine_account(name)
+    is_privileged = bool(name) and not is_machine and name.upper() == "ADMINISTRATOR"
+
+    return NormalizedUser(name=name, domain=domain, id=sid, is_privileged=is_privileged)
+
+
+def _extract_privileges_4672(raw: dict[str, Any]) -> list[str]:
+    """
+    Return the privilege list from a 4672 event.
+    Tries the structured ``Privileges`` field first (populated by some log shippers
+    and the mapper's key-value parser), then falls back to scanning the original
+    raw message text with a regex.  Result is ordered and deduplicated.
+    """
+    privs_raw = raw.get("Privileges") or raw.get("privileges")
+    if privs_raw and isinstance(privs_raw, str):
+        found = re.findall(r"Se\w+(?:Privilege|Right)", privs_raw)
+        if found:
+            return list(dict.fromkeys(found))
+
+    # Fall back to the original message embedded in the raw sub-dict.
+    raw_sub = raw.get("raw") if isinstance(raw.get("raw"), dict) else {}
+    msg = raw_sub.get("message", "")
+    return list(dict.fromkeys(re.findall(r"Se\w+(?:Privilege|Right)", msg)))
 
 
 def _extract_registry_windows(raw: dict[str, Any]) -> dict[str, Any]:
     return {
-        "key": raw.get("TargetObject") or raw.get("registry", {}).get("key"),
-        "value": raw.get("Details") or raw.get("registry", {}).get("value"),
-        "action": raw.get("EventType") or raw.get("registry", {}).get("action"),
+        "key":    raw.get("TargetObject") or raw.get("registry", {}).get("key"),
+        "value":  raw.get("Details")      or raw.get("registry", {}).get("value"),
+        "action": raw.get("EventType")    or raw.get("registry", {}).get("action"),
     }
 
 
@@ -566,9 +686,63 @@ def _to_int(val: object) -> int | None:
         return None
 
 
+def _is_machine_account(name: str | None) -> bool:
+    """Windows computer/machine accounts end with '$' — they are not human users."""
+    return bool(name and name.endswith("$"))
+
+
+def _add_tag(base: NormalizedEvent, tag: str) -> None:
+    """Append *tag* to base.tags only if not already present."""
+    if tag not in base.tags:
+        base.tags.append(tag)
+
+
+def _replace_tag(base: NormalizedEvent, old: str, new: str) -> None:
+    """Replace *old* tag with *new* in-place, preserving list position.
+    Falls back to appending *new* if *old* is not found."""
+    try:
+        idx = base.tags.index(old)
+        base.tags[idx] = new
+    except ValueError:
+        _add_tag(base, new)
+
+
+def _apply_logon_type(raw: dict[str, Any], base: NormalizedEvent) -> None:
+    """
+    Extract the Windows LogonType numeric code, inject a descriptive
+    ``logon:<type>`` tag, and escalate severity for high-risk session types
+    when a non-local source IP is present.
+
+    Called for EventIDs 4624 (success), 4625 (failure), and 4648 (explicit creds).
+
+    Escalation rules
+    ----------------
+    - Type 8  (network-cleartext) → HIGH (3) always: credentials sent in plaintext.
+    - Type 10 / 12 (RDP / cached-RDP) from external IP → MEDIUM (2) minimum.
+    - Type 3 / 9  (network / new-credentials) from external IP → MEDIUM (2) minimum.
+    """
+    lt = str(raw.get("LogonType") or raw.get("Logon Type") or "").strip()
+    name = _LOGON_TYPE_NAMES.get(lt)
+    if not name:
+        return
+
+    _add_tag(base, f"logon:{name}")
+
+    src_ip      = raw.get("IpAddress") or raw.get("source_ip") or ""
+    is_external = bool(src_ip) and src_ip not in _LOCAL_IP_ADDRESSES
+
+    if lt == "8" and base.severity < 3:
+        # Cleartext credentials are always a concern regardless of source.
+        base.severity = 3
+    elif lt in _REMOTE_LOGON_TYPES and is_external and base.severity < 2:
+        base.severity = 2
+    elif lt in _NETWORK_LOGON_TYPES and lt != "8" and is_external and base.severity < 2:
+        base.severity = 2
+
+
 def _try_extract_src_ip(raw: dict[str, Any], base: NormalizedEvent) -> None:
     ip = raw.get("IpAddress") or raw.get("source_ip")
-    if not ip or ip in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
+    if not ip or ip in _LOCAL_IP_ADDRESSES:
         return
     if base.network is None:
         base.network = NormalizedNetwork(src_ip=ip)
@@ -579,7 +753,7 @@ def _try_extract_src_ip(raw: dict[str, Any], base: NormalizedEvent) -> None:
 def _try_extract_firewall_network(raw: dict[str, Any], base: NormalizedEvent) -> None:
     """Populate network sub-object from Windows Firewall audit fields (5156/5157/5158/5159)."""
     src_ip = raw.get("SourceAddress") or raw.get("source_ip")
-    dst_ip = raw.get("DestAddress") or raw.get("dest_ip")
+    dst_ip = raw.get("DestAddress")   or raw.get("dest_ip")
     if not src_ip and not dst_ip:
         return
     src_port = _to_int(raw.get("SourcePort"))

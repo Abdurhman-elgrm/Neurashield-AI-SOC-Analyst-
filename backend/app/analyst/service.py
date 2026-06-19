@@ -21,7 +21,7 @@ from app.analyst.assignment import AssignmentService
 from app.analyst.cases import CaseService
 from app.analyst.evidence import EvidenceService
 from app.analyst.graph_api import GraphService
-from app.analyst.hunt import HuntEngine
+from app.analyst.hunt import EventHuntEngine, HuntEngine
 from app.analyst.notes import NoteService
 from app.analyst.search import PivotEngine
 from app.analyst.timeline_api import TimelineService
@@ -31,6 +31,8 @@ from app.analyst.schemas import (
     EvidenceCreate,
     GraphFilter,
     GraphResponse,
+    EventHuntQuery,
+    EventHuntResult,
     HuntQuery,
     HuntResult,
     InvestigationDetail,
@@ -366,6 +368,29 @@ class AnalystWorkspaceService:
             analyst_id=analyst_id,
             action=AnalystAction.HUNT_RUN,
             metadata={"filter_count": len(query.filters), "result_count": result.total},
+        )
+        return result
+
+    @staticmethod
+    async def run_event_hunt(
+        db: AsyncSession,
+        tenant_id: UUID,
+        analyst_id: UUID,
+        query: EventHuntQuery,
+    ) -> EventHuntResult:
+        result = await EventHuntEngine.run_query(db, tenant_id, query)
+        await ActivityService.log(
+            db,
+            tenant_id=tenant_id,
+            investigation_id="__event_hunt__",
+            analyst_id=analyst_id,
+            action=AnalystAction.HUNT_EVENT_RUN,
+            metadata={
+                "filter_count": len(query.filters),
+                "result_count": result.total,
+                "categories":   query.category,
+                "ueba_flags":   query.ueba_flags,
+            },
         )
         return result
 

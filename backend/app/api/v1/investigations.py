@@ -21,7 +21,8 @@ Routes:
   PATCH  /investigations/{id}/verdict         set verdict
   PATCH  /investigations/{id}/assign          assign/escalate
   POST   /investigations/{id}/evidence        attach evidence
-  POST   /investigations/hunt                 threat hunt query
+  POST   /investigations/hunt                 investigation-level hunt query
+  POST   /investigations/hunt/events          raw event-level threat hunt
   POST   /investigations/hunt/saved           save hunt
   GET    /investigations/hunt/saved           list saved hunts
   POST   /investigations/merge                merge investigations
@@ -46,6 +47,8 @@ from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
 from app.analyst.schemas import (
     AssignmentCreate,
     EvidenceCreate,
+    EventHuntQuery,
+    EventHuntResult,
     GraphFilter,
     HuntQuery,
     InvestigationCreate,
@@ -702,6 +705,26 @@ async def save_hunt(
             updated_at=hunt.updated_at,
         )
     )
+
+
+@router.post("/hunt/events", response_model=APIResponse[EventHuntResult])
+async def run_event_hunt(
+    payload: EventHuntQuery,
+    member: Annotated[object, require_permission(Permission.HUNT_QUERY)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[EventHuntResult]:
+    """
+    True threat hunting on raw normalized events.
+
+    Queries the indexed events table directly — hunt by hostname, username,
+    process name, source/dest IP, category, severity, UEBA flags, and tags.
+    Returns paginated event results with a page-level entity summary.
+    """
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    result = await AnalystWorkspaceService.run_event_hunt(db, m.tenant_id, m.user_id, payload)
+    await db.commit()
+    return APIResponse.ok(result)
 
 
 @router.get("/hunt/saved", response_model=APIResponse[list[SavedHuntOut]])

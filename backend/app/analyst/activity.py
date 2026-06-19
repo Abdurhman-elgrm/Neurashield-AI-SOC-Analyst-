@@ -36,6 +36,7 @@ class AnalystAction:
     EVIDENCE_ATTACHED    = "investigation.evidence_attached"
     EVIDENCE_DETACHED    = "investigation.evidence_detached"
     HUNT_RUN             = "investigation.hunt_run"
+    HUNT_EVENT_RUN       = "investigation.hunt_event_run"
     PIVOT_QUERY          = "investigation.pivot_query"
     MERGED               = "investigation.merged"
     SPLIT                = "investigation.split"

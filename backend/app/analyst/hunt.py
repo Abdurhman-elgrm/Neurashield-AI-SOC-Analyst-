@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 """
-Threat hunting engine — query investigations by structured filters.
+Threat hunting engine.
 
-Supports:
-  - Field-level filters with AND/OR logic
-  - Score ranges, severity, time ranges
-  - MITRE tactic filtering (via behaviors_json JSONB)
-  - Matched-rule filtering
-  - Saved hunt templates
-  - Cursor-based pagination
+Investigation Hunt  — queries the investigations table (aggregated view).
+Event Hunt          — queries the raw events table (true threat hunting on
+                      individual normalized events with indexed entity fields).
 
 All DB queries use parameterized SQLAlchemy ORM expressions.
 No raw SQL string interpolation.
@@ -21,13 +17,20 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB as PgJSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.analyst import SavedHunt
+from app.models.event import Event
 from app.models.investigation import Investigation
 from app.analyst.schemas import (
+    EventHuntFilter,
+    EventHuntQuery,
+    EventHuntResult,
+    EventHuntResultEntry,
+    EventHuntSummary,
     HuntFilter,
     HuntQuery,
     HuntResult,
@@ -52,6 +55,7 @@ _NUMERIC_FIELDS: dict[str, Any] = {
 
 # Text fields (ILIKE)
 _TEXT_FIELDS: dict[str, Any] = {
+    "title":             Investigation.title,
     "executive_summary": Investigation.executive_summary,
     "technical_summary": Investigation.technical_summary,
 }
@@ -343,3 +347,224 @@ def _decode_cursor(cursor: str) -> tuple[str, str]:
     raw = base64.urlsafe_b64decode(cursor.encode()).decode()
     ts, _, id_str = raw.partition("|")
     return ts, id_str
+
+
+# ─── Event Hunt ───────────────────────────────────────────────────────────────
+
+# Indexed text columns on the Event model — safe to ILIKE without full table scan
+_EVENT_TEXT_FIELDS: dict[str, Any] = {
+    "host_name":      Event.host_name,
+    "username":       Event.username,
+    "process_name":   Event.process_name,
+    "source_ip":      Event.source_ip,
+    "dest_ip":        Event.dest_ip,
+    "correlation_id": Event.correlation_id,
+    "session_id":     Event.session_id,
+    "geo_country":    Event.geo_country,
+    "geo_city":       Event.geo_city,
+}
+
+_EVENT_NUMERIC_FIELDS: dict[str, Any] = {
+    "severity":     Event.severity,
+    "anomaly_score": Event.anomaly_score,
+}
+
+
+def _build_event_filter_clauses(filters: list[EventHuntFilter]) -> list[Any]:
+    clauses: list[Any] = []
+    for f in filters:
+        if not f.value.strip():
+            continue
+        col = _EVENT_TEXT_FIELDS.get(f.field) or _EVENT_NUMERIC_FIELDS.get(f.field)
+        if col is None:
+            continue
+        clause = _apply_event_operator(col, f.field, f.value, f.operator)
+        if clause is not None:
+            clauses.append(clause)
+    return clauses
+
+
+def _apply_event_operator(col: Any, field: str, value: str, operator: str) -> Any:
+    is_numeric = field in _EVENT_NUMERIC_FIELDS
+    try:
+        if operator == "eq":
+            return col == (int(value) if is_numeric else value)
+        elif operator == "contains" and not is_numeric:
+            return col.ilike(f"%{value}%")
+        elif operator == "startswith" and not is_numeric:
+            return col.ilike(f"{value}%")
+        elif operator == "endswith" and not is_numeric:
+            return col.ilike(f"%{value}")
+        elif operator == "gt":
+            return col > (int(value) if is_numeric else value)
+        elif operator == "lt":
+            return col < (int(value) if is_numeric else value)
+        elif operator == "gte":
+            return col >= (int(value) if is_numeric else value)
+        elif operator == "lte":
+            return col <= (int(value) if is_numeric else value)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _build_event_match_reasons(row: Event, query: EventHuntQuery) -> list[str]:
+    reasons: list[str] = []
+    for f in query.filters:
+        if not f.value.strip():
+            continue
+        val = getattr(row, f.field, None)
+        if val is not None:
+            reasons.append(f"{f.field} {f.operator} '{f.value}'")
+    for flag in query.ueba_flags:
+        if flag in (row.ueba_flags or []):
+            reasons.append(f"ueba_flag={flag}")
+    for tag in query.tags:
+        if tag in (row.tags or []):
+            reasons.append(f"tag={tag}")
+    if query.is_anomaly and row.is_anomaly:
+        reasons.append(f"anomaly_score={row.anomaly_score:.2f}")
+    if query.is_threat_ip and row.is_threat_ip:
+        reasons.append("threat_ip=true")
+    return reasons
+
+
+class EventHuntEngine:
+    """
+    True threat hunting against raw normalized events.
+
+    Queries the `events` table which has indexed denormalized fields
+    (host_name, username, process_name, source_ip, dest_ip, category, severity)
+    enabling fast, precise hunts across the event log without JSONB full-scans.
+    """
+
+    @staticmethod
+    async def run_query(
+        db: AsyncSession,
+        tenant_id: UUID,
+        query: EventHuntQuery,
+    ) -> EventHuntResult:
+        conditions: list[Any] = [Event.tenant_id == tenant_id]
+
+        # ── Time range ─────────────────────────────────────────────────────────
+        if query.from_ts:
+            conditions.append(Event.event_timestamp >= query.from_ts)
+        if query.to_ts:
+            conditions.append(Event.event_timestamp <= query.to_ts)
+
+        # ── Quick indexed filters ──────────────────────────────────────────────
+        if query.category:
+            conditions.append(Event.category.in_(query.category))
+        if query.min_severity is not None:
+            conditions.append(Event.severity >= query.min_severity)
+        if query.is_anomaly is not None:
+            conditions.append(Event.is_anomaly == query.is_anomaly)
+        if query.is_threat_ip is not None:
+            conditions.append(Event.is_threat_ip == query.is_threat_ip)
+
+        # ── JSONB containment (GIN-indexed after migration 024) ────────────────
+        for flag in query.ueba_flags:
+            conditions.append(
+                Event.ueba_flags.op("@>")(cast([flag], PgJSONB))
+            )
+        for tag in query.tags:
+            conditions.append(
+                Event.tags.op("@>")(cast([tag], PgJSONB))
+            )
+
+        # ── Field-level text / numeric filters ─────────────────────────────────
+        filter_clauses = _build_event_filter_clauses(query.filters)
+        if filter_clauses:
+            if query.logic == "or":
+                conditions.append(or_(*filter_clauses))
+            else:
+                conditions.extend(filter_clauses)
+
+        # ── Cursor pagination ──────────────────────────────────────────────────
+        if query.cursor:
+            try:
+                ts_str, id_str = _decode_cursor(query.cursor)
+                ts = datetime.fromisoformat(ts_str)
+                if query.sort == "desc":
+                    conditions.append(
+                        and_(Event.event_timestamp <= ts, Event.id < UUID(id_str))
+                    )
+                else:
+                    conditions.append(
+                        and_(Event.event_timestamp >= ts, Event.id > UUID(id_str))
+                    )
+            except Exception:
+                pass
+
+        limit = min(query.limit, 200)
+        order = (
+            Event.event_timestamp.desc()
+            if query.sort == "desc"
+            else Event.event_timestamp.asc()
+        )
+
+        stmt = (
+            select(Event)
+            .where(and_(*conditions))
+            .order_by(order, Event.id)
+            .limit(limit + 1)
+        )
+        result = await db.execute(stmt)
+        rows = list(result.scalars().all())
+
+        has_more = len(rows) > limit
+        next_cursor: str | None = None
+        if has_more:
+            last = rows[limit - 1]
+            next_cursor = _encode_cursor(
+                last.event_timestamp.isoformat(), str(last.id)
+            )
+            rows = rows[:limit]
+
+        # ── Page-level summary stats ───────────────────────────────────────────
+        unique_hosts    = len({r.host_name    for r in rows if r.host_name})
+        unique_users    = len({r.username     for r in rows if r.username})
+        unique_ips      = len({r.source_ip    for r in rows if r.source_ip})
+        total_anomalies = sum(1 for r in rows if r.is_anomaly)
+        total_threat_ips = sum(1 for r in rows if r.is_threat_ip)
+
+        entries = [
+            EventHuntResultEntry(
+                event_id=str(r.id),
+                timestamp=r.event_timestamp.isoformat(),
+                host_name=r.host_name,
+                username=r.username,
+                source_ip=r.source_ip,
+                dest_ip=r.dest_ip,
+                process_name=r.process_name,
+                category=(
+                    r.category.value
+                    if hasattr(r.category, "value")
+                    else str(r.category)
+                ),
+                severity=r.severity,
+                is_anomaly=r.is_anomaly,
+                is_threat_ip=r.is_threat_ip,
+                anomaly_score=float(r.anomaly_score or 0),
+                ueba_flags=list(r.ueba_flags or []),
+                tags=list(r.tags or []),
+                match_reasons=_build_event_match_reasons(r, query),
+                correlation_id=r.correlation_id,
+                geo_country=r.geo_country,
+            )
+            for r in rows
+        ]
+
+        return EventHuntResult(
+            entries=entries,
+            total=len(entries),
+            next_cursor=next_cursor,
+            has_more=has_more,
+            summary=EventHuntSummary(
+                unique_hosts=unique_hosts,
+                unique_users=unique_users,
+                unique_ips=unique_ips,
+                total_anomalies=total_anomalies,
+                total_threat_ips=total_threat_ips,
+            ),
+        )

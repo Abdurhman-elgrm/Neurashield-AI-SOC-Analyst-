@@ -251,6 +251,68 @@ class SavedHuntOut(BaseModel):
     updated_at:   datetime
 
 
+# ─── Event-level Hunt engine ─────────────────────────────────────────────────
+
+class EventHuntFilter(BaseModel):
+    """A single field-level filter for raw-event hunt queries."""
+    field:    str
+    value:    str
+    operator: str = "eq"  # eq | contains | startswith | gt | lt | gte | lte
+
+
+class EventHuntQuery(BaseModel):
+    filters:      list[EventHuntFilter] = Field(default_factory=list)
+    logic:        str = Field(default="and", pattern="^(and|or)$")
+    from_ts:      datetime | None = None
+    to_ts:        datetime | None = None
+    # Quick filters — applied at SQL level before field-level filters
+    category:     list[str]  = Field(default_factory=list)
+    min_severity: int | None = Field(default=None, ge=1, le=4)
+    is_anomaly:   bool | None = None
+    is_threat_ip: bool | None = None
+    ueba_flags:   list[str]  = Field(default_factory=list)
+    tags:         list[str]  = Field(default_factory=list)
+    cursor:       str | None = None
+    limit:        int        = Field(default=50, ge=1, le=200)
+    sort:         str        = Field(default="desc", pattern="^(asc|desc)$")
+
+
+class EventHuntResultEntry(BaseModel):
+    event_id:       str
+    timestamp:      str
+    host_name:      str | None
+    username:       str | None
+    source_ip:      str | None
+    dest_ip:        str | None
+    process_name:   str | None
+    category:       str
+    severity:       int
+    is_anomaly:     bool
+    is_threat_ip:   bool
+    anomaly_score:  float
+    ueba_flags:     list[str]
+    tags:           list[str]
+    match_reasons:  list[str]
+    correlation_id: str | None
+    geo_country:    str | None
+
+
+class EventHuntSummary(BaseModel):
+    unique_hosts:     int
+    unique_users:     int
+    unique_ips:       int
+    total_anomalies:  int
+    total_threat_ips: int
+
+
+class EventHuntResult(BaseModel):
+    entries:     list[EventHuntResultEntry]
+    total:       int
+    next_cursor: str | None
+    has_more:    bool
+    summary:     EventHuntSummary
+
+
 # ─── Entity pivot / search ────────────────────────────────────────────────────
 
 class PivotResult(BaseModel):

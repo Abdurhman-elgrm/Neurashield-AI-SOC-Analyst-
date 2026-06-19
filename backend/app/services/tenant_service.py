@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.detection.default_rules import seed_default_rules
 from app.models.tenant import Tenant
 from app.models.tenant_member import TenantMember
 from app.models.user import User
@@ -48,6 +49,8 @@ class TenantService:
         )
         db.add(member)
         await db.flush([member])
+
+        await seed_default_rules(db, tenant.id)
 
         await AuditService.log(
             db,

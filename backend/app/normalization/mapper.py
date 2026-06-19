@@ -144,11 +144,17 @@ def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent
     severity_raw = message.get("severity", "low")
     severity = _SEVERITY_MAP.get(str(severity_raw).lower(), 1) if isinstance(severity_raw, str) else int(severity_raw or 1)
 
+    _VALID_CATEGORIES = frozenset({
+        "auth", "process", "network", "file", "registry", "dns", "system", "other",
+    })
+    category_raw = str(message.get("category", "other")).lower()
+    category = category_raw if category_raw in _VALID_CATEGORIES else "other"
+
     base = NormalizedEvent(
         event_id=str(message.get("event_id", "")),
         timestamp=ts,
         ingested_at=now,
-        category=str(message.get("category", "other")),
+        category=category,
         severity=severity,
         hostname=str(message.get("hostname", "")),
         os_type=str(message.get("os_type", "")).lower(),

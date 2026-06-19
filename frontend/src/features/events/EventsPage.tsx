@@ -504,94 +504,132 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
           )}
 
           {/* ── UEBA Behavioral Analysis ── */}
-          {(event.is_anomaly || event.ueba_flags.length > 0) && (
-            <Section
-              title="Behavioral Analysis (UEBA)"
-              accent={event.anomaly_score >= 0.7 ? '#F87171' : '#FBBF24'}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <AlertTriangle size={14} style={{
-                  color: event.anomaly_score >= 0.7 ? '#F87171' : '#FBBF24',
-                }} />
-                <span style={{
-                  fontSize: 11, fontWeight: 700,
-                  color: event.anomaly_score >= 0.7 ? '#F87171' : '#FBBF24',
-                }}>
-                  {event.anomaly_score >= 0.7 ? 'HIGH RISK ANOMALY' : 'BEHAVIORAL ANOMALY'}
-                </span>
-              </div>
+          {(event.is_anomaly || event.ueba_flags.length > 0) && (() => {
+            const isConfirmedAnomaly = event.is_anomaly
+            const score = event.anomaly_score
 
-              {/* Anomaly score bar */}
-              <div>
-                <div style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  fontSize: 9, color: '#4A5366', textTransform: 'uppercase',
-                  letterSpacing: '1px', marginBottom: 4,
-                }}>
-                  <span>Anomaly Score</span>
-                  <span style={{ color: '#7A8699' }}>{Math.round(event.anomaly_score * 100)}%</span>
+            // Tier the display based on is_anomaly (the authoritative flag) not just score.
+            const accentColor = isConfirmedAnomaly
+              ? (score >= 0.7 ? '#F87171' : '#FBBF24')
+              : '#475569'  // muted slate for informational signals below anomaly threshold
+
+            const statusLabel = isConfirmedAnomaly
+              ? (score >= 0.7 ? 'HIGH RISK ANOMALY' : 'BEHAVIORAL ANOMALY')
+              : 'BEHAVIORAL SIGNALS'  // flags present but score below anomaly threshold
+
+            // Flag severity colours — independent of whether the overall event is_anomaly
+            const HIGH_RISK_FLAGS = new Set([
+              'impossible_travel', 'brute_force_success', 'lateral_movement',
+              'lateral_movement_xdomain', 'threat_ip_confirmed', 'insider_offhours_data',
+              'insider_sensitive_access',
+            ])
+            const MEDIUM_RISK_FLAGS = new Set([
+              'brute_force', 'credential_stuffing', 'insider_rapid_access',
+              'after_hours', 'new_source_ip',
+            ])
+
+            const flagLevel = (flag: string): 'high' | 'medium' | 'low' =>
+              HIGH_RISK_FLAGS.has(flag) ? 'high'
+              : MEDIUM_RISK_FLAGS.has(flag) ? 'medium'
+              : 'low'
+
+            const flagColor = (level: 'high' | 'medium' | 'low') =>
+              level === 'high' ? '#F87171' : level === 'medium' ? '#FBBF24' : '#94A3B8'
+
+            return (
+              <Section title="Behavioral Analysis (UEBA)" accent={accentColor}>
+                {/* Status headline */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <AlertTriangle size={14} style={{ color: accentColor }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: accentColor }}>
+                    {statusLabel}
+                  </span>
+                  {!isConfirmedAnomaly && (
+                    <span style={{
+                      fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                      background: 'rgba(71,85,105,0.25)', border: '1px solid rgba(71,85,105,0.4)',
+                      color: '#64748B',
+                    }}>
+                      BELOW THRESHOLD
+                    </span>
+                  )}
                 </div>
-                <div style={{
-                  height: 5, borderRadius: 3,
-                  background: 'rgba(255,255,255,0.05)', overflow: 'hidden',
-                }}>
+
+                {/* Anomaly score bar */}
+                <div>
                   <div style={{
-                    height: '100%',
-                    width: `${Math.round(event.anomaly_score * 100)}%`,
-                    borderRadius: 3,
-                    background: event.anomaly_score >= 0.7 ? '#F87171'
-                      : event.anomaly_score >= 0.5 ? '#FBBF24'
-                      : '#34D399',
-                    transition: 'width 400ms ease',
-                  }} />
+                    display: 'flex', justifyContent: 'space-between',
+                    fontSize: 9, color: '#4A5366', textTransform: 'uppercase',
+                    letterSpacing: '1px', marginBottom: 4,
+                  }}>
+                    <span>Anomaly Score</span>
+                    <span style={{ color: '#7A8699' }}>{Math.round(score * 100)}%</span>
+                  </div>
+                  <div style={{
+                    height: 5, borderRadius: 3,
+                    background: 'rgba(255,255,255,0.05)', overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.round(score * 100)}%`,
+                      borderRadius: 3,
+                      background: isConfirmedAnomaly
+                        ? (score >= 0.7 ? '#F87171' : '#FBBF24')
+                        : '#475569',
+                      transition: 'width 400ms ease',
+                    }} />
+                  </div>
+                  {!isConfirmedAnomaly && (
+                    <div style={{ fontSize: 9, color: '#2F3A4A', marginTop: 3 }}>
+                      Anomaly threshold: 50% — signals below this are informational only
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Flags + reasons */}
-              {event.ueba_flags.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                  {event.ueba_flags.map(flag => {
-                    const isHigh = ['impossible_travel', 'brute_force_success', 'lateral_movement', 'threat_ip_confirmed'].includes(flag)
-                    const reason = event.ueba_reasons?.[flag]
-                    return (
-                      <div key={flag} style={{
-                        background: isHigh ? 'rgba(248,113,113,0.05)' : 'rgba(251,191,36,0.05)',
-                        border: `1px solid ${isHigh ? 'rgba(248,113,113,0.15)' : 'rgba(251,191,36,0.15)'}`,
-                        borderRadius: 5, padding: '6px 8px',
-                      }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 5, marginBottom: reason ? 4 : 0,
+                {/* Flags + reasons */}
+                {event.ueba_flags.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                    {event.ueba_flags.map(flag => {
+                      const level = flagLevel(flag)
+                      const fc = flagColor(level)
+                      const reason = event.ueba_reasons?.[flag]
+                      const levelLabel = level === 'high' ? 'HIGH' : level === 'medium' ? 'MEDIUM' : 'LOW'
+                      return (
+                        <div key={flag} style={{
+                          background: `${fc}08`,
+                          border: `1px solid ${fc}22`,
+                          borderRadius: 5, padding: '6px 8px',
                         }}>
-                          <span style={{
-                            fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
-                            fontFamily: "'JetBrains Mono', monospace",
-                            color: isHigh ? '#F87171' : '#FBBF24',
-                            textTransform: 'uppercase',
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 5, marginBottom: reason ? 4 : 0,
                           }}>
-                            {flag.replace(/_/g, '_')}
-                          </span>
-                          <span style={{
-                            fontSize: 8, padding: '1px 5px', borderRadius: 2,
-                            background: isHigh ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)',
-                            color: isHigh ? '#F87171' : '#FBBF24',
-                          }}>
-                            {isHigh ? 'HIGH' : 'MEDIUM'}
-                          </span>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
+                              fontFamily: "'JetBrains Mono', monospace",
+                              color: fc, textTransform: 'uppercase',
+                            }}>
+                              {flag}
+                            </span>
+                            <span style={{
+                              fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                              background: `${fc}18`, color: fc,
+                            }}>
+                              {levelLabel}
+                            </span>
+                          </div>
+                          {reason && (
+                            <p style={{ margin: 0, fontSize: 10, color: '#7A8699', lineHeight: 1.5 }}>
+                              {reason}
+                            </p>
+                          )}
                         </div>
-                        {reason && (
-                          <p style={{
-                            margin: 0, fontSize: 10, color: '#7A8699', lineHeight: 1.5,
-                          }}>
-                            {reason}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </Section>
-          )}
+                      )
+                    })}
+                  </div>
+                )}
+              </Section>
+            )
+          })()}
 
           {/* ── GeoIP ── */}
           {(event.geo_country || event.geo_city) && (

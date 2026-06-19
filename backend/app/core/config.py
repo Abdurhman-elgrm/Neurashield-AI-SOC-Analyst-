@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     ABUSEIPDB_API_KEY: str = ""
     ALIENVAULT_API_KEY: str = ""
     VIRUSTOTAL_API_KEY: str = ""
+    # Optional: absolute path to a GeoLite2-City.mmdb file from MaxMind.
+    # When set, GeoIP lookups use the local DB (no rate limit) instead of
+    # ip-api.com.  Download: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
+    # Install the library:  pip install "soc-saas-backend[geoip]"
+    MAXMIND_DB_PATH: str = ""
 
     # ─── Email / SMTP ─────────────────────────────────────────────────────────
     SMTP_HOST: str = ""
