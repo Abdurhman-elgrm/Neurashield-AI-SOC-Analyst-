@@ -164,5 +164,5 @@ class ResponseActionResponse(BaseModel):
     target_name: str | None
     status: str
     result: str | None
-    metadata: dict[str, Any]
+    action_metadata: dict[str, Any]
     created_at: datetime

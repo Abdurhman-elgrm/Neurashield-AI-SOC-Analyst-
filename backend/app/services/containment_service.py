@@ -148,7 +148,7 @@ class ContainmentService:
             target_name=agent.hostname,
             status="success",
             result=f"State changed from {previous_state.value} to {new_state.value}",
-            metadata={
+            action_metadata={
                 "reason": reason,
                 "previous_state": previous_state.value,
                 "new_state": new_state.value,

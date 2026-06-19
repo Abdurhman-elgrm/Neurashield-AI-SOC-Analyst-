@@ -206,7 +206,7 @@ def upgrade() -> None:
             target_name      VARCHAR(255),
             status           VARCHAR(32) NOT NULL DEFAULT 'pending',
             result           TEXT,
-            metadata         JSONB NOT NULL DEFAULT '{}',
+            action_metadata  JSONB NOT NULL DEFAULT '{}',
             created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """))
