@@ -9,11 +9,19 @@ export interface UserProfile {
   is_active: boolean
   created_at: string
   timezone?: string
+  email_verified?: boolean
+  avatar_url?: string | null
+  job_title?: string | null
+  bio?: string | null
+  gravatar_url?: string | null
 }
 
 export interface UpdateProfilePayload {
   full_name?: string
   timezone?: string
+  avatar_url?: string | null
+  job_title?: string | null
+  bio?: string | null
 }
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────

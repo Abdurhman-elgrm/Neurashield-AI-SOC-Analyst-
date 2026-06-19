@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -69,6 +69,20 @@ async def _check_rate_limit(
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 @router.post(
@@ -198,7 +212,6 @@ async def resend_verification(
     db: AsyncSession = Depends(get_db),
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[EmptyResponse]:
-    # Rate-limit by email address
     await _check_rate_limit(
         redis,
         f"auth_resend_verify:{payload.email.lower()}",
@@ -206,4 +219,54 @@ async def resend_verification(
         window=3600,
     )
     await AuthService.resend_verification(db, payload.email)
+    return APIResponse.ok(EmptyResponse())
+
+
+@router.post(
+    "/forgot-password",
+    response_model=APIResponse[EmptyResponse],
+    summary="Request a password reset email",
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Annotated[object | None, Depends(get_redis_optional)] = None,
+) -> APIResponse[EmptyResponse]:
+    await _check_rate_limit(
+        redis,
+        f"auth_forgot_pw:{payload.email.lower()}",
+        limit=3,
+        window=3600,
+    )
+    await AuthService.forgot_password(db, payload.email)
+    return APIResponse.ok(EmptyResponse())
+
+
+@router.post(
+    "/reset-password",
+    response_model=APIResponse[EmptyResponse],
+    summary="Reset password using a one-time token",
+)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[EmptyResponse]:
+    await AuthService.reset_password(db, payload.token, payload.new_password)
+    return APIResponse.ok(EmptyResponse())
+
+
+@router.post(
+    "/change-password",
+    response_model=APIResponse[EmptyResponse],
+    summary="Change password for the authenticated user",
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[EmptyResponse]:
+    await AuthService.change_password(
+        db, current_user.id, payload.current_password, payload.new_password
+    )
+    await db.commit()
     return APIResponse.ok(EmptyResponse())

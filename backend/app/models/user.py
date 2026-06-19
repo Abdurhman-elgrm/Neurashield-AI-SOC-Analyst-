@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, String, Text, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -33,6 +33,10 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     email_verification_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
     email_verification_sent_at: Mapped[str | None] = mapped_column(nullable=True)
+
+    # ─── Password reset ───────────────────────────────────────────────────────
+    password_reset_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    password_reset_sent_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # ─── Extended profile ─────────────────────────────────────────────────────
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

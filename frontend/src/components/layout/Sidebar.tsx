@@ -11,6 +11,9 @@ import {
   Monitor,
   Settings,
   LogOut,
+  BookOpen,
+  FileBarChart,
+  User,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -180,11 +183,20 @@ export function Sidebar() {
 
         <div className="sec-label">AI &amp; Response</div>
         {hasRole('analyst') && (
-          <NavItem to="/copilot" icon={Sparkles} label="AI Copilot" badge="BETA" badgeColor="blue" />
+          <NavItem to="/copilot"   icon={Sparkles}     label="AI Copilot" badge="BETA" badgeColor="blue" />
+        )}
+        {hasRole('analyst') && (
+          <NavItem to="/playbooks" icon={BookOpen}      label="Playbooks" />
+        )}
+
+        <div className="sec-label">Reporting</div>
+        {hasRole('analyst') && (
+          <NavItem to="/reports"   icon={FileBarChart}  label="Reports" />
         )}
 
         <div className="sec-label">Platform</div>
         <NavItem to="/agents"   icon={Monitor}  label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
+        <NavItem to="/profile"  icon={User}     label="Profile" />
         <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 

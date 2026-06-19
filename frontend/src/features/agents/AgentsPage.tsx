@@ -1,11 +1,34 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Monitor, Terminal, Activity, Trash2, X } from 'lucide-react'
+import { Plus, Search, Monitor, Terminal, Activity, Trash2, X, ShieldAlert, ShieldOff, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
 import { formatDateTime } from '@/lib/timezone'
-import { useAgents, useDeleteAgent } from './hooks/useAgents'
+import { useAgents, useDeleteAgent, useQuarantineAgent, useIsolateAgent, useReleaseAgent } from './hooks/useAgents'
 import type { Agent } from '@/api/agents'
+
+// ─── Containment badge ────────────────────────────────────────────────────────
+
+function ContainmentBadge({ state }: { state: string }) {
+  if (!state || state === 'none') return null
+  const cfg =
+    state === 'quarantined' ? { color: '#EF4444', bg: 'rgba(239,68,68,0.12)', label: 'QUARANTINED', icon: ShieldAlert } :
+    state === 'isolated'    ? { color: '#F97316', bg: 'rgba(249,115,22,0.12)', label: 'ISOLATED',    icon: ShieldOff } :
+                              { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', label: 'MUTED',       icon: ShieldOff }
+  const Icon = cfg.icon
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 7px', borderRadius: 4,
+      fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+      fontFamily: "'JetBrains Mono', monospace",
+      color: cfg.color, background: cfg.bg,
+    }}>
+      <Icon size={9} />
+      {cfg.label}
+    </span>
+  )
+}
 
 // ─── Status badge (shared) ────────────────────────────────────────────────────
 
@@ -142,6 +165,79 @@ function AgentRow({ agent, onClick, onDelete }: {
   )
 }
 
+// ─── Containment action modal ─────────────────────────────────────────────────
+
+function ContainmentModal({ action, onConfirm, onCancel, loading }: {
+  action: 'quarantine' | 'isolate' | 'release'
+  onConfirm: (reason: string) => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  const [reason, setReason] = useState('')
+
+  const cfg = {
+    quarantine: { label: 'Quarantine Agent', color: '#EF4444', icon: ShieldAlert, desc: 'Block all network traffic from this device. The agent cannot send telemetry or heartbeat.' },
+    isolate:    { label: 'Isolate Agent',    color: '#F97316', icon: ShieldOff,  desc: 'Block data ingestion from this agent while allowing heartbeat monitoring to continue.' },
+    release:    { label: 'Release Agent',   color: '#10B981', icon: ShieldCheck, desc: 'Remove containment restrictions and restore normal agent operation.' },
+  }[action]
+  const Icon = cfg.icon
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: 400, background: '#111111',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 12, padding: 24,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8,
+            background: `${cfg.color}1A`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Icon size={16} style={{ color: cfg.color }} />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#F5F7FA', fontFamily: "'Space Grotesk', sans-serif" }}>
+            {cfg.label}
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: '#8B95A7', marginBottom: 16, lineHeight: 1.6 }}>
+          {cfg.desc}
+        </p>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>
+            {action === 'release' ? 'Reason (optional)' : 'Reason'}
+          </label>
+          <input
+            className="inp"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder={action === 'release' ? 'e.g. Incident resolved' : 'e.g. Suspected ransomware activity'}
+            required={action !== 'release'}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button
+            loading={loading}
+            onClick={() => onConfirm(reason)}
+            style={{
+              background: cfg.color, color: '#fff',
+              border: 'none',
+            }}
+          >
+            {cfg.label}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── AgentDrawer ──────────────────────────────────────────────────────────────
 
 function AgentDrawer({ agent, onClose, onDelete }: {
@@ -150,6 +246,28 @@ function AgentDrawer({ agent, onClose, onDelete }: {
   onDelete: () => void
 }) {
   const navigate = useNavigate()
+  const [containmentAction, setContainmentAction] = useState<'quarantine' | 'isolate' | 'release' | null>(null)
+  const [containmentErr, setContainmentErr] = useState<string | null>(null)
+  const quarantine = useQuarantineAgent()
+  const isolate    = useIsolateAgent()
+  const release    = useReleaseAgent()
+
+  const containmentState = agent.containment_state ?? 'none'
+  const isContained = containmentState !== 'none'
+
+  async function handleContainment(reason: string) {
+    setContainmentErr(null)
+    try {
+      if (containmentAction === 'quarantine') await quarantine.mutateAsync({ id: agent.id, reason })
+      if (containmentAction === 'isolate')    await isolate.mutateAsync({ id: agent.id, reason })
+      if (containmentAction === 'release')    await release.mutateAsync({ id: agent.id, reason })
+      setContainmentAction(null)
+    } catch {
+      setContainmentErr('Containment action failed. Please try again.')
+    }
+  }
+
+  const containmentLoading = quarantine.isPending || isolate.isPending || release.isPending
 
   return (
     <>
@@ -246,6 +364,71 @@ function AgentDrawer({ agent, onClose, onDelete }: {
             ))}
           </div>
 
+          {/* Containment section */}
+          <div style={{
+            fontSize: 9, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '1.5px',
+            color: '#5C6373', marginBottom: 10,
+          }}>
+            Containment
+          </div>
+
+          <div style={{
+            padding: '12px 14px', borderRadius: 8,
+            background: isContained ? 'rgba(239,68,68,0.04)' : 'rgba(255,255,255,0.02)',
+            border: `1px solid ${isContained ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.06)'}`,
+            marginBottom: 20,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isContained ? 10 : 0 }}>
+              <div>
+                <ContainmentBadge state={containmentState} />
+                {containmentState === 'none' && (
+                  <span style={{ fontSize: 11, color: '#5C6373' }}>Active — No containment</span>
+                )}
+              </div>
+            </div>
+            {isContained && agent.containment_reason && (
+              <div style={{ fontSize: 11, color: '#8B95A7', marginBottom: 8 }}>
+                Reason: {agent.containment_reason}
+              </div>
+            )}
+            {containmentErr && (
+              <div style={{ fontSize: 11, color: '#F87171', marginBottom: 8 }}>{containmentErr}</div>
+            )}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: isContained ? 0 : 10 }}>
+              {!isContained && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{ fontSize: 11, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                    onClick={() => setContainmentAction('quarantine')}
+                  >
+                    <ShieldAlert size={11} /> Quarantine
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    style={{ fontSize: 11, color: '#F97316', borderColor: 'rgba(249,115,22,0.3)' }}
+                    onClick={() => setContainmentAction('isolate')}
+                  >
+                    <ShieldOff size={11} /> Isolate
+                  </Button>
+                </>
+              )}
+              {isContained && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  style={{ fontSize: 11, color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }}
+                  onClick={() => setContainmentAction('release')}
+                >
+                  <ShieldCheck size={11} /> Release
+                </Button>
+              )}
+            </div>
+          </div>
+
           {agent.tags?.length > 0 && (
             <>
               <div style={{
@@ -292,6 +475,15 @@ function AgentDrawer({ agent, onClose, onDelete }: {
           </Button>
         </div>
       </div>
+
+      {containmentAction && (
+        <ContainmentModal
+          action={containmentAction}
+          loading={containmentLoading}
+          onConfirm={handleContainment}
+          onCancel={() => setContainmentAction(null)}
+        />
+      )}
     </>
   )
 }

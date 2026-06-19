@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   User, Building2, Key, Users, Bell,
   Plus, Copy, Check, Trash2, CheckCircle,
-  Mail, ChevronDown, ChevronUp, Shield, X,
+  Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useTenantStore } from '@/stores/tenantStore'
 import { settingsApi } from '@/api/settings'
 import type { UserProfile, TenantInfo, Member, ApiKey, ApiKeyCreateResponse, NotificationPreferences } from '@/api/settings'
+import { authApi } from '@/api/auth'
 import { invitationsApi } from '@/api/invitations'
 import type { Invitation } from '@/api/invitations'
 import { extractApiError } from '@/lib/utils'
@@ -52,24 +53,34 @@ function ProfileTab() {
   const [profile,  setProfile]  = useState<UserProfile | null>(null)
   const [fullName, setFullName] = useState('')
   const [timezone, setTimezone] = useState('UTC')
+  const [jobTitle, setJobTitle] = useState('')
+  const [bio,      setBio]      = useState('')
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
+  const [verifySent, setVerifySent] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
 
   useEffect(() => {
     settingsApi.getProfile().then(p => {
       setProfile(p)
       setFullName(p.full_name ?? '')
       setTimezone(p.timezone ?? storeUser?.timezone ?? 'UTC')
+      setJobTitle(p.job_title ?? '')
+      setBio(p.bio ?? '')
     }).catch(console.error)
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updated = await settingsApi.updateProfile({ full_name: fullName, timezone })
+      const updated = await settingsApi.updateProfile({
+        full_name: fullName,
+        timezone,
+        job_title: jobTitle || null,
+        bio: bio || null,
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-      // Update auth store so timezone takes effect immediately
       if (storeUser) {
         setUser({ ...storeUser, full_name: updated.full_name, timezone: updated.timezone ?? 'UTC' })
       }
@@ -78,9 +89,91 @@ function ProfileTab() {
     }
   }
 
+  async function resendVerification() {
+    if (!profile?.email) return
+    setVerifyLoading(true)
+    try {
+      await authApi.resendVerification(profile.email)
+      setVerifySent(true)
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
+
+  const initials = profile?.full_name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) ?? '?'
+  const avatarSrc = profile?.avatar_url || profile?.gravatar_url
+
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div style={{ maxWidth: 520 }}>
       <SectionHeader title="Profile" description="Update your personal information" />
+
+      {/* Avatar + email verification */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20,
+        padding: '14px 16px', borderRadius: 8,
+        background: '#111111', border: '1px solid rgba(255,255,255,0.06)',
+      }}>
+        {avatarSrc ? (
+          <img
+            src={avatarSrc}
+            alt={profile?.full_name}
+            style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(59,130,246,0.3)' }}
+          />
+        ) : (
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: 'rgba(59,130,246,0.15)', border: '2px solid rgba(59,130,246,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, fontWeight: 800, color: '#60A5FA',
+            fontFamily: "'Space Grotesk', sans-serif", flexShrink: 0,
+          }}>
+            {initials}
+          </div>
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F7FA' }}>{profile?.full_name}</div>
+          <div style={{ fontSize: 11, color: '#8B95A7', marginTop: 2 }}>{profile?.email}</div>
+          {profile?.job_title && (
+            <div style={{ fontSize: 10, color: '#5C6373', marginTop: 1 }}>{profile.job_title}</div>
+          )}
+        </div>
+        <div>
+          {profile?.email_verified ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontSize: 10, color: '#10B981',
+              padding: '3px 8px', borderRadius: 5,
+              background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)',
+            }}>
+              <CheckCircle size={11} />
+              Verified
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                fontSize: 10, color: '#F59E0B',
+                padding: '3px 8px', borderRadius: 5,
+                background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
+              }}>
+                <AlertCircle size={11} />
+                Not verified
+              </div>
+              {!verifySent ? (
+                <button
+                  onClick={resendVerification}
+                  disabled={verifyLoading}
+                  style={{ fontSize: 10, color: '#60A5FA', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  {verifyLoading ? 'Sending…' : 'Resend email'}
+                </button>
+              ) : (
+                <span style={{ fontSize: 10, color: '#10B981' }}>Email sent!</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <FormField label="Email">
         <input
@@ -100,6 +193,27 @@ function ProfileTab() {
           value={fullName}
           onChange={e => setFullName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSave()}
+        />
+      </FormField>
+
+      <FormField label="Job Title">
+        <input
+          className="inp"
+          style={{ width: '100%' }}
+          placeholder="e.g. Senior SOC Analyst"
+          value={jobTitle}
+          onChange={e => setJobTitle(e.target.value)}
+        />
+      </FormField>
+
+      <FormField label="Bio">
+        <textarea
+          className="inp"
+          style={{ width: '100%', resize: 'vertical', minHeight: 64 }}
+          placeholder="A short bio about yourself..."
+          value={bio}
+          onChange={e => setBio(e.target.value)}
+          maxLength={2000}
         />
       </FormField>
 

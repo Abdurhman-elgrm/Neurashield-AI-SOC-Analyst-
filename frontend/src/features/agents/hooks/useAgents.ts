@@ -33,3 +33,39 @@ export function useDeleteAgent() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   })
 }
+
+export function useQuarantineAgent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      agentsApi.quarantine(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agents'] })
+      qc.invalidateQueries({ queryKey: ['agent-containment'] })
+    },
+  })
+}
+
+export function useIsolateAgent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      agentsApi.isolate(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agents'] })
+      qc.invalidateQueries({ queryKey: ['agent-containment'] })
+    },
+  })
+}
+
+export function useReleaseAgent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      agentsApi.release(id, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agents'] })
+      qc.invalidateQueries({ queryKey: ['agent-containment'] })
+    },
+  })
+}

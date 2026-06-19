@@ -307,6 +307,102 @@ class AuthService:
         )
 
     @staticmethod
+    async def forgot_password(db: AsyncSession, email: str) -> None:
+        """
+        Silently succeeds for unknown/inactive emails to prevent user enumeration.
+        Rate-limited: only 1 reset email allowed per 5-minute window per account.
+        """
+        user = await UserService.get_by_email(db, email)
+        if user is None or not user.is_active:
+            return
+
+        if user.password_reset_sent_at:
+            sent_at = user.password_reset_sent_at
+            if isinstance(sent_at, str):
+                sent_at = datetime.fromisoformat(sent_at)
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+                return
+
+        token = _generate_verification_token()
+        user.password_reset_token = token
+        user.password_reset_sent_at = datetime.now(tz=timezone.utc)
+        await db.flush([user])
+
+        try:
+            from app.services.email_service import send_password_reset_email
+            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+            import asyncio
+            asyncio.create_task(
+                send_password_reset_email(user.email, user.full_name, reset_url)
+            )
+        except Exception:
+            logger.warning("password_reset_email_failed", user_id=str(user.id))
+
+    @staticmethod
+    async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+        """
+        Validates the reset token (1-hour expiry), updates the password hash,
+        and clears the token so it cannot be reused.
+        """
+        result = await db.execute(
+            select(User).where(User.password_reset_token == token)
+        )
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            raise NotFoundError("Password reset link is invalid or has already been used")
+
+        if user.password_reset_sent_at:
+            sent_at = user.password_reset_sent_at
+            if isinstance(sent_at, str):
+                sent_at = datetime.fromisoformat(sent_at)
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=1):
+                raise NotFoundError(
+                    "Password reset link has expired — please request a new one"
+                )
+
+        user.password_hash = hash_password(new_password)
+        user.password_reset_token = None
+        user.password_reset_sent_at = None
+        await db.flush([user])
+
+        await AuditService.log(
+            db,
+            action="user.password_reset",
+            actor_id=user.id,
+            resource_type="user",
+            resource_id=user.id,
+        )
+        logger.info("password_reset_completed", user_id=str(user.id))
+
+    @staticmethod
+    async def change_password(
+        db: AsyncSession,
+        user_id: UUID,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """Verifies current password then replaces the hash."""
+        user = await UserService.get_by_id(db, user_id)
+        if user is None:
+            raise NotFoundError("User not found")
+        if not verify_password(current_password, user.password_hash):
+            raise UnauthorizedError("Current password is incorrect")
+        user.password_hash = hash_password(new_password)
+        await db.flush([user])
+        await AuditService.log(
+            db,
+            action="user.password_changed",
+            actor_id=user.id,
+            resource_type="user",
+            resource_id=user.id,
+        )
+
+    @staticmethod
     async def _get_refresh_token_by_jti(
         db: AsyncSession, jti: str
     ) -> RefreshToken | None:

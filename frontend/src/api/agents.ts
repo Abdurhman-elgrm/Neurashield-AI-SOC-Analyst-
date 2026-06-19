@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { apiPost, apiGet } from './client'
 
 export interface Agent {
   id: string
@@ -14,6 +15,28 @@ export interface Agent {
   updated_at: string
   tenant_id: string
   config: Record<string, unknown>
+  containment_state?: string
+  containment_reason?: string | null
+  contained_at?: string | null
+}
+
+export interface ContainmentStatus {
+  agent_id: string
+  hostname: string
+  containment_state: string
+  containment_reason: string | null
+  contained_at: string | null
+  contained_by_id: string | null
+}
+
+export interface ResponseAction {
+  id: string
+  action_type: string
+  target_type: string
+  target_name: string | null
+  status: string
+  result: string | null
+  created_at: string
 }
 
 interface OffsetPagination {
@@ -44,4 +67,19 @@ export const agentsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/agents/${id}`),
+
+  getContainment: (id: string): Promise<ContainmentStatus> =>
+    apiGet<ContainmentStatus>(`/agents/${id}/containment`),
+
+  quarantine: (id: string, reason: string): Promise<ContainmentStatus> =>
+    apiPost<ContainmentStatus>(`/agents/${id}/quarantine`, { reason }),
+
+  isolate: (id: string, reason: string): Promise<ContainmentStatus> =>
+    apiPost<ContainmentStatus>(`/agents/${id}/isolate`, { reason }),
+
+  release: (id: string, reason?: string): Promise<ContainmentStatus> =>
+    apiPost<ContainmentStatus>(`/agents/${id}/release`, { reason: reason ?? '' }),
+
+  getResponseActions: (id: string): Promise<ResponseAction[]> =>
+    apiGet<ResponseAction[]>(`/agents/${id}/response-actions`),
 }

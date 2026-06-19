@@ -142,9 +142,18 @@ export function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-text-secondary mb-1.5">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="block text-xs font-medium text-text-secondary">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs transition-colors"
+                  style={{ color: "#60A5FA" }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="password"

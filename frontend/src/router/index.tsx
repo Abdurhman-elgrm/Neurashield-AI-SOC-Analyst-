@@ -145,6 +145,27 @@ const SetupPage = lazyPage(() =>
 const AcceptInvitePage = lazyPage(() =>
   import("@/features/auth/AcceptInvitePage").then((m) => ({ default: m.AcceptInvitePage }))
 );
+const ForgotPasswordPage = lazyPage(() =>
+  import("@/features/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage }))
+);
+const ResetPasswordPage = lazyPage(() =>
+  import("@/features/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage }))
+);
+const VerifyEmailPage = lazyPage(() =>
+  import("@/features/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage }))
+);
+const ProfilePage = lazyPage(() =>
+  import("@/features/profile/ProfilePage").then((m) => ({ default: m.ProfilePage }))
+);
+const PlaybooksPage = lazyPage(() =>
+  import("@/features/playbooks/PlaybooksPage").then((m) => ({ default: m.PlaybooksPage }))
+);
+const PlaybookDetailPage = lazyPage(() =>
+  import("@/features/playbooks/PlaybookDetailPage").then((m) => ({ default: m.PlaybookDetailPage }))
+);
+const ReportsPage = lazyPage(() =>
+  import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage }))
+);
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -164,10 +185,13 @@ function S({ children }: { children: React.ReactNode }) {
 
 const router = createBrowserRouter([
   // Public routes
-  { path: "/login",          element: <LoginPage /> },
-  { path: "/register",       element: <RegisterPage /> },
-  { path: "/unauthorized",   element: <Unauthorized /> },
-  { path: "/accept-invite",  element: <S><AcceptInvitePage /></S> },
+  { path: "/login",            element: <LoginPage /> },
+  { path: "/register",         element: <RegisterPage /> },
+  { path: "/unauthorized",     element: <Unauthorized /> },
+  { path: "/accept-invite",    element: <S><AcceptInvitePage /></S> },
+  { path: "/forgot-password",  element: <S><ForgotPasswordPage /></S> },
+  { path: "/reset-password",   element: <S><ResetPasswordPage /></S> },
+  { path: "/verify-email",     element: <S><VerifyEmailPage /></S> },
 
   // Setup — authenticated but no tenant needed
   {
@@ -203,6 +227,13 @@ const router = createBrowserRouter([
       // viewer+ (read-only for non-admins, admin-only actions blocked in UI)
       { path: "rules",              element: <S><RulesPage /></S> },
       { path: "graph",              element: <S><GraphPage /></S> },
+      // profile
+      { path: "profile",            element: <S><ProfilePage /></S> },
+      // playbooks
+      { path: "playbooks",          element: <S><RequireRole min="analyst"><PlaybooksPage /></RequireRole></S> },
+      { path: "playbooks/:id",      element: <S><RequireRole min="analyst"><PlaybookDetailPage /></RequireRole></S> },
+      // reports
+      { path: "reports",            element: <S><RequireRole min="analyst"><ReportsPage /></RequireRole></S> },
     ],
   },
 

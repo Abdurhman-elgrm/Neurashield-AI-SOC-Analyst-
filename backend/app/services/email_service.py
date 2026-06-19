@@ -370,6 +370,56 @@ async def send_agent_offline_email(
     return await _send_email(to_email, subject, body_text, body_html)
 
 
+async def send_password_reset_email(
+    to_email: str,
+    full_name: str,
+    reset_url: str,
+) -> bool:
+    subject = "Reset your NEURASHIELD password"
+
+    body_text = f"""Hi {full_name},
+
+We received a request to reset the password for your NEURASHIELD account.
+
+Reset your password here:
+{reset_url}
+
+This link expires in 1 hour.
+
+If you did not request a password reset, you can safely ignore this email.
+Your password will not be changed.
+
+-- NEURASHIELD SOC Platform
+"""
+
+    content_html = f"""
+<p style="color:#B8C0CC;font-size:14px;line-height:1.7;margin:0 0 20px;">
+  Hi <strong style="color:#F5F7FA;">{full_name}</strong>,<br>
+  We received a request to reset the password for your NEURASHIELD account.
+  Click the button below to set a new password.
+</p>
+<div style="background:rgba(239,68,68,0.08);
+            border:1px solid rgba(239,68,68,0.2);
+            border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+  <div style="font-size:11px;color:#5C6373;text-transform:uppercase;
+              letter-spacing:1px;margin-bottom:4px;">Account</div>
+  <div style="font-size:14px;font-weight:600;color:#F5F7FA;">{to_email}</div>
+</div>
+<p style="color:#5C6373;font-size:12px;line-height:1.6;margin:0;">
+  This link expires in 1 hour.<br>
+  If you did not request a password reset, no action is needed — your password
+  will not be changed.
+</p>
+"""
+    body_html = _html_wrapper(
+        title="Reset your password",
+        content=content_html,
+        cta_url=reset_url,
+        cta_text="Reset Password →",
+    )
+    return await _send_email(to_email, subject, body_text, body_html)
+
+
 async def send_investigation_email(
     to_email: str,
     recipient_name: str,
