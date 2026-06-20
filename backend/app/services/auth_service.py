@@ -198,17 +198,17 @@ class AuthService:
         if user is None or user.email_verified:
             return
 
-        # Rate limit: don't resend if last email was sent < 5 minutes ago.
+        # Rate limit: don't resend if last email was sent < 1 minute ago.
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=1):
                 logger.info(
                     "resend_verification_rate_limited",
                     user_id=str(user.id),
                     retry_after_seconds=int(
-                        (sent_at + timedelta(minutes=5) - datetime.now(tz=timezone.utc)).total_seconds()
+                        (sent_at + timedelta(minutes=1) - datetime.now(tz=timezone.utc)).total_seconds()
                     ),
                 )
                 return
@@ -328,12 +328,12 @@ class AuthService:
             sent_at = user.password_reset_sent_at
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=1):
                 logger.info(
                     "forgot_password_rate_limited",
                     user_id=str(user.id),
                     retry_after_seconds=int(
-                        (sent_at + timedelta(minutes=5) - datetime.now(tz=timezone.utc)).total_seconds()
+                        (sent_at + timedelta(minutes=1) - datetime.now(tz=timezone.utc)).total_seconds()
                     ),
                 )
                 return

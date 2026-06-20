@@ -215,7 +215,7 @@ async def resend_verification(
     await _check_rate_limit(
         redis,
         f"auth_resend_verify:{payload.email.lower()}",
-        limit=3,
+        limit=10,
         window=3600,
     )
     await AuthService.resend_verification(db, payload.email)
@@ -235,7 +235,7 @@ async def forgot_password(
     await _check_rate_limit(
         redis,
         f"auth_forgot_pw:{payload.email.lower()}",
-        limit=3,
+        limit=10,
         window=3600,
     )
     await AuthService.forgot_password(db, payload.email)
