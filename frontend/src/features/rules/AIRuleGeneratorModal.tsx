@@ -262,7 +262,7 @@ export function AIRuleGeneratorModal({ open, onClose, onImported }: AIRuleGenera
             }}>
               <Shield size={14} style={{ color: '#3B82F6', flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0', margin: 0, truncate: true }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {result.title}
                 </p>
                 {result.description && (
