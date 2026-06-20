@@ -606,12 +606,16 @@ async def add_note(
         db, m.tenant_id, investigation_id, m.user_id, payload
     )
     await db.commit()
+    # Resolve name for immediate response
+    user_res = await db.execute(select(User.full_name).where(User.id == m.user_id))
+    author_name = user_res.scalar_one_or_none()
     return APIResponse.ok(
         NoteOut(
             note_id=str(note.id),
             investigation_id=investigation_id,
             tenant_id=str(m.tenant_id),
             analyst_id=note.analyst_id,
+            analyst_name=author_name,
             content=note.content,
             pinned=note.pinned,
             created_at=note.created_at,
@@ -635,12 +639,15 @@ async def update_note(
         db, m.tenant_id, note_id, m.user_id, payload, investigation_id, is_admin
     )
     await db.commit()
+    user_res = await db.execute(select(User.full_name).where(User.id == note.analyst_id))
+    author_name = user_res.scalar_one_or_none()
     return APIResponse.ok(
         NoteOut(
             note_id=str(note.id),
             investigation_id=investigation_id,
             tenant_id=str(m.tenant_id),
             analyst_id=note.analyst_id,
+            analyst_name=author_name,
             content=note.content,
             pinned=note.pinned,
             created_at=note.created_at,
