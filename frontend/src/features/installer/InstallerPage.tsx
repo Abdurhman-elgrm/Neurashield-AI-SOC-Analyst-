@@ -395,10 +395,9 @@ export function InstallerPage() {
       {/* Page header */}
       <div className="page-header px-6 pt-6 pb-0 flex-shrink-0">
         <div>
-          <h1 className="page-title">Installer Tokens</h1>
+          <h1 className="page-title">Device Enrollment</h1>
           <p className="text-xs text-text-muted mt-0.5">
-            One-time bootstrap tokens for agent enrollment · single-use ·
-            1-hour TTL
+            Generate one-time installer tokens to enroll new devices · single-use · 1-hour TTL
           </p>
         </div>
         <div className="flex items-center gap-2">

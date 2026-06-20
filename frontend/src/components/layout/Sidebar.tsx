@@ -196,7 +196,7 @@ export function Sidebar() {
 
         <div className="sec-label">Platform</div>
         <NavItem to="/agents"    icon={Monitor}   label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
-        <NavItem to="/installer" icon={Download}  label="Generate Tokens" />
+        <NavItem to="/installer" icon={Download}  label="Device Enrollment" />
         <NavItem to="/settings"  icon={Settings}  label="Settings" />
       </nav>
 
