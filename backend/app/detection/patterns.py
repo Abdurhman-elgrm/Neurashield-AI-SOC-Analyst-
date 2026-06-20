@@ -121,16 +121,49 @@ def _get_field(event: NormalizedEvent, path: str) -> Any:
 
 # ─── Condition evaluation ─────────────────────────────────────────────────────
 
+_OP_ANY_OF = "any_of"
+_OP_ANY_OF_GROUPS = "any_of_groups"
+_OP_NONE_OF = "none_of"
+_OP_LIST_CONTAINS = "list_contains"
+
+
 def evaluate_condition(condition: dict[str, Any], event: NormalizedEvent) -> bool:
     """
     Evaluates a single condition dict against a normalized event.
-    condition = {"field": "process.name", "op": "eq", "value": "cmd.exe"}
-    """
-    field_path: str = condition.get("field", "")
-    op: str = condition.get("op", _OP_EQ)
-    expected: Any = condition.get("value")
 
+    Standard:  {"field": "process.name", "op": "eq", "value": "cmd.exe"}
+
+    Group/logical (no field — recursive):
+      {"op": "any_of",        "conditions": [...]}        — OR of sub-conditions
+      {"op": "any_of_groups", "groups": [[...], [...]]}   — OR of AND-groups (Sigma 1-of)
+      {"op": "none_of",       "conditions": [...]}        — NOT of any sub-condition
+
+    List membership (field value is a Python list):
+      {"field": "ueba_flags", "op": "list_contains", "value": "impossible_travel"}
+    """
+    op: str = condition.get("op", _OP_EQ)
+
+    if op == _OP_ANY_OF:
+        return any(evaluate_condition(c, event) for c in condition.get("conditions", []))
+
+    if op == _OP_ANY_OF_GROUPS:
+        return any(
+            all(evaluate_condition(c, event) for c in grp)
+            for grp in condition.get("groups", [])
+        )
+
+    if op == _OP_NONE_OF:
+        return not any(evaluate_condition(c, event) for c in condition.get("conditions", []))
+
+    field_path: str = condition.get("field", "")
+    expected: Any = condition.get("value")
     actual = _get_field(event, field_path)
+
+    if op == _OP_LIST_CONTAINS:
+        if isinstance(actual, list):
+            exp_lower = str(expected).lower()
+            return any(str(v).lower() == exp_lower for v in actual)
+        return False
 
     return _apply_op(op, actual, expected)
 

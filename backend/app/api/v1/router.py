@@ -6,6 +6,7 @@ from app.api.v1 import investigations, entities
 from app.api.v1 import api_keys, reports, dashboard
 from app.api.v1 import notification_channels, suppressions
 from app.api.v1 import playbooks
+from app.api.v1 import sigma
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
 from app.ingestion.router import router as ingestion_router
@@ -75,6 +76,9 @@ api_router.include_router(suppressions.router)
 
 # ─── SOAR: Playbook Generator ─────────────────────────────────────────────────
 api_router.include_router(playbooks.router)
+
+# ─── Sigma Rule Engine ────────────────────────────────────────────────────────
+api_router.include_router(sigma.router)
 
 # ─── Phase 2: WebSocket (registered at root level, no prefix) ────────────────
 api_router.include_router(ws_router)

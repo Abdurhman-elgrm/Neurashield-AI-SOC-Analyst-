@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit2, Trash2, Shield, ChevronDown } from 'lucide-react'
+import { Plus, Edit2, Trash2, Shield, ChevronDown, Download } from 'lucide-react'
 import { rulesApi } from '@/api/rules'
+import { apiClient } from '@/api/client'
 import { useTenantStore } from '@/stores/tenantStore'
 import type { DetectionRule, RuleType, RuleSeverity, PatternCondition, ThresholdCondition } from '@/api/rules'
 import { extractApiError } from '@/lib/utils'
@@ -661,6 +662,24 @@ export function RulesPage() {
   const openCreate = () => { setEditRule(null); setShowModal(true) }
   const openEdit   = (rule: DetectionRule) => { setEditRule(rule); setShowModal(true) }
 
+  const [importing, setImporting] = useState(false)
+  const handleImportDefaults = async () => {
+    if (importing) return
+    setImporting(true)
+    try {
+      const resp = await apiClient.post<{ data: { created: number; skipped: number; errors: number; message: string } }>(
+        '/sigma/import-defaults'
+      )
+      const r = resp.data.data
+      showToast(`Imported ${r.created} new rules, ${r.skipped} already existed`)
+      await loadRules()
+    } catch (e) {
+      showToast(extractApiError(e), 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const filterSel = (_label: string, val: string, opts: Array<{label: string; value: string}>, onSet: (v: string) => void) => (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
       <select
@@ -693,14 +712,27 @@ export function RulesPage() {
           </p>
         </div>
         {canManage && (
-          <button onClick={openCreate} style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '9px 16px', borderRadius: 8,
-            background: '#3B82F6', border: 'none', color: '#fff',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          }}>
-            <Plus size={14} /> New Rule
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleImportDefaults} disabled={importing} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 16px', borderRadius: 8,
+              background: 'rgba(59,130,246,0.12)',
+              border: '1px solid rgba(59,130,246,0.35)',
+              color: '#93C5FD', fontSize: 13, fontWeight: 600,
+              cursor: importing ? 'not-allowed' : 'pointer',
+              opacity: importing ? 0.6 : 1,
+            }}>
+              <Download size={14} /> {importing ? 'Importing…' : 'Import Defaults'}
+            </button>
+            <button onClick={openCreate} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 16px', borderRadius: 8,
+              background: '#3B82F6', border: 'none', color: '#fff',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+              <Plus size={14} /> New Rule
+            </button>
+          </div>
         )}
       </div>
 
