@@ -165,6 +165,9 @@ const PlaybookDetailPage = lazyPage(() =>
 const ReportsPage = lazyPage(() =>
   import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage }))
 );
+const ImportPage = lazyPage(() =>
+  import("@/features/import/ImportPage").then((m) => ({ default: m.ImportPage }))
+);
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -235,6 +238,8 @@ const router = createBrowserRouter([
       { path: "playbooks/:id",      element: <S><RequireRole min="analyst"><PlaybookDetailPage /></RequireRole></S> },
       // reports
       { path: "reports",            element: <S><RequireRole min="analyst"><ReportsPage /></RequireRole></S> },
+      // log import
+      { path: "import",             element: <S><RequireRole min="admin"><ImportPage /></RequireRole></S> },
     ],
   },
 
