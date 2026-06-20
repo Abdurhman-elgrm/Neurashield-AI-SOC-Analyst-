@@ -63,7 +63,7 @@ export const playbooksApi = {
   listTemplates: (): Promise<PlaybookTemplate[]> =>
     apiGet<PlaybookTemplate[]>('/playbooks/templates'),
 
-  list: (params?: { status?: string; severity?: string }): Promise<Playbook[]> => {
+  list: (params?: { status?: string; severity?: string; investigation_id?: string }): Promise<Playbook[]> => {
     const qs = params
       ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString()
       : ''

@@ -7,6 +7,8 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { NotFound } from "@/pages/NotFound";
 import { Unauthorized } from "@/pages/Unauthorized";
+import { LandingPage } from "@/pages/LandingPage";
+import { DocsPage } from "@/pages/DocsPage";
 
 // ─── Chunk-load error boundary ────────────────────────────────────────────────
 // After a new deployment the old hashed chunk URLs 404. Catch that error
@@ -181,7 +183,11 @@ function S({ children }: { children: React.ReactNode }) {
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const router = createBrowserRouter([
-  // Public routes
+  // ── Public marketing / docs pages (no AppShell, no auth) ──────────────────
+  { path: "/",     element: <LandingPage /> },
+  { path: "/docs", element: <DocsPage /> },
+
+  // ── Auth pages ─────────────────────────────────────────────────────────────
   { path: "/login",            element: <LoginPage /> },
   { path: "/register",         element: <RegisterPage /> },
   { path: "/unauthorized",     element: <Unauthorized /> },
@@ -190,7 +196,7 @@ const router = createBrowserRouter([
   { path: "/reset-password",   element: <S><ResetPasswordPage /></S> },
   { path: "/verify-email",     element: <S><VerifyEmailPage /></S> },
 
-  // Setup — authenticated but no tenant needed
+  // ── Setup — authenticated but no tenant needed ─────────────────────────────
   {
     path: "/setup",
     element: (
@@ -200,16 +206,16 @@ const router = createBrowserRouter([
     ),
   },
 
-  // Protected routes — wrapped in AppShell
+  // ── Protected app routes (pathless layout — all paths stay unchanged) ──────
+  // Using a pathless route element means every child path is an absolute path,
+  // so /dashboard, /alerts, etc. remain exactly as they were.
   {
-    path: "/",
     element: (
       <AuthGuard>
         <S><AppShell /></S>
       </AuthGuard>
     ),
     children: [
-      { index: true,                element: <S><DashboardPage /></S> },
       { path: "dashboard",          element: <S><DashboardPage /></S> },
       { path: "alerts",             element: <S><AlertsPage /></S> },
       { path: "events",             element: <S><EventsPage /></S> },
@@ -221,7 +227,7 @@ const router = createBrowserRouter([
       { path: "investigations/:id", element: <S><RequireRole min="analyst"><InvestigationDetailPage /></RequireRole></S> },
       { path: "hunt",               element: <S><RequireRole min="analyst"><HuntPage /></RequireRole></S> },
       { path: "copilot",            element: <S><RequireRole min="analyst"><CopilotPage /></RequireRole></S> },
-      // viewer+ (read-only for non-admins, admin-only actions blocked in UI)
+      // viewer+
       { path: "rules",              element: <S><RulesPage /></S> },
       { path: "graph",              element: <S><GraphPage /></S> },
       // playbooks

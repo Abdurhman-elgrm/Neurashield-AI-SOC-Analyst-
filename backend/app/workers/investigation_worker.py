@@ -127,6 +127,15 @@ class InvestigationWorker:
             except Exception:
                 logger.warning("investigation_email_notify_failed", exc_info=True)
 
+        # Auto-generate playbook for new investigations above threshold — non-blocking
+        if is_new_investigation and result.score.threat_score >= 45:
+            asyncio.create_task(
+                _auto_generate_investigation_playbook(
+                    investigation_id=investigation_id,
+                    tenant_id=self._tenant_id,
+                )
+            )
+
         # AI Analysis — only for high-confidence or high-severity investigations
         should_analyze = (
             result.score.threat_score >= 60
@@ -284,3 +293,117 @@ class InvestigationWorker:
             )
         except Exception as exc:
             logger.warning("full_result_persist_failed", error=str(exc))
+
+
+# ── Module-level background task: auto-generate playbook for investigation ────
+
+async def _auto_generate_investigation_playbook(
+    investigation_id: str,
+    tenant_id: str,
+) -> None:
+    """
+    Background task: generates a playbook for a new investigation.
+    Uses the first linked alert for technique/severity/host context.
+    Skips silently if a playbook already exists for this investigation.
+    """
+    import asyncio as _asyncio
+    from uuid import UUID as _UUID
+    from sqlalchemy import text as _text, select as _select
+
+    # Small delay so triggering_alert_ids commit propagates
+    await _asyncio.sleep(3)
+
+    try:
+        async with database_manager.session() as db:
+            # Check if a playbook already exists for this investigation
+            existing = await db.execute(
+                _text(
+                    "SELECT 1 FROM playbooks WHERE investigation_id = CAST(:inv_id AS uuid) "
+                    "AND deleted_at IS NULL LIMIT 1"
+                ),
+                {"inv_id": investigation_id},
+            )
+            if existing.first() is not None:
+                logger.debug(
+                    "investigation_playbook_already_exists",
+                    investigation_id=investigation_id,
+                )
+                return
+
+            # Load investigation to get triggering_alert_ids
+            from app.models.investigation import Investigation as _Investigation
+            inv_result = await db.execute(
+                _select(_Investigation).where(
+                    _Investigation.id == _UUID(investigation_id),
+                    _Investigation.tenant_id == _UUID(tenant_id),
+                )
+            )
+            inv = inv_result.scalar_one_or_none()
+            if inv is None:
+                return
+
+            alert_ids: list[str] = inv.triggering_alert_ids or []
+
+            # Get company name for substitution variables
+            company_row = await db.execute(
+                _text("SELECT name FROM tenants WHERE id = CAST(:tid AS uuid)"),
+                {"tid": tenant_id},
+            )
+            company_row_result = company_row.first()
+            company_name = company_row_result[0] if company_row_result else "Your Organization"
+
+            # Build context from the first linked alert (highest severity preferred)
+            alert_title = inv.title or inv.executive_summary or "Security Incident"
+            severity = "high"
+            source_host: str | None = None
+            mitre_techniques: list[str] = []
+            mitre_tactics: list[str] = []
+            evidence: dict = {}
+
+            if alert_ids:
+                from app.models.alert import Alert as _Alert
+                alert_result = await db.execute(
+                    _select(_Alert).where(
+                        _Alert.id.in_([_UUID(aid) for aid in alert_ids[:5]]),
+                        _Alert.tenant_id == _UUID(tenant_id),
+                    ).order_by(_Alert.severity.desc())
+                )
+                alerts_list = list(alert_result.scalars().all())
+                if alerts_list:
+                    primary = alerts_list[0]
+                    alert_title = primary.title
+                    severity = primary.severity.value if hasattr(primary.severity, "value") else str(primary.severity)
+                    source_host = primary.source_host
+                    mitre_techniques = list(primary.mitre_techniques or [])
+                    mitre_tactics = list(primary.mitre_tactics or [])
+                    evidence = dict(primary.evidence or {})
+
+            from app.services.playbook_service import PlaybookGeneratorService
+            playbook = await PlaybookGeneratorService.generate(
+                db=db,
+                tenant_id=_UUID(tenant_id),
+                alert_id=_UUID(alert_ids[0]) if alert_ids else None,
+                alert_title=alert_title,
+                severity=severity,
+                source_host=source_host,
+                mitre_techniques=mitre_techniques,
+                mitre_tactics=mitre_tactics,
+                evidence=evidence,
+                company_name=company_name,
+                investigation_id=_UUID(investigation_id),
+                created_by_id=None,  # system-generated
+            )
+            await db.commit()
+            logger.info(
+                "investigation_playbook_auto_generated",
+                investigation_id=investigation_id,
+                playbook_id=str(playbook.id),
+                severity=severity,
+                steps=len(playbook.steps or []),
+            )
+    except Exception:
+        logger.warning(
+            "investigation_playbook_auto_generate_failed",
+            investigation_id=investigation_id,
+            exc_info=True,
+        )

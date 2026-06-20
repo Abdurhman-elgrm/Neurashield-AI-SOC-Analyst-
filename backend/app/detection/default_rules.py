@@ -1996,16 +1996,19 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     # ═══════════════════════════════════════════════════════════════════════
 
     {
-        "name": "C2 - Outbound Connection to Uncommon High Port",
+        "name": "C2 - LOLBin Initiating Outbound High Port Connection",
         "description": (
-            "Network connection established to a high ephemeral port (>49152) on an external host — "
-            "malware often listens on non-standard high ports to avoid detection."
+            "A known LOLBin or script interpreter (PowerShell, MSHTA, WScript, etc.) opened an "
+            "outbound connection to a high ephemeral port (>49152) on an external host — "
+            "a strong indicator of a C2 channel initiated via a living-off-the-land technique. "
+            "Browsers and legitimate apps are excluded via process filter."
         ),
         "rule_type": "pattern",
-        "severity": "medium",
+        "severity": "high",
         "conditions": [
             {"field": "category", "op": "eq", "value": "network"},
             {"field": "network.dst_port", "op": "gt", "value": 49152},
+            # External IP only — exclude all RFC-1918 and loopback ranges
             {
                 "op": "none_of",
                 "conditions": [
@@ -2030,9 +2033,27 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {"field": "network.dst_ip", "op": "startswith", "value": "127."},
                 ],
             },
+            # Require the connecting process to be a LOLBin or script interpreter.
+            # This eliminates the enormous false-positive surface from browsers,
+            # update services, and other legitimate apps using ephemeral ports.
+            {
+                "op": "any_of",
+                "conditions": [
+                    {"field": "process.executable", "op": "contains", "value": "powershell"},
+                    {"field": "process.executable", "op": "contains", "value": "mshta"},
+                    {"field": "process.executable", "op": "contains", "value": "wscript"},
+                    {"field": "process.executable", "op": "contains", "value": "cscript"},
+                    {"field": "process.executable", "op": "contains", "value": "regsvr32"},
+                    {"field": "process.executable", "op": "contains", "value": "rundll32"},
+                    {"field": "process.executable", "op": "contains", "value": "certutil"},
+                    {"field": "process.executable", "op": "contains", "value": "bitsadmin"},
+                    {"field": "process.executable", "op": "contains", "value": "installutil"},
+                    {"field": "process.executable", "op": "contains", "value": "cmstp"},
+                ],
+            },
         ],
         "mitre_tactics": ["Command and Control"],
-        "mitre_techniques": ["T1571"],
+        "mitre_techniques": ["T1571", "T1059"],
         "suppression_window_secs": 600,
     },
     {

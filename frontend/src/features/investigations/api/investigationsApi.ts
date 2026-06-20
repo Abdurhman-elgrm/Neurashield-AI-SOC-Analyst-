@@ -128,11 +128,38 @@ export async function updateInvestigationVerdict(
 
 // ─── Related alerts ───────────────────────────────────────────────────────────
 
-export async function getRelatedAlerts(id: string): Promise<Alert[]> {
-  const { data } = await apiClient.get<APIResponse<Alert[]>>(
+// The backend returns snake_case; adapt to camelCase Alert + archived flag
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function _adaptRelatedAlert(raw: Record<string, any>): Alert & { archived?: boolean } {
+  return {
+    id:             String(raw.id ?? ''),
+    tenantId:       String(raw.tenant_id ?? ''),
+    ruleId:         String(raw.rule_id ?? ''),
+    ruleName:       String(raw.rule_name ?? ''),
+    title:          String(raw.title ?? ''),
+    description:    String(raw.description ?? ''),
+    severity:       raw.severity ?? 'low',
+    status:         raw.status ?? 'open',
+    hostname:       String(raw.source_host ?? raw.hostname ?? ''),
+    sourceIp:       raw.source_ip ? String(raw.source_ip) : undefined,
+    username:       raw.username ? String(raw.username) : undefined,
+    processName:    raw.process_name ? String(raw.process_name) : undefined,
+    tags:           Array.isArray(raw.tags) ? raw.tags : [],
+    rawEventCount:  Number(raw.raw_event_count ?? 0),
+    firstSeenAt:    String(raw.first_seen_at ?? raw.created_at ?? ''),
+    lastSeenAt:     String(raw.last_seen_at ?? raw.updated_at ?? ''),
+    createdAt:      String(raw.created_at ?? ''),
+    updatedAt:      String(raw.updated_at ?? ''),
+    archived:       Boolean(raw.archived),
+  } as Alert & { archived?: boolean }
+}
+
+export async function getRelatedAlerts(id: string): Promise<(Alert & { archived?: boolean })[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await apiClient.get<APIResponse<any[]>>(
     `/investigations/${id}/related-alerts`
   );
-  return data.data!;
+  return (data.data ?? []).map(_adaptRelatedAlert)
 }
 
 // ─── Activity ─────────────────────────────────────────────────────────────────

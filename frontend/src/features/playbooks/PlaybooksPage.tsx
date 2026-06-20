@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Plus, ChevronRight, Zap, Clock, CheckCircle, XCircle, X, Bot } from 'lucide-react'
 import { playbooksApi, type Playbook } from '@/api/playbooks'
@@ -51,31 +51,95 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+// ─── MITRE lookup tables (mirrors backend) ───────────────────────────────────
+
+const TECHNIQUE_NAMES: Record<string, string> = {
+  T1190: 'Exploit Public-Facing Application', T1133: 'External Remote Services',
+  T1566: 'Phishing', T1078: 'Valid Accounts', T1091: 'Replication Through Removable Media',
+  T1195: 'Supply Chain Compromise', T1199: 'Trusted Relationship',
+  T1059: 'Command and Scripting Interpreter', T1047: 'Windows Management Instrumentation',
+  T1053: 'Scheduled Task/Job', T1106: 'Native API', T1204: 'User Execution',
+  T1098: 'Account Manipulation', T1136: 'Create Account', T1547: 'Boot or Logon Autostart Execution',
+  T1574: 'Hijack Execution Flow', T1055: 'Process Injection', T1068: 'Exploitation for Privilege Escalation',
+  T1134: 'Access Token Manipulation', T1548: 'Abuse Elevation Control Mechanism',
+  T1027: 'Obfuscated Files or Information', T1036: 'Masquerading', T1070: 'Indicator Removal',
+  T1112: 'Modify Registry', T1218: 'System Binary Proxy Execution', T1562: 'Impair Defenses',
+  T1003: 'OS Credential Dumping', T1040: 'Network Sniffing', T1110: 'Brute Force',
+  T1539: 'Steal Web Session Cookie', T1555: 'Credentials from Password Stores',
+  T1558: 'Steal or Forge Kerberos Tickets', T1016: 'System Network Configuration Discovery',
+  T1018: 'Remote System Discovery', T1046: 'Network Service Discovery', T1057: 'Process Discovery',
+  T1082: 'System Information Discovery', T1083: 'File and Directory Discovery',
+  T1087: 'Account Discovery', T1021: 'Remote Services', T1072: 'Software Deployment Tools',
+  T1080: 'Taint Shared Content', T1550: 'Use Alternate Authentication Material',
+  T1005: 'Data from Local System', T1074: 'Data Staged', T1114: 'Email Collection',
+  T1560: 'Archive Collected Data', T1071: 'Application Layer Protocol',
+  T1095: 'Non-Application Layer Protocol', T1105: 'Ingress Tool Transfer',
+  T1571: 'Non-Standard Port', T1572: 'Protocol Tunneling',
+  T1041: 'Exfiltration Over C2 Channel', T1048: 'Exfiltration Over Alternative Protocol',
+  T1567: 'Exfiltration Over Web Service', T1485: 'Data Destruction',
+  T1486: 'Data Encrypted for Impact', T1489: 'Service Stop',
+  T1490: 'Inhibit System Recovery', T1498: 'Network Denial of Service',
+  T1499: 'Endpoint Denial of Service', T1529: 'System Shutdown/Reboot',
+}
+
+const TACTIC_NAMES: Record<string, string> = {
+  TA0001: 'Initial Access', TA0002: 'Execution', TA0003: 'Persistence',
+  TA0004: 'Privilege Escalation', TA0005: 'Defense Evasion', TA0006: 'Credential Access',
+  TA0007: 'Discovery', TA0008: 'Lateral Movement', TA0009: 'Collection',
+  TA0010: 'Exfiltration', TA0011: 'Command and Control', TA0040: 'Impact',
+  TA0042: 'Resource Development', TA0043: 'Reconnaissance',
+}
+
+const TACTIC_RE  = /^TA\d{4}$/i
+const TECH_RE    = /^T\d{4}(\.\d{3})?$/i
+const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // ─── Generate Modal ───────────────────────────────────────────────────────────
 
 function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenerated: (id: string) => void }) {
+  const [mode, setMode] = useState<'scratch' | 'alert'>('scratch')
   const [alertId, setAlertId] = useState('')
   const [tactic, setTactic] = useState('')
   const [technique, setTechnique] = useState('')
   const [severity, setSeverity] = useState('high')
   const [sourceHost, setSourceHost] = useState('')
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
   const qc = useQueryClient()
 
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  // Live lookups
+  const tacticKey = tactic.trim().toUpperCase()
+  const techKey   = technique.trim().toUpperCase().split('.')[0]
+  const tacticName  = TACTIC_NAMES[tacticKey] ?? null
+  const techName    = TECHNIQUE_NAMES[techKey] ?? null
+
+  // Field-level validation
+  const alertIdErr   = mode === 'alert' && touched.alertId && alertId.trim() && !UUID_RE.test(alertId.trim())
+    ? 'Must be a valid UUID' : null
+  const tacticErr    = mode === 'scratch' && touched.tactic && tactic.trim() && !TACTIC_RE.test(tactic.trim())
+    ? 'Format: TA0000 (e.g. TA0040)' : null
+  const techniqueErr = mode === 'scratch' && touched.technique && technique.trim() && !TECH_RE.test(technique.trim())
+    ? 'Format: T0000 or T0000.000 (e.g. T1486)' : null
+  const techniqueRequired = mode === 'scratch' && touched.technique && !technique.trim()
+    ? 'Technique is required for manual generation' : null
+
+  const hasErrors = !!(alertIdErr || tacticErr || techniqueErr || techniqueRequired)
+  const canSubmit = mode === 'alert'
+    ? (alertId.trim() !== '' && !alertIdErr)
+    : (technique.trim() !== '' && !techniqueErr && !tacticErr)
 
   const generate = useMutation({
     mutationFn: () => {
-      const trimmedAlertId = alertId.trim()
-      if (trimmedAlertId && !UUID_RE.test(trimmedAlertId)) {
-        throw new Error('Alert ID must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000). Leave it empty to generate without an alert.')
+      setTouched({ alertId: true, tactic: true, technique: true })
+      if (!canSubmit) throw new Error('Please fix validation errors before generating.')
+      if (mode === 'alert') {
+        return playbooksApi.generate({ alert_id: alertId.trim() })
       }
       return playbooksApi.generate({
-        alert_id: trimmedAlertId || undefined,
-        tactic: tactic || undefined,
-        technique: technique || undefined,
+        tactic:      tactic.trim().toUpperCase() || undefined,
+        technique:   technique.trim().toUpperCase() || undefined,
         severity,
-        source_host: sourceHost || undefined,
+        source_host: sourceHost.trim() || undefined,
       })
     },
     onSuccess: (pb) => {
@@ -85,79 +149,175 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
     onError: (err) => setError(extractApiError(err)),
   })
 
+  const inputStyle = (hasErr: boolean) => ({
+    width: '100%', padding: '7px 10px', borderRadius: 6, fontSize: 12, outline: 'none',
+    background: 'rgba(255,255,255,0.04)', color: '#F5F7FA',
+    fontFamily: "'JetBrains Mono', monospace",
+    border: `1px solid ${hasErr ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.08)'}`,
+    boxSizing: 'border-box' as const,
+    transition: 'border-color 0.15s',
+  })
+  const labelStyle = { fontSize: 10, color: '#8B95A7', display: 'block', marginBottom: 4,
+    textTransform: 'uppercase' as const, letterSpacing: '0.5px', fontWeight: 600 }
+  const hintStyle  = (ok: boolean) => ({ fontSize: 10, marginTop: 3, color: ok ? '#10B981' : '#EF4444' })
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.7)',
+      background: 'rgba(0,0,0,0.75)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        width: 460, background: '#111111',
+        width: 500, background: '#111111',
         border: '1px solid rgba(255,255,255,0.08)',
         borderRadius: 12, padding: 24,
       }}>
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#F5F7FA', fontFamily: "'Space Grotesk', sans-serif" }}>
-            Generate Playbook
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#F5F7FA', fontFamily: "'Space Grotesk', sans-serif" }}>
+              Generate Playbook
+            </div>
+            <div style={{ fontSize: 11, color: '#5C6373', marginTop: 2 }}>
+              AI will generate a complete incident response procedure
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#5C6373', cursor: 'pointer', padding: 4 }}>
             <X size={16} />
           </button>
         </div>
 
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div>
-            <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>Alert ID (optional)</label>
-            <input
-              className="inp"
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              value={alertId}
-              onChange={e => { setAlertId(e.target.value); setError(null) }}
-            />
-            <p style={{ fontSize: 10, color: '#3A4150', marginTop: 4 }}>
-              Leave empty to generate manually using the fields below
-            </p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {/* Mode toggle */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 20,
+          background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 4,
+        }}>
+          {(['scratch', 'alert'] as const).map(m => (
+            <button key={m} onClick={() => { setMode(m); setError(null); setTouched({}) }} style={{
+              padding: '7px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 700, transition: 'all 0.15s',
+              background: mode === m ? '#1E293B' : 'transparent',
+              color: mode === m ? '#F5F7FA' : '#5C6373',
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}>
+              {m === 'scratch' ? '⚡ From MITRE ATT&CK' : '🔗 From Alert ID'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gap: 14 }}>
+          {mode === 'alert' ? (
             <div>
-              <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>MITRE Tactic</label>
+              <label style={labelStyle}>Alert ID <span style={{ color: '#EF4444' }}>*</span></label>
               <input
-                className="inp"
-                placeholder="e.g. TA0040"
-                value={tactic}
-                onChange={e => setTactic(e.target.value)}
+                style={inputStyle(!!alertIdErr)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={alertId}
+                onChange={e => { setAlertId(e.target.value); setError(null) }}
+                onBlur={() => setTouched(t => ({ ...t, alertId: true }))}
               />
+              {alertIdErr && <div style={hintStyle(false)}>{alertIdErr}</div>}
+              <div style={{ fontSize: 10, color: '#3A4150', marginTop: 4 }}>
+                Paste an alert UUID to build the playbook from real incident data
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>MITRE Technique</label>
-              <input
-                className="inp"
-                placeholder="e.g. T1486"
-                value={technique}
-                onChange={e => setTechnique(e.target.value)}
-              />
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>Severity</label>
-              <select className="inp" value={severity} onChange={e => setSeverity(e.target.value)}>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>Source Host</label>
-              <input
-                className="inp"
-                placeholder="hostname or IP"
-                value={sourceHost}
-                onChange={e => setSourceHost(e.target.value)}
-              />
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Tactic + Technique */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>MITRE Tactic</label>
+                  <input
+                    style={inputStyle(!!tacticErr)}
+                    placeholder="e.g. TA0040"
+                    value={tactic}
+                    onChange={e => { setTactic(e.target.value); setError(null) }}
+                    onBlur={() => setTouched(t => ({ ...t, tactic: true }))}
+                  />
+                  {tacticErr
+                    ? <div style={hintStyle(false)}>{tacticErr}</div>
+                    : tacticName
+                    ? <div style={hintStyle(true)}>✓ {tacticName}</div>
+                    : tactic.trim()
+                    ? <div style={{ fontSize: 10, color: '#5C6373', marginTop: 3 }}>Unknown tactic ID</div>
+                    : null
+                  }
+                </div>
+                <div>
+                  <label style={labelStyle}>MITRE Technique <span style={{ color: '#EF4444' }}>*</span></label>
+                  <input
+                    style={inputStyle(!!(techniqueErr || techniqueRequired))}
+                    placeholder="e.g. T1486"
+                    value={technique}
+                    onChange={e => { setTechnique(e.target.value); setError(null) }}
+                    onBlur={() => setTouched(t => ({ ...t, technique: true }))}
+                  />
+                  {techniqueErr
+                    ? <div style={hintStyle(false)}>{techniqueErr}</div>
+                    : techniqueRequired
+                    ? <div style={hintStyle(false)}>{techniqueRequired}</div>
+                    : techName
+                    ? <div style={hintStyle(true)}>✓ {techName}</div>
+                    : technique.trim()
+                    ? <div style={{ fontSize: 10, color: '#5C6373', marginTop: 3 }}>Unknown technique ID</div>
+                    : null
+                  }
+                </div>
+              </div>
+
+              {/* Severity + Source Host */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>Severity <span style={{ color: '#EF4444' }}>*</span></label>
+                  <select
+                    style={{ ...inputStyle(false), appearance: 'none' as const }}
+                    value={severity}
+                    onChange={e => setSeverity(e.target.value)}
+                  >
+                    <option value="critical">🔴 Critical</option>
+                    <option value="high">🟠 High</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="low">🔵 Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Source Host</label>
+                  <input
+                    style={inputStyle(false)}
+                    placeholder="hostname or IP"
+                    value={sourceHost}
+                    onChange={e => setSourceHost(e.target.value)}
+                  />
+                  <div style={{ fontSize: 10, color: '#3A4150', marginTop: 3 }}>Optional — improves commands</div>
+                </div>
+              </div>
+
+              {/* AI preview strip */}
+              {(techName || tacticName) && (
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8,
+                  background: 'rgba(59,130,246,0.06)',
+                  border: '1px solid rgba(59,130,246,0.15)',
+                }}>
+                  <div style={{ fontSize: 10, color: '#60A5FA', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    AI will generate a playbook for:
+                  </div>
+                  <div style={{ fontSize: 12, color: '#F5F7FA', fontWeight: 600 }}>
+                    {techName ?? tacticName}
+                    {techName && technique.trim() && <span style={{ color: '#5C6373', fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}> ({technique.trim().toUpperCase()})</span>}
+                  </div>
+                  {sourceHost.trim() && (
+                    <div style={{ fontSize: 10, color: '#8B95A7', marginTop: 3 }}>
+                      Target host: <span style={{ fontFamily: "'JetBrains Mono', monospace", color: '#93C5FD' }}>{sourceHost.trim()}</span>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: '#5C6373', marginTop: 6 }}>
+                    8–10 steps • Real commands • Full IR lifecycle • MITRE-mapped
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {error && (
@@ -177,8 +337,9 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
             size="sm"
             loading={generate.isPending}
             onClick={() => generate.mutate()}
+            disabled={hasErrors || generate.isPending}
           >
-            <Zap size={12} /> Generate
+            <Zap size={12} /> Generate Playbook
           </Button>
         </div>
       </div>
@@ -190,8 +351,16 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
 
 export function PlaybooksPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState('')
   const [showGenerate, setShowGenerate] = useState(false)
+
+  // Auto-open generate modal when coming from investigation page
+  useEffect(() => {
+    if (searchParams.get('generate') === '1') {
+      setShowGenerate(true)
+    }
+  }, [searchParams])
 
   const { data: playbooks = [], isLoading } = useQuery({
     queryKey: ['playbooks', statusFilter],

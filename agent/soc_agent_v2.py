@@ -996,6 +996,13 @@ def _collect_fim_events() -> list:
                 "timestamp":   _utc_iso(),
                 "raw_message": (f"FILE INTEGRITY VIOLATION: path={path} "
                                 f"prev={prev[:16]}... curr={current[:16]}..."),
+                # Structured fields forwarded to the normalization layer so the
+                # hash reaches threat-intel enrichment (MalwareBazaar IOC check).
+                "file": {
+                    "path":        path,
+                    "hash_sha256": current,
+                    "action":      "modified",
+                },
             })
     return logs
 

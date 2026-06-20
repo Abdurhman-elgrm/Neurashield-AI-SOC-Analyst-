@@ -244,6 +244,17 @@ class CaseService:
             analyst_id=str(created_by),
             tenant_id=str(tenant_id),
         )
+
+        # Auto-generate a playbook in the background using linked alert context
+        import asyncio as _asyncio
+        from app.workers.investigation_worker import _auto_generate_investigation_playbook
+        _asyncio.create_task(
+            _auto_generate_investigation_playbook(
+                investigation_id=str(investigation.id),
+                tenant_id=str(tenant_id),
+            )
+        )
+
         return investigation
 
     @staticmethod

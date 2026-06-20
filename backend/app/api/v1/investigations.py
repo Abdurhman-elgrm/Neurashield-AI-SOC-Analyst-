@@ -37,6 +37,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -198,6 +199,80 @@ async def get_investigation(
     )
     await db.commit()
     return APIResponse.ok(detail)
+
+
+# ─── Related alerts ──────────────────────────────────────────────────────────
+
+@router.get("/{investigation_id}/related-alerts", response_model=APIResponse[list])
+async def get_related_alerts(
+    investigation_id: str,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[list]:
+    """
+    Return alerts linked to an investigation via triggering_alert_ids.
+    Includes soft-deleted alerts (they show in investigation context but not in alerts list).
+    """
+    from app.models.investigation import Investigation
+    from app.models.alert import Alert
+    from app.models.tenant_member import TenantMember
+    from sqlalchemy import cast
+    from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+    m: TenantMember = member  # type: ignore[assignment]
+
+    inv_result = await db.execute(
+        select(Investigation).where(
+            Investigation.id == UUID(investigation_id),
+            Investigation.tenant_id == m.tenant_id,
+        )
+    )
+    inv = inv_result.scalar_one_or_none()
+    if inv is None:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError(f"Investigation {investigation_id} not found")
+
+    alert_ids: list[str] = inv.triggering_alert_ids or []
+    if not alert_ids:
+        return APIResponse.ok([])
+
+    try:
+        alert_uuids = [UUID(aid) for aid in alert_ids]
+    except ValueError:
+        return APIResponse.ok([])
+
+    result = await db.execute(
+        select(Alert).where(
+            Alert.id.in_(alert_uuids),
+            Alert.tenant_id == m.tenant_id,
+        )
+    )
+    alerts = list(result.scalars().all())
+
+    def _serialize(a: Alert) -> dict:
+        return {
+            "id":            str(a.id),
+            "tenant_id":     str(a.tenant_id),
+            "rule_id":       str(a.rule_id or ""),
+            "rule_name":     str(a.rule_name or ""),
+            "title":         a.title,
+            "description":   a.description or "",
+            "severity":      a.severity.value if hasattr(a.severity, "value") else str(a.severity),
+            "status":        a.status.value if hasattr(a.status, "value") else str(a.status),
+            "source_host":   a.source_host,
+            "source_ip":     a.source_ip,
+            "username":      a.username,
+            "process_name":  a.process_name,
+            "tags":          a.tags or [],
+            "raw_event_count": getattr(a, "raw_event_count", 0) or 0,
+            "first_seen_at": a.created_at.isoformat() if a.created_at else None,
+            "last_seen_at":  a.updated_at.isoformat() if a.updated_at else None,
+            "created_at":    a.created_at.isoformat() if a.created_at else None,
+            "updated_at":    a.updated_at.isoformat() if a.updated_at else None,
+            "archived":      a.deleted_at is not None,
+        }
+
+    return APIResponse.ok([_serialize(a) for a in alerts])
 
 
 # ─── AI Analysis ─────────────────────────────────────────────────────────────

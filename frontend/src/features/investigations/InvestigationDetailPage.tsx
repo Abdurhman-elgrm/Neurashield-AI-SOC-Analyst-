@@ -6,10 +6,13 @@ import { formatDateTime } from '@/lib/timezone'
 import {
   ArrowLeft, LayoutDashboard, Clock, Share2, Paperclip,
   StickyNote, UserPlus, ChevronDown, Brain, ChevronRight, Copy, Check,
+  BookOpen, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { SevBadge } from '@/components/ui/SevBadge'
 import { formatRelativeTime } from '@/lib/utils'
+import { useQuery } from '@tanstack/react-query'
+import { playbooksApi } from '@/api/playbooks'
 import {
   useInvDetail, useInvTimeline, useInvGraph,
   useInvEvidence, useInvNotes,
@@ -916,6 +919,16 @@ export function InvestigationDetailPage() {
   const [assigning, setAssigning] = useState(false)
   const [assignedLabel, setAssignedLabel] = useState(false)
 
+  // Look up the auto-generated playbook for this investigation
+  const { data: invPlaybooks, isLoading: playbooksLoading } = useQuery({
+    queryKey: ['playbooks', 'investigation', id],
+    queryFn: () => playbooksApi.list({ investigation_id: id }),
+    enabled: !!id,
+    staleTime: 30_000,
+    refetchInterval: isLoading ? false : 15_000,
+  })
+  const linkedPlaybook = invPlaybooks?.[0] ?? null
+
   const handleAssign = async () => {
     if (!currentUser || assigning) return
     setAssigning(true)
@@ -1017,7 +1030,44 @@ export function InvestigationDetailPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+            {/* Playbook link — shown once the auto-generated playbook is ready */}
+            {playbooksLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                fontSize: 11, color: '#5C6373' }}>
+                <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                Generating playbook…
+              </div>
+            ) : linkedPlaybook ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate(`/playbooks/${linkedPlaybook.id}`)}
+                title={`View playbook: ${linkedPlaybook.title}`}
+              >
+                <BookOpen size={12} />
+                Playbook
+                <span style={{
+                  fontSize: 8, padding: '1px 5px', borderRadius: 3, marginLeft: 2,
+                  background: linkedPlaybook.created_by_id === null
+                    ? 'rgba(139,92,246,0.15)' : 'rgba(59,130,246,0.15)',
+                  color: linkedPlaybook.created_by_id === null ? '#A78BFA' : '#93C5FD',
+                  fontFamily: "'JetBrains Mono', monospace", fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.4px',
+                }}>
+                  {linkedPlaybook.created_by_id === null ? 'AUTO' : 'MANUAL'}
+                </span>
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate(`/playbooks?generate=1&investigation_id=${id}`)}
+                title="Generate a playbook for this investigation"
+              >
+                <BookOpen size={12} /> + Playbook
+              </Button>
+            )}
             <StatusDropdown
               current={inv.status}
               onChange={status => updateStatus.mutate(status)}

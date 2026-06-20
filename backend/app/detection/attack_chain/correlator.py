@@ -116,6 +116,9 @@ async def _load_recent_alerts(
             Alert.source_host == host,
             Alert.created_at >= cutoff,
             Alert.deleted_at.is_(None),
+            # Exclude chain alerts themselves — they contain stage keywords in their
+            # titles and would cascade-trigger new chains on every chain alert created.
+            Alert.title.not_like("[Attack Chain]%"),
         )
         .order_by(Alert.created_at.desc())
         .limit(50)

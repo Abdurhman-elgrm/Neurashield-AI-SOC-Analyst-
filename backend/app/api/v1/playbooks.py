@@ -176,9 +176,19 @@ async def generate_playbook(
         evidence         = dict(alert.evidence or {})
     else:
         # Manual generation: use the fields supplied in the request
-        technique = payload.technique or ""
-        tactic    = payload.tactic or ""
-        alert_title      = f"{tactic} – {technique}".strip(" –") or "Manual Playbook"
+        from app.services.playbook_service import _technique_name as _tname, _TACTIC_NAMES as _tnames
+        technique = (payload.technique or "").strip().upper()
+        tactic    = (payload.tactic or "").strip().upper()
+        tech_label  = _tname(technique) if technique else ""
+        tactic_label = _tnames.get(tactic, tactic)
+        if tech_label and tech_label != "Unknown Technique":
+            alert_title = f"{tech_label} ({technique})"
+        elif tactic_label:
+            alert_title = f"{tactic_label} Attack"
+        else:
+            alert_title = payload.source_host or "Manual Playbook"
+        if payload.source_host:
+            alert_title = f"{alert_title} — {payload.source_host}"
         severity         = payload.severity
         source_host      = payload.source_host
         mitre_techniques = [technique] if technique else []
@@ -212,6 +222,7 @@ async def list_playbooks(
     limit: int = Query(default=25, ge=1, le=100),
     status: str | None = Query(default=None),
     severity: str | None = Query(default=None),
+    investigation_id: UUID | None = Query(default=None),
 ) -> PaginatedResponse[PlaybookResponse]:
     m: TenantMember = member  # type: ignore[assignment]
 
@@ -223,6 +234,8 @@ async def list_playbooks(
         where.append(Playbook.status == status)
     if severity:
         where.append(Playbook.severity == severity)
+    if investigation_id:
+        where.append(Playbook.investigation_id == investigation_id)
 
     total_result = await db.execute(select(func.count()).where(*where))
     total = total_result.scalar_one()
