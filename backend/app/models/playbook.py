@@ -209,3 +209,26 @@ class PlaybookRun(Base):
     playbook: Mapped["Playbook"] = relationship(
         "Playbook", back_populates="runs", lazy="noload"
     )
+
+
+class PlaybookAutoConfig(Base, TimestampMixin):
+    """Per-tenant configuration for automatic playbook generation when an alert is created."""
+
+    __tablename__ = "playbook_auto_config"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    min_severity: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="critical"
+    )  # critical | high | medium
+    updated_by_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+

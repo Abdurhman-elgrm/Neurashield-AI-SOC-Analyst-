@@ -21,8 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
+from app.models.generated_report import GeneratedReport
+from app.models.tenant_member import TenantMember
 from app.rbac.permissions import Permission
-from app.schemas.common import APIResponse
+from app.schemas.common import APIResponse, PaginatedResponse
+from app.services.report_generator_service import ReportGeneratorService, REPORT_TYPE_LABELS
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -353,3 +356,122 @@ async def get_compliance_report(
         controls=controls,
     )
     return APIResponse.ok(report)
+
+
+# ─── Generated Reports ────────────────────────────────────────────────────────
+
+class GeneratedReportSummary(BaseModel):
+    id: str
+    report_type: str
+    title: str
+    status: str
+    period_days: int
+    period_start: str
+    period_end: str
+    created_at: str
+
+class GeneratedReportDetail(GeneratedReportSummary):
+    sections: list | None = None
+    metrics: dict | None = None
+    error_message: str | None = None
+
+class GenerateReportRequest(BaseModel):
+    report_type: Literal["executive_summary", "threat_report", "compliance_summary"] = "executive_summary"
+    period_days: int = Field(default=30, ge=7, le=365)
+
+
+@router.post("/generate", response_model=APIResponse[GeneratedReportSummary], status_code=201)
+async def generate_report(
+    payload: GenerateReportRequest,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[GeneratedReportSummary]:
+    m: TenantMember = member  # type: ignore[assignment]
+
+    from app.models.tenant import Tenant
+    tenant_result = await db.execute(select(Tenant.name).where(Tenant.id == m.tenant_id))
+    company_name = tenant_result.scalar_one_or_none() or "Your Organization"
+
+    report = await ReportGeneratorService.generate(
+        db=db,
+        tenant_id=m.tenant_id,
+        report_type=payload.report_type,
+        period_days=payload.period_days,
+        company_name=company_name,
+        created_by_id=m.user_id,
+    )
+    await db.commit()
+    return APIResponse.ok(_to_summary(report))
+
+
+@router.get("/generated", response_model=PaginatedResponse[GeneratedReportSummary])
+async def list_generated_reports(
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> PaginatedResponse[GeneratedReportSummary]:
+    m: TenantMember = member  # type: ignore[assignment]
+
+    total = (await db.execute(
+        select(func.count()).where(GeneratedReport.tenant_id == m.tenant_id)
+    )).scalar_one()
+
+    rows = (await db.execute(
+        select(GeneratedReport)
+        .where(GeneratedReport.tenant_id == m.tenant_id)
+        .order_by(GeneratedReport.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )).scalars().all()
+
+    return PaginatedResponse[GeneratedReportSummary].offset(
+        data=[_to_summary(r) for r in rows],
+        page=page, limit=limit, total=total,
+    )
+
+
+@router.get("/generated/{report_id}", response_model=APIResponse[GeneratedReportDetail])
+async def get_generated_report(
+    report_id: str,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[GeneratedReportDetail]:
+    from uuid import UUID as _UUID
+    from app.core.exceptions import NotFoundError
+    m: TenantMember = member  # type: ignore[assignment]
+    try:
+        rid = _UUID(report_id)
+    except ValueError:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Invalid report ID")
+
+    result = await db.execute(
+        select(GeneratedReport).where(
+            GeneratedReport.id == rid,
+            GeneratedReport.tenant_id == m.tenant_id,
+        )
+    )
+    report = result.scalar_one_or_none()
+    if report is None:
+        raise NotFoundError(f"Report {report_id} not found")
+
+    return APIResponse.ok(GeneratedReportDetail(
+        **_to_summary(report).model_dump(),
+        sections=report.sections,
+        metrics=report.metrics,
+        error_message=report.error_message,
+    ))
+
+
+def _to_summary(r: GeneratedReport) -> GeneratedReportSummary:
+    return GeneratedReportSummary(
+        id=str(r.id),
+        report_type=r.report_type,
+        title=r.title,
+        status=r.status,
+        period_days=r.period_days,
+        period_start=r.period_start.isoformat(),
+        period_end=r.period_end.isoformat(),
+        created_at=r.created_at.isoformat(),
+    )

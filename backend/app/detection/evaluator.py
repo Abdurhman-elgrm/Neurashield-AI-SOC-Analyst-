@@ -17,6 +17,65 @@ from app.normalization.models import NormalizedEvent
 
 logger = structlog.get_logger(__name__)
 
+_SEVERITY_RANK_AUTO = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+
+async def _maybe_auto_playbook(alert: "Alert") -> None:
+    """Background task: generate a playbook automatically if tenant config allows it."""
+    import asyncio
+    await asyncio.sleep(2)  # wait for the current transaction to commit
+
+    try:
+        from sqlalchemy import select
+        from app.core.database import database_manager
+        from app.models.playbook import PlaybookAutoConfig
+        from app.models.tenant import Tenant
+        from app.services.playbook_service import PlaybookGeneratorService
+
+        async with database_manager.session() as db:
+            cfg_result = await db.execute(
+                select(PlaybookAutoConfig).where(
+                    PlaybookAutoConfig.tenant_id == alert.tenant_id
+                )
+            )
+            cfg = cfg_result.scalar_one_or_none()
+            if cfg is None or not cfg.enabled:
+                return
+
+            alert_rank = _SEVERITY_RANK_AUTO.get(alert.severity.value, 0)
+            min_rank   = _SEVERITY_RANK_AUTO.get(cfg.min_severity, 4)
+            if alert_rank < min_rank:
+                return
+
+            tenant_result = await db.execute(
+                select(Tenant.name).where(Tenant.id == alert.tenant_id)
+            )
+            company_name = tenant_result.scalar_one_or_none() or "Your Organization"
+
+            playbook = await PlaybookGeneratorService.generate(
+                db=db,
+                tenant_id=alert.tenant_id,
+                alert_id=alert.id,
+                alert_title=alert.title,
+                severity=alert.severity.value,
+                source_host=alert.source_host,
+                mitre_techniques=list(alert.mitre_techniques or []),
+                mitre_tactics=list(alert.mitre_tactics or []),
+                evidence=dict(alert.evidence or {}),
+                company_name=company_name,
+                created_by_id=None,
+            )
+            await db.commit()
+            logger.info(
+                "auto_playbook_generated",
+                playbook_id=str(playbook.id),
+                alert_id=str(alert.id),
+                severity=alert.severity.value,
+            )
+    except Exception as exc:
+        logger.warning("auto_playbook_failed", alert_id=str(alert.id), error=str(exc)[:200])
+
+
 # ─── Context-aware severity escalation ────────────────────────────────────────
 
 _SEVERITY_RANK: dict[str, int] = {
@@ -181,6 +240,10 @@ class RuleEvaluator:
 
         self._db.add(alert)
         await self._db.flush()
+
+        # Fire-and-forget: auto-generate playbook if tenant has it enabled
+        import asyncio as _asyncio
+        _asyncio.create_task(_maybe_auto_playbook(alert))
 
         logger.info(
             "alert_created",

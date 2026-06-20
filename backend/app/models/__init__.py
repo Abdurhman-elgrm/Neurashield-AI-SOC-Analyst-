@@ -36,6 +36,8 @@ from app.models.playbook import (
     PlaybookRun,
 )
 from app.models.response_action import ResponseAction
+from app.models.playbook import PlaybookAutoConfig
+from app.models.generated_report import GeneratedReport
 
 __all__ = [
     "Base",
@@ -69,4 +71,6 @@ __all__ = [
     "PlaybookStep",
     "PlaybookRun",
     "ResponseAction",
+    "PlaybookAutoConfig",
+    "GeneratedReport",
 ]

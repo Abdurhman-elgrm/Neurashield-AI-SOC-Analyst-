@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_permission
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.alert import Alert
-from app.models.playbook import Playbook, PlaybookRun, PlaybookStep, PlaybookTemplate, PlaybookTemplateStep
+from app.models.playbook import Playbook, PlaybookAutoConfig, PlaybookRun, PlaybookStep, PlaybookTemplate, PlaybookTemplateStep
 from app.models.tenant_member import TenantMember
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
@@ -354,3 +354,70 @@ async def _load_playbook_response(db: AsyncSession, playbook_id: UUID) -> Playbo
     resp = PlaybookResponse.model_validate(playbook)
     resp = resp.model_copy(update={"steps": [PlaybookStepResponse.model_validate(s) for s in steps]})
     return resp
+
+
+# ── Auto-config ───────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+
+class AutoConfigResponse(_BaseModel):
+    enabled: bool
+    min_severity: str
+
+class AutoConfigUpdateRequest(_BaseModel):
+    enabled: bool
+    min_severity: str = "critical"
+
+
+@router.get("/auto-config", response_model=APIResponse[AutoConfigResponse])
+async def get_auto_config(
+    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[AutoConfigResponse]:
+    m: TenantMember = member  # type: ignore[assignment]
+    result = await db.execute(
+        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        return APIResponse.ok(AutoConfigResponse(enabled=False, min_severity="critical"))
+    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))
+
+
+@router.put("/auto-config", response_model=APIResponse[AutoConfigResponse])
+async def update_auto_config(
+    payload: AutoConfigUpdateRequest,
+    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[AutoConfigResponse]:
+    m: TenantMember = member  # type: ignore[assignment]
+
+    valid_severities = {"critical", "high", "medium", "low"}
+    if payload.min_severity not in valid_severities:
+        from app.core.exceptions import ValidationError
+        raise ValidationError(f"min_severity must be one of {sorted(valid_severities)}")
+
+    result = await db.execute(
+        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        cfg = PlaybookAutoConfig(
+            tenant_id=m.tenant_id,
+            enabled=payload.enabled,
+            min_severity=payload.min_severity,
+            updated_by_id=m.user_id,
+        )
+        db.add(cfg)
+    else:
+        cfg.enabled = payload.enabled
+        cfg.min_severity = payload.min_severity
+        cfg.updated_by_id = m.user_id
+
+    await AuditService.log(
+        db, action="playbook_auto_config.updated", actor_id=m.user_id, actor_role=m.role,
+        tenant_id=m.tenant_id, resource_type="playbook_auto_config",
+        resource_id=cfg.id if cfg.id else None,
+    )
+    await db.commit()
+    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))
