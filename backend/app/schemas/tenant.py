@@ -36,6 +36,10 @@ class TenantCreateRequest(BaseModel):
 
 class TenantUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
+    timezone: str | None = Field(default=None, max_length=64)
+    logo_url: str | None = Field(default=None, max_length=65535)
+    event_retention_days: int | None = Field(default=None, ge=7, le=3650)
+    alert_retention_days: int | None = Field(default=None, ge=7, le=3650)
 
     @field_validator("name")
     @classmethod
@@ -52,6 +56,10 @@ class TenantResponse(BaseModel):
     is_active: bool
     created_at: datetime
     member_role: str | None = None
+    timezone: str = "UTC"
+    logo_url: str | None = None
+    event_retention_days: int = 90
+    alert_retention_days: int = 365
 
 
 # ─── Tenant Member ────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import {
   BookOpen,
   FileBarChart,
   Download,
+  Upload,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -197,6 +198,9 @@ export function Sidebar() {
         <div className="sec-label">Platform</div>
         <NavItem to="/agents"    icon={Monitor}   label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
         <NavItem to="/installer" icon={Download}  label="Device Enrollment" />
+        {hasRole('admin') && (
+          <NavItem to="/import"  icon={Upload}    label="Log Import" />
+        )}
         <NavItem to="/settings"  icon={Settings}  label="Settings" />
       </nav>
 

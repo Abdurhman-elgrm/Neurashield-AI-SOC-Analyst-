@@ -94,5 +94,15 @@ async def update_tenant(
     tenant = await TenantService.get_by_id(db, tenant_id)
     if tenant is None:
         raise NotFoundError("Tenant not found")
-    updated = await TenantService.update(db, tenant, actor=m, name=payload.name)
+    logo_sentinel = ... if "logo_url" not in payload.model_fields_set else payload.logo_url
+    updated = await TenantService.update(
+        db,
+        tenant,
+        actor=m,
+        name=payload.name,
+        timezone=payload.timezone,
+        logo_url=logo_sentinel,
+        event_retention_days=payload.event_retention_days,
+        alert_retention_days=payload.alert_retention_days,
+    )
     return APIResponse.ok(TenantResponse.model_validate(updated))

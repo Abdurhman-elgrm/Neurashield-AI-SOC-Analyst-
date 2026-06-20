@@ -117,10 +117,27 @@ class TenantService:
         tenant: Tenant,
         actor: TenantMember,
         name: str | None = None,
+        timezone: str | None = None,
+        logo_url: str | None | type[...] = ...,
+        event_retention_days: int | None = None,
+        alert_retention_days: int | None = None,
     ) -> Tenant:
-        before = {"name": tenant.name}
+        before = {
+            "name": tenant.name,
+            "timezone": tenant.timezone,
+            "event_retention_days": tenant.event_retention_days,
+            "alert_retention_days": tenant.alert_retention_days,
+        }
         if name is not None:
             tenant.name = name.strip()
+        if timezone is not None:
+            tenant.timezone = timezone
+        if logo_url is not ...:
+            tenant.logo_url = logo_url  # type: ignore[assignment]
+        if event_retention_days is not None:
+            tenant.event_retention_days = event_retention_days
+        if alert_retention_days is not None:
+            tenant.alert_retention_days = alert_retention_days
         await db.flush([tenant])
 
         await AuditService.log(
@@ -131,7 +148,15 @@ class TenantService:
             tenant_id=tenant.id,
             resource_type="tenant",
             resource_id=tenant.id,
-            changes={"before": before, "after": {"name": tenant.name}},
+            changes={
+                "before": before,
+                "after": {
+                    "name": tenant.name,
+                    "timezone": tenant.timezone,
+                    "event_retention_days": tenant.event_retention_days,
+                    "alert_retention_days": tenant.alert_retention_days,
+                },
+            },
         )
         return tenant
 
