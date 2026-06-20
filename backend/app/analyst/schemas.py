@@ -414,6 +414,7 @@ class InvestigationListItem(BaseModel):
     status:                 str
     verdict:                str | None
     assigned_to:            UUID | None
+    assigned_to_name:       str | None = None
     executive_summary:      str
     title:                  str | None = None
     source:                 str | None = "auto"

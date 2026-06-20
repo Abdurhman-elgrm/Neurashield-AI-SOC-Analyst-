@@ -40,6 +40,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
+
 from app.core.database import get_db
 from app.core.dependencies import require_permission
 from app.rbac.permissions import Permission
@@ -177,6 +179,18 @@ async def list_investigations(
     items, next_cursor = await AnalystWorkspaceService.list_investigations(
         db, m.tenant_id, params
     )
+
+    # Resolve assigned_to UUIDs → full names in a single batch query
+    assigned_ids = {item.assigned_to for item in items if item.assigned_to}
+    if assigned_ids:
+        result = await db.execute(
+            select(User.id, User.full_name).where(User.id.in_(assigned_ids))
+        )
+        name_map: dict = {row.id: row.full_name for row in result.all()}
+        for item in items:
+            if item.assigned_to:
+                item.assigned_to_name = name_map.get(item.assigned_to)
+
     return PaginatedResponse[InvestigationListItem].cursor(
         data=items,
         next_cursor=next_cursor,
@@ -552,12 +566,23 @@ async def list_notes(
     rows, total = await NoteService.list_for_investigation(
         db, m.tenant_id, investigation_id, page, limit
     )
+
+    # Bulk-resolve analyst names
+    analyst_ids = {r.analyst_id for r in rows}
+    name_map: dict = {}
+    if analyst_ids:
+        res = await db.execute(
+            select(User.id, User.full_name).where(User.id.in_(analyst_ids))
+        )
+        name_map = {row.id: row.full_name for row in res.all()}
+
     data = [
         NoteOut(
             note_id=str(r.id),
             investigation_id=investigation_id,
             tenant_id=str(m.tenant_id),
             analyst_id=r.analyst_id,
+            analyst_name=name_map.get(r.analyst_id),
             content=r.content,
             pinned=r.pinned,
             created_at=r.created_at,
