@@ -194,12 +194,10 @@ export function DashboardPage() {
       </div>
 
       {/* Row 2: Alerts + Ingestion + Detection */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) 300px", gap: 12, marginBottom: 12 }}>
         <LiveAlertsFeed timeRange={timeRange} maxHeight={380} />
         <IngestionRateChart timeRange={timeRange} />
-        <div style={{ width: 260 }}>
-          <DetectionHealthWidget timeRange={timeRange} />
-        </div>
+        <DetectionHealthWidget timeRange={timeRange} />
       </div>
 
       {/* Row 3: MITRE + Correlation */}

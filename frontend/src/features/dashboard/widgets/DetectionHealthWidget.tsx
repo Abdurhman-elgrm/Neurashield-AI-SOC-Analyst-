@@ -1,14 +1,11 @@
 import { Activity, CheckCircle, AlertOctagon, VolumeX, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { BarChart } from "@/features/dashboard/charts";
-import { CHART_COLORS } from "@/features/dashboard/charts/ChartTheme";
 import { WidgetRefreshButton } from "./KPICard";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDetectionHealth } from "@/features/dashboard/hooks/useDashboardData";
 import type { DashboardTimeRange, DetectionRuleHealth } from "@/features/dashboard/types/dashboard";
 
-// ─── Rule status mini-stat ────────────────────────────────────────────────────
+// ─── Status stat pill ─────────────────────────────────────────────────────────
 
 function StatPill({
   icon,
@@ -22,43 +19,87 @@ function StatPill({
   variant: "success" | "warning" | "error" | "muted";
 }) {
   const colors = {
-    success: "text-severity-low",
-    warning: "text-severity-medium",
-    error:   "text-severity-critical",
-    muted:   "text-text-muted",
-  };
+    success: { text: "#10B981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)" },
+    warning: { text: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)" },
+    error:   { text: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)"  },
+    muted:   { text: "#5C6373", bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.07)" },
+  }[variant];
 
   return (
-    <div className="flex flex-col items-center gap-0.5 min-w-0">
-      <span className={cn("w-3.5 h-3.5", colors[variant])}>{icon}</span>
-      <span className={cn("text-sm font-bold tabular-nums", colors[variant])}>
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+      padding: "8px 4px", borderRadius: 8,
+      background: colors.bg, border: `1px solid ${colors.border}`,
+    }}>
+      <span style={{ color: colors.text, display: "flex", alignItems: "center" }}>
+        {icon}
+      </span>
+      <span style={{
+        fontSize: 15, fontWeight: 700, color: colors.text,
+        fontFamily: "'JetBrains Mono', monospace", lineHeight: 1,
+      }}>
         {value.toLocaleString()}
       </span>
-      <span className="text-2xs text-text-muted">{label}</span>
+      <span style={{ fontSize: 9, color: "#5C6373", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        {label}
+      </span>
     </div>
   );
 }
 
-// ─── Rule row ─────────────────────────────────────────────────────────────────
+// ─── Rule row with inline progress bar ───────────────────────────────────────
 
-function RuleRow({ rule }: { rule: DetectionRuleHealth }) {
-  const statusColor: Record<DetectionRuleHealth["status"], string> = {
-    active:   "text-severity-low",
-    noisy:    "text-severity-medium",
-    disabled: "text-text-muted",
-    error:    "text-severity-critical",
-  };
+const STATUS_COLOR: Record<DetectionRuleHealth["status"], string> = {
+  active:   "#10B981",
+  noisy:    "#F59E0B",
+  error:    "#EF4444",
+  disabled: "#374151",
+};
+
+function RuleBar({ rule, maxCount }: { rule: DetectionRuleHealth; maxCount: number }) {
+  const pct = maxCount > 0 ? Math.max(2, (rule.triggeredCount / maxCount) * 100) : 0;
+  const color = STATUS_COLOR[rule.status];
 
   return (
-    <div className="flex items-center gap-2 py-1.5 border-b border-border last:border-0">
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-px", {
-        "bg-severity-low": rule.status === "active",
-        "bg-severity-medium": rule.status === "noisy",
-        "bg-text-muted": rule.status === "disabled",
-        "bg-severity-critical": rule.status === "error",
-      })} />
-      <span className="flex-1 text-xs text-text-secondary truncate">{rule.ruleName}</span>
-      <span className={cn("text-xs font-medium tabular-nums", statusColor[rule.status])}>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      padding: "5px 0",
+      borderBottom: "1px solid rgba(255,255,255,0.04)",
+    }}>
+      {/* Status dot */}
+      <div style={{
+        width: 6, height: 6, borderRadius: "50%",
+        background: color, flexShrink: 0,
+        boxShadow: rule.status !== "disabled" ? `0 0 4px ${color}60` : "none",
+      }} />
+
+      {/* Rule name */}
+      <span style={{
+        flex: 1, fontSize: 11, color: "#8B95A7",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        lineHeight: 1.3,
+      }}>
+        {rule.ruleName}
+      </span>
+
+      {/* Progress bar */}
+      <div style={{
+        width: 44, height: 3, background: "rgba(255,255,255,0.06)",
+        borderRadius: 2, flexShrink: 0, overflow: "hidden",
+      }}>
+        <div style={{
+          width: `${pct}%`, height: "100%",
+          background: color, borderRadius: 2,
+          transition: "width 400ms ease",
+        }} />
+      </div>
+
+      {/* Count */}
+      <span style={{
+        width: 28, textAlign: "right", flexShrink: 0,
+        fontSize: 11, fontWeight: 600, color: rule.triggeredCount > 0 ? "#F5F7FA" : "#374151",
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
         {rule.triggeredCount.toLocaleString()}
       </span>
     </div>
@@ -67,64 +108,69 @@ function RuleRow({ rule }: { rule: DetectionRuleHealth }) {
 
 // ─── DetectionHealthWidget ────────────────────────────────────────────────────
 
-interface DetectionHealthWidgetProps {
-  timeRange: DashboardTimeRange;
-}
-
-export function DetectionHealthWidget({ timeRange }: DetectionHealthWidgetProps) {
+export function DetectionHealthWidget({ timeRange }: { timeRange: DashboardTimeRange }) {
   const { data, isLoading, isRefetching, refetch } = useDetectionHealth(timeRange);
 
-  // Build chart data from top rules
-  const chartData =
-    data?.topRules.slice(0, 8).map((r) => ({
-      name: r.ruleName.length > 20 ? r.ruleName.slice(0, 18) + "…" : r.ruleName,
-      count: r.triggeredCount,
-    })) ?? [];
+  const topRules  = data?.topRules?.slice(0, 8) ?? [];
+  const maxCount  = topRules.reduce((m, r) => Math.max(m, r.triggeredCount), 0);
 
   return (
     <div className="card flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-accent" />
-          <h3 className="text-sm font-semibold text-text-primary">Detection Health</h3>
+
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Activity size={13} style={{ color: "#3B82F6" }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#F5F7FA" }}>Detection Health</span>
         </div>
         <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
       </div>
 
-      <div className="flex-1 p-4 flex flex-col gap-4 min-h-0 overflow-y-auto">
-        {/* Rule counts */}
-        <div className="grid grid-cols-4 gap-2">
+      <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, overflowY: "auto" }}>
+
+        {/* Status pills */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
           <StatPill
-            icon={<CheckCircle />}
+            icon={<CheckCircle size={12} />}
             label="Active"
             value={data?.activeRules ?? 0}
             variant="success"
           />
           <StatPill
-            icon={<VolumeX />}
+            icon={<VolumeX size={12} />}
             label="Noisy"
             value={data?.noisyRules ?? 0}
             variant="warning"
           />
           <StatPill
-            icon={<AlertOctagon />}
+            icon={<AlertOctagon size={12} />}
             label="Error"
             value={data?.errorRules ?? 0}
             variant="error"
           />
           <StatPill
-            icon={<RefreshCw />}
-            label="Disabled"
+            icon={<RefreshCw size={12} />}
+            label="Off"
             value={data?.disabledRules ?? 0}
             variant="muted"
           />
         </div>
 
-        {/* Latency */}
+        {/* Avg latency */}
         {data && data.avgLatencyMs > 0 && (
-          <div className="flex items-center justify-between text-xs border-t border-border pt-3">
-            <span className="text-text-muted">Avg detect latency</span>
-            <span className="text-text-secondary font-medium">
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "6px 0",
+            borderTop: "1px solid rgba(255,255,255,0.05)",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+          }}>
+            <span style={{ fontSize: 11, color: "#5C6373" }}>Avg detect latency</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#8B95A7", fontFamily: "'JetBrains Mono', monospace" }}>
               {data.avgLatencyMs >= 1000
                 ? `${(data.avgLatencyMs / 1000).toFixed(1)}s`
                 : `${data.avgLatencyMs}ms`}
@@ -132,47 +178,49 @@ export function DetectionHealthWidget({ timeRange }: DetectionHealthWidgetProps)
           </div>
         )}
 
-        {/* Top triggered rules chart */}
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => <SkeletonText key={i} lines={1} />)}
-          </div>
-        ) : chartData.length === 0 ? (
-          <EmptyState
-            icon={<Activity className="w-6 h-6" />}
-            title="No rule activity"
-            description="No detection rules have triggered in this period."
-            className="py-6"
-          />
-        ) : (
-          <div>
-            <p className="text-2xs text-text-muted mb-2 font-medium uppercase tracking-wider">
+        {/* Top triggered rules */}
+        <div style={{ flex: 1 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 8,
+          }}>
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: "#5C6373",
+              textTransform: "uppercase", letterSpacing: "0.8px",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
               Top Triggered Rules
-            </p>
-            <BarChart
-              data={chartData}
-              xKey="name"
-              yKey="count"
-              layout="vertical"
-              color={CHART_COLORS.accent}
-              height={Math.max(120, chartData.length * 26)}
-              showGrid={false}
-              barSize={8}
-            />
+            </span>
+            <span style={{
+              fontSize: 9, color: "#374151",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              HITS
+            </span>
           </div>
-        )}
 
-        {/* Top rule list fallback for vertical mode */}
-        {!isLoading && data && data.topRules.length > 0 && (
-          <div className="border-t border-border pt-3">
-            <p className="text-2xs text-text-muted mb-2 font-medium uppercase tracking-wider">
-              Rule Details
-            </p>
-            {data.topRules.slice(0, 5).map((r) => (
-              <RuleRow key={r.ruleId} rule={r} />
-            ))}
-          </div>
-        )}
+          {isLoading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <SkeletonText key={i} lines={1} />
+              ))}
+            </div>
+          ) : topRules.length === 0 ? (
+            <EmptyState
+              icon={<Activity className="w-5 h-5" />}
+              title="No rule activity"
+              description="No rules triggered in this period."
+              className="py-4"
+            />
+          ) : (
+            <div>
+              {topRules.map((rule) => (
+                <RuleBar key={rule.ruleId} rule={rule} maxCount={maxCount} />
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
