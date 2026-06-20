@@ -30,6 +30,7 @@ export function LoginPage() {
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent,    setResendSent]    = useState(false);
+  const [resendError,   setResendError]   = useState<string | null>(null);
 
   const from = (location.state as { from?: Location })?.from?.pathname ?? "/dashboard";
 
@@ -82,11 +83,12 @@ export function LoginPage() {
   async function handleResend() {
     if (!unverifiedEmail || resendLoading || resendSent) return;
     setResendLoading(true);
+    setResendError(null);
     try {
       await authApi.resendVerification(unverifiedEmail);
       setResendSent(true);
-    } catch {
-      // silently fail — backend rate-limits but doesn't surface errors
+    } catch (err) {
+      setResendError(extractApiError(err));
     } finally {
       setResendLoading(false);
     }
@@ -225,6 +227,9 @@ export function LoginPage() {
                       <RefreshCw size={12} style={{ animation: resendLoading ? "spin 1s linear infinite" : "none" }} />
                       {resendLoading ? "Sending…" : "Resend verification email"}
                     </button>
+                  )}
+                  {resendError && (
+                    <p style={{ color: "#FCA5A5", fontSize: 11, marginTop: 4 }}>{resendError}</p>
                   )}
                 </div>
               </motion.div>

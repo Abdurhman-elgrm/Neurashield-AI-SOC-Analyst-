@@ -519,14 +519,7 @@ function ApiKeysTab() {
   useEffect(() => {
     settingsApi.listApiKeys()
       .then(setKeys)
-      .catch((err) => {
-        const status = (err as { response?: { status?: number } })?.response?.status
-        if (status === 403) {
-          setLoadError('You need Owner or Admin role to manage API keys.')
-        } else {
-          setLoadError('Failed to load API keys. Please try again.')
-        }
-      })
+      .catch((err) => setLoadError(extractApiError(err)))
       .finally(() => setLoading(false))
   }, [])
 
@@ -540,12 +533,7 @@ function ApiKeysTab() {
       setKeys(prev => [key, ...prev])
       setNewKeyName('')
     } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (status === 403) {
-        setCreateError('Insufficient permissions. Owner or Admin role required.')
-      } else {
-        setCreateError('Failed to create API key. Please try again.')
-      }
+      setCreateError(extractApiError(err))
     } finally {
       setCreating(false)
     }
