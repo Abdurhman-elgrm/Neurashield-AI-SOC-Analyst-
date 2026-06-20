@@ -81,57 +81,21 @@ async def _send_email(
     body_html: str = "",
 ) -> bool:
     """
-    Try Resend first (HTTPS, works on Railway).
-    Fall back to SMTP for local dev.
-    Returns True on success.
+    Provider priority: SMTP → Brevo → Resend.
+
+    SMTP (Gmail with App Password) is tried first because it sends with full
+    DKIM/SPF authentication from the actual Gmail account, so emails land in
+    inbox.  Brevo and Resend send from a third-party relay using a Gmail
+    "From" address, which Gmail spam-filters detect as spoofed.
+
+    Each provider falls through to the next on failure.
+    Returns True on first success, False if all providers fail.
     """
     settings = get_settings()
 
-    # ── Brevo (HTTPS, no port-blocking issues) ───────────────────────────────
-    if settings.BREVO_API_KEY:
-        try:
-            import httpx as _httpx
-            from_email = settings.BREVO_FROM_EMAIL or settings.SMTP_FROM_EMAIL or settings.SMTP_USER
-            payload: dict = {
-                "sender":      {"name": "NEURASHIELD SOC", "email": from_email},
-                "to":          [{"email": to_email}],
-                "subject":     subject,
-                "textContent": body_text,
-            }
-            if body_html:
-                payload["htmlContent"] = body_html
-            async with _httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(
-                    "https://api.brevo.com/v3/smtp/email",
-                    headers={"api-key": settings.BREVO_API_KEY, "Content-Type": "application/json"},
-                    json=payload,
-                )
-            if resp.status_code in (200, 201):
-                log.info("email_sent_brevo", to=to_email, subject=subject[:60])
-                return True
-            log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
-            # fall through to next provider
-        except Exception as exc:
-            log.warning("email_brevo_error", to=to_email, error=str(exc))
-            # fall through to next provider
-
-    # ── Resend ────────────────────────────────────────────────────────────────
-    if settings.RESEND_API_KEY:
-        try:
-            import resend as resend_sdk
-            resend_sdk.api_key = settings.RESEND_API_KEY
-            from_addr = settings.RESEND_FROM_EMAIL or "NEURASHIELD <onboarding@resend.dev>"
-            params: dict = {"from": from_addr, "to": [to_email], "subject": subject, "text": body_text}
-            if body_html:
-                params["html"] = body_html
-            resend_sdk.Emails.send(params)
-            log.info("email_sent_resend", to=to_email, subject=subject[:60])
-            return True
-        except Exception as exc:
-            log.warning("email_resend_error", to=to_email, error=str(exc))
-            # fall through to SMTP
-
-    # ── SMTP (Gmail app-password fallback) ────────────────────────────────────
+    # ── 1. SMTP — tried first when Gmail credentials are configured ───────────
+    # Gmail SMTP authenticates with the real Google servers so DKIM/SPF pass
+    # and emails land in inbox (no spam-relay mismatch).
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
         try:
             import aiosmtplib
@@ -161,6 +125,48 @@ async def _send_email(
             return True
         except Exception as exc:
             log.warning("email_smtp_error", to=to_email, error=str(exc))
+            # fall through to Brevo
+
+    # ── 2. Brevo (HTTPS, works behind any firewall) ───────────────────────────
+    if settings.BREVO_API_KEY:
+        try:
+            import httpx as _httpx
+            from_email = settings.BREVO_FROM_EMAIL or settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+            payload: dict = {
+                "sender":      {"name": "NEURASHIELD SOC", "email": from_email},
+                "to":          [{"email": to_email}],
+                "subject":     subject,
+                "textContent": body_text,
+            }
+            if body_html:
+                payload["htmlContent"] = body_html
+            async with _httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    headers={"api-key": settings.BREVO_API_KEY, "Content-Type": "application/json"},
+                    json=payload,
+                )
+            if resp.status_code in (200, 201):
+                log.info("email_sent_brevo", to=to_email, subject=subject[:60])
+                return True
+            log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
+        except Exception as exc:
+            log.warning("email_brevo_error", to=to_email, error=str(exc))
+
+    # ── 3. Resend ─────────────────────────────────────────────────────────────
+    if settings.RESEND_API_KEY:
+        try:
+            import resend as resend_sdk
+            resend_sdk.api_key = settings.RESEND_API_KEY
+            from_addr = settings.RESEND_FROM_EMAIL or "NEURASHIELD <onboarding@resend.dev>"
+            params: dict = {"from": from_addr, "to": [to_email], "subject": subject, "text": body_text}
+            if body_html:
+                params["html"] = body_html
+            resend_sdk.Emails.send(params)
+            log.info("email_sent_resend", to=to_email, subject=subject[:60])
+            return True
+        except Exception as exc:
+            log.warning("email_resend_error", to=to_email, error=str(exc))
 
     log.warning("email_all_providers_failed", to=to_email, subject=subject[:80])
     return False
