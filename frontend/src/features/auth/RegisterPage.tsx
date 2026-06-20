@@ -82,6 +82,19 @@ function CheckEmailScreen({ email }: { email: string }) {
         <p className="text-sm font-semibold mb-4" style={{ color: "#93C5FD" }}>
           {email}
         </p>
+
+        <div
+          className="flex items-start gap-2 p-3 rounded-lg mb-4 text-left"
+          style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.2)" }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1, marginTop: 1, flexShrink: 0 }}>⚠</span>
+          <p className="text-xs" style={{ color: "#FCD34D", lineHeight: 1.6 }}>
+            Can&apos;t find it?{" "}
+            <strong style={{ color: "#FDE68A" }}>Check your Spam / Junk folder</strong> —
+            mark it as &quot;Not Spam&quot; before clicking the link.
+          </p>
+        </div>
+
         <p className="text-xs mb-6" style={{ color: "#5C6373", lineHeight: 1.6 }}>
           Click the link in the email to activate your account. The link expires in 24 hours.
         </p>
@@ -92,13 +105,13 @@ function CheckEmailScreen({ email }: { email: string }) {
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
         >
           <p className="text-xs mb-2" style={{ color: "#5C6373" }}>
-            Didn&apos;t receive the email? Check your spam folder, or:
+            Still not there? Resend it:
           </p>
 
           {resendSent ? (
             <div className="flex items-center gap-2" style={{ color: "#10B981", fontSize: 12, fontWeight: 600 }}>
               <CheckCircle2 size={13} />
-              Email resent — check your inbox.
+              Email resent — check your inbox and spam folder.
             </div>
           ) : (
             <button

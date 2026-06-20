@@ -152,7 +152,7 @@ export function LoginPage() {
               >
                 <MailCheck className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "#10B981" }} />
                 <p className="text-sm" style={{ color: "#6EE7B7", lineHeight: 1.5 }}>
-                  Account created! Check your inbox and verify your email before signing in.
+                  Account created! Check your inbox (or <strong>Spam / Junk folder</strong>) for the verification email.
                 </p>
               </motion.div>
             )}
@@ -197,7 +197,7 @@ export function LoginPage() {
                     <p className="text-xs" style={{ color: "#A78A4F", lineHeight: 1.5 }}>
                       A verification link was sent to{" "}
                       <span style={{ color: "#FCD34D", fontWeight: 600 }}>{unverifiedEmail}</span>.
-                      Check your inbox and click the link to activate your account.
+                      Check your <strong style={{ color: "#FCD34D" }}>inbox and Spam / Junk folder</strong> for the verification link.
                     </p>
                   </div>
                 </div>
@@ -209,7 +209,7 @@ export function LoginPage() {
                   {resendSent ? (
                     <div className="flex items-center gap-2" style={{ color: "#10B981", fontSize: 12 }}>
                       <CheckCircle2 size={13} />
-                      Verification email sent — check your inbox.
+                      Sent — check your inbox and Spam / Junk folder.
                     </div>
                   ) : (
                     <button

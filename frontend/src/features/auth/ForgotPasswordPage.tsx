@@ -73,20 +73,30 @@ export function ForgotPasswordPage() {
               <h2 className="font-display font-bold mb-2" style={{ fontSize: 16, color: "#F5F7FA" }}>
                 Check your inbox
               </h2>
-              <p className="text-sm mb-6" style={{ color: "#8B95A7", lineHeight: 1.6 }}>
+              <p className="text-sm mb-4" style={{ color: "#8B95A7", lineHeight: 1.6 }}>
                 If an account exists for <strong style={{ color: "#F5F7FA" }}>{email}</strong>,
                 you'll receive a password reset link within a few minutes.
               </p>
+              <div
+                className="flex items-start gap-2 p-3 rounded-lg mb-4 text-left"
+                style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.2)" }}
+              >
+                <span style={{ fontSize: 14, lineHeight: 1, marginTop: 1 }}>⚠</span>
+                <p className="text-xs" style={{ color: "#FCD34D", lineHeight: 1.6 }}>
+                  Can't find it in your inbox?{" "}
+                  <strong style={{ color: "#FDE68A" }}>Check your Spam / Junk folder</strong> —
+                  reset emails sometimes get filtered. Mark it as "Not Spam" before clicking the link.
+                </p>
+              </div>
               <p className="text-xs" style={{ color: "#5C6373" }}>
-                Didn't receive it? Check your spam folder or{" "}
+                Still nothing?{" "}
                 <button
                   onClick={() => setSent(false)}
                   className="underline"
                   style={{ color: "#60A5FA", background: "none", border: "none", cursor: "pointer" }}
                 >
-                  try again
+                  Try again
                 </button>
-                .
               </p>
             </motion.div>
           ) : (
