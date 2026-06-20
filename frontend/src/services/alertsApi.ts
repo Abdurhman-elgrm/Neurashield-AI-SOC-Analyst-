@@ -2,6 +2,7 @@ import { apiClient } from "@/api/client";
 import type { APIResponse } from "@/types/api";
 import type {
   Alert,
+  AlertRiskContext,
   AlertSeverity,
   AlertStatus,
   AlertListParams,
@@ -43,6 +44,24 @@ function adaptAlert(raw: Record<string, any>): Alert {
     acknowledgedAt:   raw.acknowledged_at ? String(raw.acknowledged_at) : undefined,
     closedAt:         raw.closed_at ? String(raw.closed_at) : undefined,
     notes:            raw.notes ? String(raw.notes) : undefined,
+    riskContext:      _adaptRiskContext(raw.evidence),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function _adaptRiskContext(evidence: Record<string, any> | undefined | null): AlertRiskContext | undefined {
+  const rc = evidence?.risk_context;
+  if (!rc) return undefined;
+  return {
+    ruleSeverity:      String(rc.rule_base_severity ?? ""),
+    finalSeverity:     String(rc.final_severity ?? ""),
+    severityEscalated: Boolean(rc.severity_escalated),
+    escalationReasons: Array.isArray(rc.escalation_reasons) ? rc.escalation_reasons : [],
+    uebaScore:         Number(rc.ueba_score ?? 0),
+    uebaFlags:         Array.isArray(rc.ueba_flags) ? rc.ueba_flags : [],
+    isThreatIp:        Boolean(rc.is_threat_ip),
+    abuseConfidence:   Number(rc.abuse_confidence ?? 0),
+    threatIntelFlags:  Array.isArray(rc.threat_intel_flags) ? rc.threat_intel_flags : [],
   };
 }
 

@@ -11,6 +11,7 @@ from app.core.database import database_manager
 from app.core.redis import TenantRedisClient, redis_manager
 from app.correlation.extractor import extract_entities
 from app.correlation.enrichment import enrich_normalized_payload, entity_counts
+from app.normalization.mapper import compute_security_severity
 from app.normalization.service import NormalizationService
 from app.pipeline import stream_names
 from app.pipeline.consumer import StreamConsumer
@@ -91,6 +92,31 @@ class NormalizationWorker:
                 ueba_result = await UEBAService.analyze(
                     normalized, enrichment, redis, tenant_id_str
                 )
+
+                # ── Security severity computation ─────────────────────────────
+                # Replace the naive agent-reported severity with a context-aware
+                # security severity derived from category, threat intel, and UEBA.
+                # Operational severity (e.g. "system: critical") ≠ security severity.
+                agent_severity = normalized.severity
+                normalized.severity = compute_security_severity(
+                    category=normalized.category,
+                    agent_severity=agent_severity,
+                    is_threat_ip=enrichment.is_threat_ip,
+                    abuse_confidence=enrichment.abuse_confidence,
+                    ueba_score=ueba_result.anomaly_score,
+                    ueba_flags=ueba_result.ueba_flags,
+                )
+
+                # ── Embed enrichment + UEBA context into the normalized event ─
+                # These are forwarded through the normalized_events stream so the
+                # DetectionWorker can apply context-aware alert severity without
+                # repeating expensive GeoIP/ThreatIntel/UEBA lookups.
+                normalized.is_threat_ip = enrichment.is_threat_ip
+                normalized.abuse_confidence = enrichment.abuse_confidence
+                normalized.threat_intel_flags = list(enrichment.threat_intel_flags)
+                normalized.ueba_score = ueba_result.anomaly_score
+                normalized.ueba_is_anomaly = ueba_result.is_anomaly
+                normalized.ueba_flags = list(ueba_result.ueba_flags)
 
                 event = await NormalizationService.persist_event(
                     db, normalized, stream_id=msg_id,

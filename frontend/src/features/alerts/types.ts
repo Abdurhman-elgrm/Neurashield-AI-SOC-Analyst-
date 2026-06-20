@@ -13,6 +13,20 @@ export type BulkAlertAction =
   | "remove_tag"
   | "update_severity";
 
+// ─── Risk context (populated by detection engine severity escalation) ─────────
+
+export interface AlertRiskContext {
+  ruleSeverity: string;
+  finalSeverity: string;
+  severityEscalated: boolean;
+  escalationReasons: string[];
+  uebaScore: number;
+  uebaFlags: string[];
+  isThreatIp: boolean;
+  abuseConfidence: number;
+  threatIntelFlags: string[];
+}
+
 // ─── Core alert entity ────────────────────────────────────────────────────────
 
 export interface MitreAttack {
@@ -57,6 +71,7 @@ export interface Alert {
   acknowledgedAt?: string;
   closedAt?: string;
   notes?: string;
+  riskContext?: AlertRiskContext;
 }
 
 // ─── Alert list / pagination ──────────────────────────────────────────────────

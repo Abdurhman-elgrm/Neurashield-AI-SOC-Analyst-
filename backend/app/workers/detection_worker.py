@@ -227,4 +227,12 @@ def _dict_to_normalized_event(payload: dict[str, Any]) -> NormalizedEvent:
         registry=payload.get("registry"),
         tags=payload.get("tags", []),
         raw=payload.get("raw", {}),
+        # Enrichment + UEBA context forwarded from NormalizationWorker.
+        # Used by the detection evaluator for context-aware severity escalation.
+        is_threat_ip=bool(payload.get("is_threat_ip", False)),
+        abuse_confidence=int(payload.get("abuse_confidence", 0)),
+        threat_intel_flags=list(payload.get("threat_intel_flags") or []),
+        ueba_score=float(payload.get("ueba_score", 0.0)),
+        ueba_is_anomaly=bool(payload.get("ueba_is_anomaly", False)),
+        ueba_flags=list(payload.get("ueba_flags") or []),
     )

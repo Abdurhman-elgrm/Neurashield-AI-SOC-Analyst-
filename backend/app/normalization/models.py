@@ -74,6 +74,16 @@ class NormalizedEvent:
     tags: list[str] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
+    # Enrichment context — populated by NormalizationWorker after GeoIP/ThreatIntel/UEBA.
+    # Carried through the normalized_events stream so DetectionWorker can use them
+    # for context-aware alert severity without repeating expensive lookups.
+    is_threat_ip: bool = False
+    abuse_confidence: int = 0
+    threat_intel_flags: list[str] = field(default_factory=list)
+    ueba_score: float = 0.0
+    ueba_is_anomaly: bool = False
+    ueba_flags: list[str] = field(default_factory=list)
+
     def to_dict(self) -> dict[str, Any]:
         import dataclasses
 

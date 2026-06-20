@@ -20,6 +20,87 @@ _SEVERITY_MAP = {
     "critical": 4,
 }
 
+# Security relevance floor per category.
+# Operational log severity ≠ security severity.
+# "system" / "other" logs are never security-critical by default; they may be
+# operationally critical (disk full, service crash) but carry no inherent
+# security signal and must not appear as "critical" in the Security Events Explorer.
+_CATEGORY_SEC_FLOOR: dict[str, int] = {
+    "auth":     2,  # Authentication events → medium floor (security-relevant by nature)
+    "process":  2,  # Process execution → medium floor
+    "network":  2,  # Network traffic → medium floor
+    "dns":      1,  # DNS → low unless enriched
+    "file":     1,  # File access → low unless enriched
+    "registry": 1,  # Registry → low unless enriched
+    "system":   1,  # System logs → always low (ops severity ≠ security severity)
+    "other":    1,
+}
+
+# Agent-reported severity is NOT trusted as a security signal for these categories.
+_LOW_TRUST_CATEGORIES = frozenset({"system", "other"})
+# Agent severity partially trusted here — capped at medium (2).
+_MEDIUM_TRUST_CATEGORIES = frozenset({"file", "registry", "dns"})
+
+# UEBA flags that always indicate high-confidence attack activity.
+_HIGH_CONFIDENCE_CHAIN_FLAGS = frozenset({
+    "impossible_travel",
+    "brute_force_success",
+    "lateral_movement",
+    "lateral_movement_xdomain",
+})
+
+
+def compute_security_severity(
+    category: str,
+    agent_severity: int,
+    is_threat_ip: bool,
+    abuse_confidence: int,
+    ueba_score: float,
+    ueba_flags: list[str],
+) -> int:
+    """
+    Compute security-aware event severity (1–4) from multiple signals.
+
+    Replaces the naive agent-reported severity pass-through.  The final value
+    is stored in Event.severity and displayed in the Security Events Explorer.
+
+    Scoring logic:
+      1. Category floor: system/other events cannot be security-critical by default.
+      2. Agent severity as a HINT only — capped per category trust level.
+      3. Threat Intel boost: confirmed/suspicious IPs escalate severity.
+      4. UEBA boost: behavioral anomaly escalates severity.
+      5. Attack chain floor: high-confidence attack flags enforce at least HIGH (3).
+    """
+    floor = _CATEGORY_SEC_FLOOR.get(category, 1)
+
+    if category in _LOW_TRUST_CATEGORIES:
+        # Ignore agent severity entirely — these are operational, not security, signals.
+        base = floor
+    elif category in _MEDIUM_TRUST_CATEGORIES:
+        # Agent may report severity, but cap at medium for low-trust categories.
+        base = max(floor, min(agent_severity, 2))
+    else:
+        # auth/process/network: trust agent up to HIGH; CRITICAL requires context.
+        base = max(floor, min(agent_severity, 3))
+
+    # Threat Intel boost
+    if abuse_confidence >= 75:
+        base = min(base + 2, 4)   # Confirmed malicious → jump two tiers
+    elif is_threat_ip or abuse_confidence >= 25:
+        base = min(base + 1, 4)   # Suspicious → jump one tier
+
+    # UEBA boost
+    if ueba_score >= 0.80:
+        base = min(base + 2, 4)   # Strong behavioral anomaly → jump two tiers
+    elif ueba_score >= 0.50:
+        base = min(base + 1, 4)   # Moderate anomaly → jump one tier
+
+    # Attack chain floor: high-confidence flags lock in at least HIGH
+    if any(f in ueba_flags for f in _HIGH_CONFIDENCE_CHAIN_FLAGS):
+        base = max(base, 3)
+
+    return base
+
 # Human-readable labels used by the old agent format → Windows field names
 _LABEL_TO_WIN_FIELD: dict[str, str] = {
     "Account Name":         "TargetUserName",

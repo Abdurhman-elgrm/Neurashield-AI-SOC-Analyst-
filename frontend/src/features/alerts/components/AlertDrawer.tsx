@@ -17,7 +17,7 @@ import { SkeletonText } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAlertDetail, useAlertContext, useAlertTimeline } from "../hooks/useAlerts";
 import { alertsKeys } from "../hooks/useAlerts";
-import type { Alert, AlertTimelineEvent, AIVerdictType, AlertStatus } from "../types";
+import type { Alert, AlertRiskContext, AlertTimelineEvent, AIVerdictType, AlertStatus } from "../types";
 
 // ─── Status display ───────────────────────────────────────────────────────────
 
@@ -112,6 +112,158 @@ function OverviewSection({ alert }: { alert: Alert }) {
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Risk Context */}
+      {alert.riskContext && <RiskContextCard rc={alert.riskContext} />}
+    </div>
+  );
+}
+
+// ─── Risk Context Card ────────────────────────────────────────────────────────
+
+const ESCALATION_REASON_LABEL: Record<string, string> = {
+  threat_ip_confirmed_malicious: "Confirmed malicious IP (AbuseIPDB ≥ 75)",
+  threat_ip_suspicious:          "Suspicious IP (AbuseIPDB ≥ 25 or threat feed hit)",
+  ueba_strong_anomaly:           "Strong behavioral anomaly (UEBA ≥ 0.80)",
+  ueba_moderate_anomaly:         "Moderate behavioral anomaly (UEBA ≥ 0.60)",
+  compound_threat_intel_and_ueba:"Compound: threat IP + behavioral anomaly",
+  critical_attack_chain_detected:"Critical attack chain detected (floored to HIGH)",
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: "text-severity-critical",
+  high:     "text-severity-high",
+  medium:   "text-severity-medium",
+  low:      "text-severity-low",
+  info:     "text-text-muted",
+};
+
+function RiskContextCard({ rc }: { rc: AlertRiskContext }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-bg-elevated hover:bg-bg-subtle transition-colors text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Shield className="w-3.5 h-3.5 text-accent" />
+          <span className="text-xs font-medium text-text-primary">Risk Assessment</span>
+          {rc.severityEscalated && (
+            <span className="px-1.5 py-0.5 text-2xs font-semibold bg-severity-critical/15 text-severity-critical border border-severity-critical/25 rounded">
+              ESCALATED
+            </span>
+          )}
+        </div>
+        <ChevronRight
+          className={cn(
+            "w-3.5 h-3.5 text-text-muted transition-transform duration-150",
+            expanded && "rotate-90"
+          )}
+        />
+      </button>
+
+      {expanded && (
+        <div className="px-3 py-3 space-y-3 border-t border-border bg-bg-subtle/50">
+          {/* Severity delta */}
+          <div className="flex items-center gap-3 text-xs">
+            <div className="space-y-0.5">
+              <p className="text-2xs text-text-muted uppercase tracking-wider">Rule Severity</p>
+              <span className={cn("font-semibold capitalize", SEVERITY_COLOR[rc.ruleSeverity])}>
+                {rc.ruleSeverity}
+              </span>
+            </div>
+            {rc.severityEscalated && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                <div className="space-y-0.5">
+                  <p className="text-2xs text-text-muted uppercase tracking-wider">Final Severity</p>
+                  <span className={cn("font-semibold capitalize", SEVERITY_COLOR[rc.finalSeverity])}>
+                    {rc.finalSeverity}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Escalation reasons */}
+          {rc.escalationReasons.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-2xs text-text-muted uppercase tracking-wider font-medium">
+                Escalation Reasons
+              </p>
+              <ul className="space-y-1">
+                {rc.escalationReasons.map((r) => (
+                  <li key={r} className="flex items-start gap-1.5 text-xs text-text-secondary">
+                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-severity-critical flex-shrink-0" />
+                    {ESCALATION_REASON_LABEL[r] ?? r.replace(/_/g, " ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* UEBA */}
+          {(rc.uebaScore > 0 || rc.uebaFlags.length > 0) && (
+            <div className="space-y-1">
+              <p className="text-2xs text-text-muted uppercase tracking-wider font-medium">UEBA</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full",
+                      rc.uebaScore >= 0.8 ? "bg-severity-critical" :
+                      rc.uebaScore >= 0.6 ? "bg-severity-high" :
+                      rc.uebaScore >= 0.4 ? "bg-severity-medium" : "bg-severity-low"
+                    )}
+                    style={{ width: `${Math.round(rc.uebaScore * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono text-text-secondary w-10 text-right">
+                  {Math.round(rc.uebaScore * 100)}%
+                </span>
+              </div>
+              {rc.uebaFlags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {rc.uebaFlags.map((f) => (
+                    <span key={f} className="px-1.5 py-0.5 text-2xs font-mono bg-severity-high/10 text-severity-high border border-severity-high/20 rounded">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Threat Intel */}
+          {(rc.isThreatIp || rc.abuseConfidence > 0 || rc.threatIntelFlags.length > 0) && (
+            <div className="space-y-1">
+              <p className="text-2xs text-text-muted uppercase tracking-wider font-medium">Threat Intel</p>
+              <div className="flex items-center gap-3 text-xs text-text-secondary">
+                {rc.isThreatIp && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-severity-critical" />
+                    Threat IP
+                  </span>
+                )}
+                {rc.abuseConfidence > 0 && (
+                  <span>AbuseIPDB: <span className="font-mono font-semibold">{rc.abuseConfidence}%</span></span>
+                )}
+              </div>
+              {rc.threatIntelFlags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {rc.threatIntelFlags.map((f) => (
+                    <span key={f} className="px-1.5 py-0.5 text-2xs font-mono bg-severity-critical/10 text-severity-critical border border-severity-critical/20 rounded">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

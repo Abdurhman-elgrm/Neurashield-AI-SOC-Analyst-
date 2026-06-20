@@ -12,10 +12,84 @@ from app.detection.patterns import evaluate_conditions
 from app.detection.suppression import SuppressionStore, build_suppression_key
 from app.detection.threshold import ThresholdEvaluator
 from app.models.alert import Alert, AlertSeverity, AlertStatus
-from app.models.detection_rule import DetectionRule, RuleType
+from app.models.detection_rule import DetectionRule, RuleSeverity, RuleType
 from app.normalization.models import NormalizedEvent
 
 logger = structlog.get_logger(__name__)
+
+# ─── Context-aware severity escalation ────────────────────────────────────────
+
+_SEVERITY_RANK: dict[str, int] = {
+    "critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0,
+}
+_RANK_TO_SEVERITY: dict[int, AlertSeverity] = {
+    4: AlertSeverity.CRITICAL,
+    3: AlertSeverity.HIGH,
+    2: AlertSeverity.MEDIUM,
+    1: AlertSeverity.LOW,
+    0: AlertSeverity.LOW,
+}
+
+# UEBA flags that represent high-confidence attack chain activity.
+# Any alert triggered alongside these flags is locked to at least HIGH.
+_CRITICAL_CHAIN_FLAGS = frozenset({
+    "impossible_travel",
+    "brute_force_success",
+    "lateral_movement_xdomain",
+})
+
+
+def _compute_alert_severity(
+    rule_severity: RuleSeverity,
+    event: NormalizedEvent,
+) -> tuple[AlertSeverity, list[str]]:
+    """
+    Compute final alert severity using the rule's base severity enriched with
+    threat intelligence and UEBA behavioral context.
+
+    Returns (final_severity, escalation_reasons).  Reasons are stored in the
+    alert evidence so analysts know exactly why a severity was elevated.
+
+    Escalation tiers:
+      +1  Suspicious IP (AbuseIPDB ≥ 25 or is_threat_ip flag from any source)
+      +2  Confirmed malicious IP (AbuseIPDB ≥ 75)
+      +1  Moderate UEBA behavioral anomaly (score ≥ 0.60)
+      +1  Strong UEBA behavioral anomaly (score ≥ 0.80, stacks)
+      +1  Compound: threat IP AND behavioral anomaly (score ≥ 0.50)
+      →3  Floor at HIGH for critical attack chain flags (impossible travel, etc.)
+    All escalations cap at CRITICAL (4).
+    """
+    base_rank = _SEVERITY_RANK.get(rule_severity.value, 2)
+    escalation_reasons: list[str] = []
+
+    # Boost 1: Threat Intel — suspicious / malicious source IP
+    if event.abuse_confidence >= 75:
+        base_rank = min(base_rank + 2, 4)
+        escalation_reasons.append("threat_ip_confirmed_malicious")
+    elif event.is_threat_ip or event.abuse_confidence >= 25:
+        base_rank = min(base_rank + 1, 4)
+        escalation_reasons.append("threat_ip_suspicious")
+
+    # Boost 2: UEBA behavioral anomaly
+    if event.ueba_score >= 0.80:
+        base_rank = min(base_rank + 1, 4)
+        escalation_reasons.append("ueba_strong_anomaly")
+    elif event.ueba_score >= 0.60:
+        base_rank = min(base_rank + 1, 4)
+        escalation_reasons.append("ueba_moderate_anomaly")
+
+    # Boost 3: Compound threat — both threat intel AND behavioral anomaly
+    if event.is_threat_ip and event.ueba_score >= 0.50:
+        base_rank = min(base_rank + 1, 4)
+        escalation_reasons.append("compound_threat_intel_and_ueba")
+
+    # Floor: critical attack-chain flags → lock to at least HIGH
+    if any(f in event.ueba_flags for f in _CRITICAL_CHAIN_FLAGS):
+        if base_rank < 3:
+            base_rank = 3
+            escalation_reasons.append("critical_attack_chain_detected")
+
+    return _RANK_TO_SEVERITY[base_rank], escalation_reasons
 
 
 class RuleEvaluator:
@@ -67,11 +141,28 @@ class RuleEvaluator:
             logger.debug("rule_suppressed", rule_id=str(rule.id), hostname=event.hostname)
             return None
 
-        # Map rule severity to alert severity
-        try:
-            severity = AlertSeverity(rule.severity.value)
-        except ValueError:
-            severity = AlertSeverity.MEDIUM
+        # Context-aware severity: rule base + threat intel + UEBA boosts
+        severity, escalation_reasons = _compute_alert_severity(rule.severity, event)
+
+        evidence = build_alert_evidence(
+            event,
+            stream_id=stream_id,
+            count=count,
+            window_event_ids=window_event_ids or None,
+        )
+
+        # Attach risk context so analysts can audit why severity was (or wasn't) elevated
+        evidence["risk_context"] = {
+            "rule_base_severity": rule.severity.value,
+            "final_severity": severity.value,
+            "severity_escalated": severity.value != rule.severity.value,
+            "escalation_reasons": escalation_reasons,
+            "ueba_score": round(event.ueba_score, 4),
+            "ueba_flags": list(event.ueba_flags),
+            "is_threat_ip": event.is_threat_ip,
+            "abuse_confidence": event.abuse_confidence,
+            "threat_intel_flags": list(event.threat_intel_flags),
+        }
 
         alert = Alert(
             tenant_id=rule.tenant_id,
@@ -82,12 +173,7 @@ class RuleEvaluator:
             title=build_alert_title(rule.name, event),
             description=rule.description,
             source_host=event.hostname or None,
-            evidence=build_alert_evidence(
-                event,
-                stream_id=stream_id,
-                count=count,
-                window_event_ids=window_event_ids or None,
-            ),
+            evidence=evidence,
             mitre_tactics=rule.mitre_tactics,
             mitre_techniques=rule.mitre_techniques,
             suppression_key=suppress_key,
@@ -100,7 +186,12 @@ class RuleEvaluator:
             "alert_created",
             alert_id=str(alert.id),
             rule_id=str(rule.id),
-            severity=severity.value,
+            rule_base_severity=rule.severity.value,
+            final_severity=severity.value,
+            severity_escalated=severity.value != rule.severity.value,
+            escalation_reasons=escalation_reasons,
+            ueba_score=round(event.ueba_score, 4),
+            is_threat_ip=event.is_threat_ip,
             hostname=event.hostname,
         )
 
