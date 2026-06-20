@@ -84,20 +84,33 @@ function UserMenu() {
           padding: "3px 6px",
           transition: "all 120ms",
         }}>
+          {/* Avatar: photo when available, gradient initial as fallback */}
           <div style={{
             width: 26,
             height: 26,
             borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "linear-gradient(135deg, #2563EB, #38BDF8)",
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: 700,
+            position: "relative",
+            overflow: "hidden",
             flexShrink: 0,
+            background: "linear-gradient(135deg, #2563EB, #38BDF8)",
           }}>
-            {initial}
+            {/* Initial — always rendered behind the photo */}
+            <div style={{
+              position: "absolute", inset: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 10, fontWeight: 700,
+            }}>
+              {initial}
+            </div>
+            {/* Photo — overlays initial; hides on load error */}
+            {user?.avatar_url && (
+              <img
+                src={user.avatar_url}
+                alt=""
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+              />
+            )}
           </div>
           <span style={{ maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {displayName}

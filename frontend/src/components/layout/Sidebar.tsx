@@ -13,6 +13,7 @@ import {
   LogOut,
   BookOpen,
   FileBarChart,
+  Download,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -194,8 +195,9 @@ export function Sidebar() {
         )}
 
         <div className="sec-label">Platform</div>
-        <NavItem to="/agents"   icon={Monitor}  label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
-        <NavItem to="/settings" icon={Settings} label="Settings" />
+        <NavItem to="/agents"    icon={Monitor}   label="Agents" badge={onlineAgentCount || undefined} badgeColor="green" />
+        <NavItem to="/installer" icon={Download}  label="Generate Tokens" />
+        <NavItem to="/settings"  icon={Settings}  label="Settings" />
       </nav>
 
       {/* Footer */}

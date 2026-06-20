@@ -208,7 +208,7 @@ function ProfileTab() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       if (storeUser) {
-        setUser({ ...storeUser, full_name: updated.full_name, timezone: updated.timezone ?? 'UTC' })
+        setUser({ ...storeUser, full_name: updated.full_name, timezone: updated.timezone ?? 'UTC', avatar_url: updated.avatar_url ?? null })
       }
     } finally {
       setSaving(false)

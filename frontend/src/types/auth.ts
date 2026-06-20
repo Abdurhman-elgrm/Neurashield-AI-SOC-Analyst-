@@ -6,6 +6,7 @@ export interface User {
   created_at: string;
   timezone?: string;
   roles?: string[];
+  avatar_url?: string | null;
 }
 
 export interface TokenPair {

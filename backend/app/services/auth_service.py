@@ -76,18 +76,24 @@ class AuthService:
             ip_address=ip_address,
         )
 
-        # Send verification email in background — never block registration
-        try:
-            from app.services.email_service import send_verification_email
-            verify_url = (
-                f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
-            )
-            import asyncio
-            asyncio.create_task(
-                send_verification_email(user.email, user.full_name, verify_url)
-            )
-        except Exception:
-            logger.warning("verification_email_schedule_failed", user_id=str(user.id))
+        # Send verification email in background — never block registration response.
+        # The task wrapper logs success/failure so failures are visible in structlog.
+        import asyncio
+        from app.services.email_service import send_verification_email
+
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+
+        async def _send_registration_email() -> None:
+            try:
+                sent = await send_verification_email(user.email, user.full_name, verify_url)
+                if not sent:
+                    logger.warning("verification_email_not_sent", user_id=str(user.id))
+                else:
+                    logger.info("verification_email_sent", user_id=str(user.id))
+            except Exception as exc:
+                logger.warning("verification_email_error", user_id=str(user.id), error=str(exc))
+
+        asyncio.create_task(_send_registration_email())
 
         return user, token_pair
 
@@ -194,7 +200,7 @@ class AuthService:
         if user is None or user.email_verified:
             return
 
-        # Rate limit: don't resend if last email was sent < 5 minutes ago
+        # Rate limit: don't resend if last email was sent < 5 minutes ago.
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
             if isinstance(sent_at, str):
@@ -202,6 +208,13 @@ class AuthService:
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+                logger.info(
+                    "resend_verification_rate_limited",
+                    user_id=str(user.id),
+                    retry_after_seconds=int(
+                        (sent_at + timedelta(minutes=5) - datetime.now(tz=timezone.utc)).total_seconds()
+                    ),
+                )
                 return
 
         new_token = _generate_verification_token()
@@ -209,17 +222,16 @@ class AuthService:
         user.email_verification_sent_at = datetime.now(tz=timezone.utc)
         await db.flush([user])
 
+        from app.services.email_service import send_verification_email
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
         try:
-            from app.services.email_service import send_verification_email
-            verify_url = (
-                f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
-            )
-            import asyncio
-            asyncio.create_task(
-                send_verification_email(user.email, user.full_name, verify_url)
-            )
-        except Exception:
-            logger.warning("resend_verification_email_failed", user_id=str(user.id))
+            sent = await send_verification_email(user.email, user.full_name, verify_url)
+            if not sent:
+                logger.warning("resend_verification_email_not_sent", user_id=str(user.id))
+            else:
+                logger.info("resend_verification_email_sent", user_id=str(user.id))
+        except Exception as exc:
+            logger.warning("resend_verification_email_error", user_id=str(user.id), error=str(exc))
 
     @staticmethod
     async def refresh(
