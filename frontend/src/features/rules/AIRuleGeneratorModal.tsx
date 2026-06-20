@@ -165,6 +165,7 @@ export function AIRuleGeneratorModal({ open, onClose, onImported }: AIRuleGenera
       title="AI Rule Generator"
       description="Describe what you want to detect in plain language"
       size="xl"
+      className="!left-[calc(50vw+110px)]"
     >
       <ModalBody className="space-y-4">
 
