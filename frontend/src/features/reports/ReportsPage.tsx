@@ -471,7 +471,7 @@ export function ReportsPage() {
     refetchInterval: 15_000,
     enabled: tab === 'generated' && !viewingId,
   })
-  const reports = reportsData?.data ?? []
+  const reports = reportsData ?? []
 
   const tabStyle = (active: boolean, color = '#3B82F6') => ({
     padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,

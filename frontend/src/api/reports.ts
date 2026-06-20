@@ -114,8 +114,8 @@ export const reportsApi = {
   generate: (payload: { report_type: ReportType; period_days: number }): Promise<GeneratedReportSummary> =>
     apiPost<GeneratedReportSummary>('/reports/generate', payload),
 
-  listGenerated: (page = 1): Promise<{ data: GeneratedReportSummary[]; total: number }> =>
-    apiGet<{ data: GeneratedReportSummary[]; total: number }>(`/reports/generated?page=${page}&limit=20`),
+  listGenerated: (page = 1): Promise<GeneratedReportSummary[]> =>
+    apiGet<GeneratedReportSummary[]>(`/reports/generated?page=${page}&limit=20`),
 
   getGenerated: (id: string): Promise<GeneratedReportDetail> =>
     apiGet<GeneratedReportDetail>(`/reports/generated/${id}`),
