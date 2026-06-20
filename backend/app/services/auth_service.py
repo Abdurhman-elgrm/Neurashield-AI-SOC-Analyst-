@@ -326,11 +326,16 @@ class AuthService:
 
         if user.password_reset_sent_at:
             sent_at = user.password_reset_sent_at
-            if isinstance(sent_at, str):
-                sent_at = datetime.fromisoformat(sent_at)
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):
+                logger.info(
+                    "forgot_password_rate_limited",
+                    user_id=str(user.id),
+                    retry_after_seconds=int(
+                        (sent_at + timedelta(minutes=5) - datetime.now(tz=timezone.utc)).total_seconds()
+                    ),
+                )
                 return
 
         token = _generate_verification_token()
@@ -338,15 +343,16 @@ class AuthService:
         user.password_reset_sent_at = datetime.now(tz=timezone.utc)
         await db.flush([user])
 
+        from app.services.email_service import send_password_reset_email
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
         try:
-            from app.services.email_service import send_password_reset_email
-            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-            import asyncio
-            asyncio.create_task(
-                send_password_reset_email(user.email, user.full_name, reset_url)
-            )
-        except Exception:
-            logger.warning("password_reset_email_failed", user_id=str(user.id))
+            sent = await send_password_reset_email(user.email, user.full_name, reset_url)
+            if not sent:
+                logger.warning("forgot_password_email_not_sent", user_id=str(user.id))
+            else:
+                logger.info("forgot_password_email_sent", user_id=str(user.id))
+        except Exception as exc:
+            logger.warning("forgot_password_email_error", user_id=str(user.id), error=str(exc))
 
     @staticmethod
     async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
@@ -364,8 +370,6 @@ class AuthService:
 
         if user.password_reset_sent_at:
             sent_at = user.password_reset_sent_at
-            if isinstance(sent_at, str):
-                sent_at = datetime.fromisoformat(sent_at)
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=1):
