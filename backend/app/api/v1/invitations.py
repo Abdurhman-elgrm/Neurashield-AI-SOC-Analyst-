@@ -26,8 +26,9 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.invitation import Invitation
 from app.models.tenant_member import TenantMember
 from app.models.user import User
+from app.core.exceptions import ForbiddenError
 from app.rbac.permissions import Permission
-from app.rbac.roles import Role
+from app.rbac.roles import Role, ROLE_HIERARCHY
 from app.schemas.common import APIResponse, EmptyResponse
 from app.services.email_service import send_invitation_email
 from app.core.config import settings
@@ -87,9 +88,17 @@ async def send_invitation(
 
     # Validate role
     try:
-        Role(payload.role)
+        invited_role = Role(payload.role)
     except ValueError:
         raise ValidationError(f"Invalid role: {payload.role!r}. Must be one of: {[r.value for r in Role]}")
+
+    # Prevent privilege escalation — actor can only invite at a strictly lower level
+    actor_level  = ROLE_HIERARCHY.get(Role(m.role), -1)
+    invited_level = ROLE_HIERARCHY.get(invited_role, -1)
+    if invited_level >= actor_level:
+        raise ForbiddenError(
+            "You cannot invite a member with a role equal to or higher than your own"
+        )
 
     # Check if email is already a member
     existing_member = await db.execute(
