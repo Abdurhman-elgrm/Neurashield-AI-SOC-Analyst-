@@ -32,6 +32,18 @@ export interface TenantInfo {
   slug: string
   is_active: boolean
   created_at: string
+  timezone: string
+  logo_url: string | null
+  event_retention_days: number
+  alert_retention_days: number
+}
+
+export interface TenantUpdatePayload {
+  name?: string
+  timezone?: string
+  logo_url?: string | null
+  event_retention_days?: number
+  alert_retention_days?: number
 }
 
 // ─── Member ───────────────────────────────────────────────────────────────────
@@ -92,9 +104,13 @@ export const settingsApi = {
     return resp.data.data
   },
 
-  updateTenant: async (id: string, payload: { name: string }): Promise<TenantInfo> => {
+  updateTenant: async (id: string, payload: TenantUpdatePayload): Promise<TenantInfo> => {
     const resp = await apiClient.patch<{ data: TenantInfo }>(`/tenants/${id}`, payload)
     return resp.data.data
+  },
+
+  deleteTenant: async (id: string): Promise<void> => {
+    await apiClient.delete(`/tenants/${id}`)
   },
 
   // Members  — GET /api/v1/tenants/{tenant_id}/members  (needs X-Tenant-ID)
