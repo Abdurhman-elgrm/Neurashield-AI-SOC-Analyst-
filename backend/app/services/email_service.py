@@ -81,21 +81,42 @@ async def _send_email(
     body_html: str = "",
 ) -> bool:
     """
-    Provider priority: SMTP → Brevo → Resend.
+    Provider priority: Resend → SMTP → Brevo.
 
-    SMTP (Gmail with App Password) is tried first because it sends with full
-    DKIM/SPF authentication from the actual Gmail account, so emails land in
-    inbox.  Brevo and Resend send from a third-party relay using a Gmail
-    "From" address, which Gmail spam-filters detect as spoofed.
+    Resend is tried first: it uses HTTPS (no port-blocking on Railway) and
+    sends from the verified resend.dev domain, so emails land in inbox.
+    SMTP (Gmail App Password) is next: blocks on Railway port 587 but works
+    for local dev.  Brevo is last: sends from a Gmail address via a third-party
+    relay, which Gmail spam-filters see as spoofed.
 
     Each provider falls through to the next on failure.
     Returns True on first success, False if all providers fail.
     """
     settings = get_settings()
 
-    # ── 1. SMTP — tried first when Gmail credentials are configured ───────────
-    # Gmail SMTP authenticates with the real Google servers so DKIM/SPF pass
-    # and emails land in inbox (no spam-relay mismatch).
+    # ── 1. Resend (HTTPS, verified resend.dev domain → inbox delivery) ────────
+    if settings.RESEND_API_KEY:
+        try:
+            import httpx as _httpx
+            from_addr = settings.RESEND_FROM_EMAIL or "NEURASHIELD <onboarding@resend.dev>"
+            payload: dict = {"from": from_addr, "to": [to_email], "subject": subject, "text": body_text}
+            if body_html:
+                payload["html"] = body_html
+            async with _httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+            if resp.status_code in (200, 201):
+                log.info("email_sent_resend", to=to_email, subject=subject[:60])
+                return True
+            log.warning("email_resend_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
+        except Exception as exc:
+            log.warning("email_resend_error", to=to_email, error=str(exc))
+            # fall through to SMTP
+
+    # ── 2. SMTP (Gmail App Password — works locally, may be blocked on Railway) ─
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
         try:
             import aiosmtplib
@@ -127,7 +148,7 @@ async def _send_email(
             log.warning("email_smtp_error", to=to_email, error=str(exc))
             # fall through to Brevo
 
-    # ── 2. Brevo (HTTPS, works behind any firewall) ───────────────────────────
+    # ── 3. Brevo (last resort — sends from Gmail address via relay → may spam) ──
     if settings.BREVO_API_KEY:
         try:
             import httpx as _httpx
@@ -152,21 +173,6 @@ async def _send_email(
             log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
         except Exception as exc:
             log.warning("email_brevo_error", to=to_email, error=str(exc))
-
-    # ── 3. Resend ─────────────────────────────────────────────────────────────
-    if settings.RESEND_API_KEY:
-        try:
-            import resend as resend_sdk
-            resend_sdk.api_key = settings.RESEND_API_KEY
-            from_addr = settings.RESEND_FROM_EMAIL or "NEURASHIELD <onboarding@resend.dev>"
-            params: dict = {"from": from_addr, "to": [to_email], "subject": subject, "text": body_text}
-            if body_html:
-                params["html"] = body_html
-            resend_sdk.Emails.send(params)
-            log.info("email_sent_resend", to=to_email, subject=subject[:60])
-            return True
-        except Exception as exc:
-            log.warning("email_resend_error", to=to_email, error=str(exc))
 
     log.warning("email_all_providers_failed", to=to_email, subject=subject[:80])
     return False
