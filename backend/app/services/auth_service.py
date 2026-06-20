@@ -167,8 +167,6 @@ class AuthService:
         # Check expiry (24 hours)
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
-            if isinstance(sent_at, str):
-                sent_at = datetime.fromisoformat(sent_at)
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=_VERIFICATION_EXPIRY_HOURS):
@@ -203,8 +201,6 @@ class AuthService:
         # Rate limit: don't resend if last email was sent < 5 minutes ago.
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
-            if isinstance(sent_at, str):
-                sent_at = datetime.fromisoformat(sent_at)
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=5):

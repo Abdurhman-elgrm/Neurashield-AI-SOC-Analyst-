@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import Boolean, String, Text, TIMESTAMP
@@ -32,11 +33,11 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     # ─── Email verification ───────────────────────────────────────────────────
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     email_verification_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    email_verification_sent_at: Mapped[str | None] = mapped_column(nullable=True)
+    email_verification_sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # ─── Password reset ───────────────────────────────────────────────────────
     password_reset_token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    password_reset_sent_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    password_reset_sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # ─── Extended profile ─────────────────────────────────────────────────────
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
