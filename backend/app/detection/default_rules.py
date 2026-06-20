@@ -903,6 +903,26 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     },
 
     # ═══════════════════════════════════════════════════════════════════════
+    #  HASH IOC — MALWAREBAZAAR CONFIRMED MALWARE
+    # ═══════════════════════════════════════════════════════════════════════
+
+    {
+        "name": "Malware Hash Confirmed - MalwareBazaar IOC Match",
+        "description": (
+            "A file hash on this host matched a known malware sample in MalwareBazaar. "
+            "This is a confirmed indicator of compromise — the file is a known malicious binary."
+        ),
+        "rule_type": "pattern",
+        "severity": "critical",
+        "conditions": [
+            {"field": "threat_intel_flags", "op": "list_contains", "value": "hash_ioc_match"},
+        ],
+        "mitre_tactics": ["Execution", "Defense Evasion"],
+        "mitre_techniques": ["T1204.002", "T1027"],
+        "suppression_window_secs": 86400,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
     #  RANSOMWARE & IMPACT
     # ═══════════════════════════════════════════════════════════════════════
 
@@ -2055,8 +2075,8 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
 
 # Validate count at import time to catch accidental additions/removals.
 _RULE_COUNT = len(_DEFAULT_RULES)
-assert _RULE_COUNT == 79, (  # noqa: S101
-    f"default_rules.py: expected 79 built-in rules, found {_RULE_COUNT}. "
+assert _RULE_COUNT == 80, (  # noqa: S101
+    f"default_rules.py: expected 80 built-in rules, found {_RULE_COUNT}. "
     "Update this assertion if the catalogue size changes intentionally."
 )
 

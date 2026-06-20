@@ -15,6 +15,7 @@ from app.normalization.mapper import compute_security_severity
 from app.normalization.service import NormalizationService
 from app.pipeline import stream_names
 from app.pipeline.consumer import StreamConsumer
+from app.threat_intel.hash_ioc import check_file_hash
 from app.threat_intel.service import ThreatIntelService
 from app.ueba.service import UEBAService
 
@@ -87,6 +88,25 @@ class NormalizationWorker:
                 # Enrich source IP with GeoIP + Threat Intel (non-blocking, cached)
                 redis = redis_manager.get_client()
                 enrichment = await ThreatIntelService.enrich_ip(normalized.source_ip, redis)
+
+                # Hash IOC check — queries MalwareBazaar for known malware hashes.
+                # Only runs when the event carries a SHA-256 file hash (FIM events).
+                # On match: injects flags into threat_intel_flags so detection rules
+                # and the severity evaluator treat this as a confirmed threat.
+                if normalized.file and normalized.file.hash_sha256:
+                    hash_result = await check_file_hash(normalized.file.hash_sha256, redis)
+                    if hash_result.found:
+                        normalized.threat_intel_flags = (
+                            list(normalized.threat_intel_flags) + hash_result.to_flags()
+                        )
+                        normalized.is_threat_ip = True
+                        logger.warning(
+                            "hash_ioc_malware_on_host",
+                            sha256=normalized.file.hash_sha256[:16],
+                            malware=hash_result.malware_name,
+                            hostname=normalized.hostname,
+                            tenant_id=tenant_id_str,
+                        )
 
                 # UEBA behavioral analysis (never raises)
                 ueba_result = await UEBAService.analyze(

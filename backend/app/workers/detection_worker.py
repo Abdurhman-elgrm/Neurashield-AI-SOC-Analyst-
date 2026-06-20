@@ -10,6 +10,7 @@ import structlog
 
 from app.core.database import database_manager
 from app.core.redis import TenantRedisClient, redis_manager
+from app.detection.attack_chain import check_attack_chains
 from app.detection.engine import DetectionEngine
 from app.normalization.models import NormalizedEvent, NormalizedProcess, NormalizedNetwork, NormalizedFile, NormalizedUser
 from app.pipeline import stream_names
@@ -130,6 +131,12 @@ class DetectionWorker:
                             mitre_tactics=list(alert.mitre_tactics or []),
                             evidence=dict(alert.evidence or {}),
                         ))
+
+                # Attack chain correlation — non-blocking, runs after commit
+                # Checks if this alert + recent alerts on the same host form a
+                # multi-stage attack chain and fires a chain alert if matched.
+                for alert in alerts:
+                    await check_attack_chains(alert, tenant_uuid, redis)
 
                 # Fan out to WebSocket clients
                 ws_client = TenantRedisClient(redis, tenant_id_str, "pipeline")
