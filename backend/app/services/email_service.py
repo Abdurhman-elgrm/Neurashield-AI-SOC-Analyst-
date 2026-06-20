@@ -87,7 +87,7 @@ async def _send_email(
     """
     settings = get_settings()
 
-    # ── Brevo (primary — HTTPS, no domain verification needed) ───────────────
+    # ── Brevo (HTTPS, no port-blocking issues) ───────────────────────────────
     if settings.BREVO_API_KEY:
         try:
             import httpx as _httpx
@@ -109,13 +109,13 @@ async def _send_email(
             if resp.status_code in (200, 201):
                 log.info("email_sent_brevo", to=to_email, subject=subject[:60])
                 return True
-            log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:200])
-            return False
+            log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
+            # fall through to next provider
         except Exception as exc:
-            log.warning("email_brevo_failed", to=to_email, error=str(exc))
-            return False
+            log.warning("email_brevo_error", to=to_email, error=str(exc))
+            # fall through to next provider
 
-    # ── Resend fallback ────────────────────────────────────────────────────────
+    # ── Resend ────────────────────────────────────────────────────────────────
     if settings.RESEND_API_KEY:
         try:
             import resend as resend_sdk
@@ -128,10 +128,10 @@ async def _send_email(
             log.info("email_sent_resend", to=to_email, subject=subject[:60])
             return True
         except Exception as exc:
-            log.warning("email_resend_failed", to=to_email, error=str(exc))
-            return False
+            log.warning("email_resend_error", to=to_email, error=str(exc))
+            # fall through to SMTP
 
-    # ── SMTP fallback (local dev only) ────────────────────────────────────────
+    # ── SMTP (Gmail app-password fallback) ────────────────────────────────────
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
         try:
             import aiosmtplib
@@ -160,10 +160,9 @@ async def _send_email(
             log.info("email_sent_smtp", to=to_email, subject=subject[:60])
             return True
         except Exception as exc:
-            log.warning("email_smtp_failed", to=to_email, error=str(exc))
-            return False
+            log.warning("email_smtp_error", to=to_email, error=str(exc))
 
-    log.info("email_not_configured", to=to_email, subject=subject[:80])
+    log.warning("email_all_providers_failed", to=to_email, subject=subject[:80])
     return False
 
 
