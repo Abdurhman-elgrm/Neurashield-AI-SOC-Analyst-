@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit2, Trash2, Shield, ChevronDown, Download } from 'lucide-react'
+import { Plus, Edit2, Trash2, Shield, ChevronDown, Download, Sparkles } from 'lucide-react'
 import { rulesApi } from '@/api/rules'
 import { apiClient } from '@/api/client'
+import { AIRuleGeneratorModal } from './AIRuleGeneratorModal'
 import { useTenantStore } from '@/stores/tenantStore'
 import type { DetectionRule, RuleType, RuleSeverity, PatternCondition, ThresholdCondition } from '@/api/rules'
 import { extractApiError } from '@/lib/utils'
@@ -662,6 +663,7 @@ export function RulesPage() {
   const openCreate = () => { setEditRule(null); setShowModal(true) }
   const openEdit   = (rule: DetectionRule) => { setEditRule(rule); setShowModal(true) }
 
+  const [showAIModal, setShowAIModal] = useState(false)
   const [importing, setImporting] = useState(false)
   const handleImportDefaults = async () => {
     if (importing) return
@@ -713,6 +715,15 @@ export function RulesPage() {
         </div>
         {canManage && (
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowAIModal(true)} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 16px', borderRadius: 8,
+              background: 'rgba(139,92,246,0.12)',
+              border: '1px solid rgba(139,92,246,0.35)',
+              color: '#C4B5FD', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+              <Sparkles size={14} /> Generate with AI
+            </button>
             <button onClick={handleImportDefaults} disabled={importing} style={{
               display: 'flex', alignItems: 'center', gap: 7,
               padding: '9px 16px', borderRadius: 8,
@@ -850,6 +861,12 @@ export function RulesPage() {
           onSaved={handleSaved}
         />
       )}
+
+      <AIRuleGeneratorModal
+        open={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        onImported={() => { loadRules(); showToast('Rule generated and imported successfully') }}
+      />
     </div>
   )
 }
