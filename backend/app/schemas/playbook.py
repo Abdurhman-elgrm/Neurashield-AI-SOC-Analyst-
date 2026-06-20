@@ -107,8 +107,13 @@ class PlaybookResponse(BaseModel):
 
 
 class GeneratePlaybookRequest(BaseModel):
-    alert_id: UUID
+    alert_id: UUID | None = None
     investigation_id: UUID | None = None
+    # Manual fields used when alert_id is not provided
+    tactic: str | None = None
+    technique: str | None = None
+    severity: str = "high"
+    source_host: str | None = None
 
 
 class CompleteStepRequest(BaseModel):

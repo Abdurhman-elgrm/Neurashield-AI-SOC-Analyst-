@@ -149,35 +149,52 @@ async def generate_playbook(
 ) -> APIResponse[PlaybookResponse]:
     m: TenantMember = member  # type: ignore[assignment]
 
-    # Load alert to extract context
-    alert_result = await db.execute(
-        select(Alert).where(
-            Alert.id == payload.alert_id,
-            Alert.tenant_id == m.tenant_id,
-            Alert.deleted_at.is_(None),
-        )
-    )
-    alert = alert_result.scalar_one_or_none()
-    if alert is None:
-        raise NotFoundError(f"Alert {payload.alert_id} not found")
-
-    # Load tenant name for variable substitution
     from app.models.tenant import Tenant
     tenant_result = await db.execute(
         select(Tenant.name).where(Tenant.id == m.tenant_id)
     )
     company_name = tenant_result.scalar_one_or_none() or "Your Organization"
 
+    if payload.alert_id is not None:
+        # Alert-based generation: pull all context from the alert
+        alert_result = await db.execute(
+            select(Alert).where(
+                Alert.id == payload.alert_id,
+                Alert.tenant_id == m.tenant_id,
+                Alert.deleted_at.is_(None),
+            )
+        )
+        alert = alert_result.scalar_one_or_none()
+        if alert is None:
+            raise NotFoundError(f"Alert {payload.alert_id} not found")
+
+        alert_title   = alert.title
+        severity      = alert.severity.value
+        source_host   = alert.source_host
+        mitre_techniques = list(alert.mitre_techniques or [])
+        mitre_tactics    = list(alert.mitre_tactics or [])
+        evidence         = dict(alert.evidence or {})
+    else:
+        # Manual generation: use the fields supplied in the request
+        technique = payload.technique or ""
+        tactic    = payload.tactic or ""
+        alert_title      = f"{tactic} – {technique}".strip(" –") or "Manual Playbook"
+        severity         = payload.severity
+        source_host      = payload.source_host
+        mitre_techniques = [technique] if technique else []
+        mitre_tactics    = [tactic]    if tactic    else []
+        evidence         = {}
+
     playbook = await PlaybookGeneratorService.generate(
         db=db,
         tenant_id=m.tenant_id,
         alert_id=payload.alert_id,
-        alert_title=alert.title,
-        severity=alert.severity.value,
-        source_host=alert.source_host,
-        mitre_techniques=list(alert.mitre_techniques or []),
-        mitre_tactics=list(alert.mitre_tactics or []),
-        evidence=dict(alert.evidence or {}),
+        alert_title=alert_title,
+        severity=severity,
+        source_host=source_host,
+        mitre_techniques=mitre_techniques,
+        mitre_tactics=mitre_tactics,
+        evidence=evidence,
         company_name=company_name,
         investigation_id=payload.investigation_id,
         created_by_id=m.user_id,

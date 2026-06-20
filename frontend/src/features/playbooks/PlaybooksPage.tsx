@@ -62,14 +62,22 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
   const [error, setError] = useState<string | null>(null)
   const qc = useQueryClient()
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   const generate = useMutation({
-    mutationFn: () => playbooksApi.generate({
-      alert_id: alertId || undefined,
-      tactic: tactic || undefined,
-      technique: technique || undefined,
-      severity,
-      source_host: sourceHost || undefined,
-    }),
+    mutationFn: () => {
+      const trimmedAlertId = alertId.trim()
+      if (trimmedAlertId && !UUID_RE.test(trimmedAlertId)) {
+        throw new Error('Alert ID must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000). Leave it empty to generate without an alert.')
+      }
+      return playbooksApi.generate({
+        alert_id: trimmedAlertId || undefined,
+        tactic: tactic || undefined,
+        technique: technique || undefined,
+        severity,
+        source_host: sourceHost || undefined,
+      })
+    },
     onSuccess: (pb) => {
       qc.invalidateQueries({ queryKey: ['playbooks'] })
       onGenerated(pb.id)
@@ -102,10 +110,13 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
             <label style={{ fontSize: 11, color: '#8B95A7', display: 'block', marginBottom: 5 }}>Alert ID (optional)</label>
             <input
               className="inp"
-              placeholder="UUID of the triggering alert"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               value={alertId}
-              onChange={e => setAlertId(e.target.value)}
+              onChange={e => { setAlertId(e.target.value); setError(null) }}
             />
+            <p style={{ fontSize: 10, color: '#3A4150', marginTop: 4 }}>
+              Leave empty to generate manually using the fields below
+            </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
