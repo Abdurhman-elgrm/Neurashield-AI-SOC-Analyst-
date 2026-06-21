@@ -24,7 +24,7 @@ export function useKPISummary(timeRange: DashboardTimeRange) {
     staleTime: 30_000,
     refetchInterval: 60_000,
     placeholderData: dashboardApi.PLACEHOLDER_SUMMARY,
-    retry: 1,
+    retry: 2,
   });
 }
 

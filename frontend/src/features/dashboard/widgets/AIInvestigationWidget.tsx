@@ -8,16 +8,17 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonText } from "@/components/ui/Skeleton";
 import { WidgetRefreshButton } from "./KPICard";
 import { useAIOperations } from "@/features/dashboard/hooks/useDashboardData";
+import { useTenantStore } from "@/stores/tenantStore";
 import type { DashboardTimeRange, AIVerdict } from "@/features/dashboard/types/dashboard";
 
 // ─── Verdict row ──────────────────────────────────────────────────────────────
 
-function VerdictRow({ v }: { v: AIVerdict }) {
+function VerdictRow({ v, onClick }: { v: AIVerdict; onClick: () => void }) {
   const statusIcon = {
     true_positive:  <CheckCircle className="w-3.5 h-3.5 text-severity-critical" />,
-    false_positive: <XCircle className="w-3.5 h-3.5 text-severity-low" />,
+    false_positive: <XCircle     className="w-3.5 h-3.5 text-severity-low" />,
     benign:         <CheckCircle className="w-3.5 h-3.5 text-text-muted" />,
-    pending:        <Clock className="w-3.5 h-3.5 text-severity-medium" />,
+    pending:        <Clock       className="w-3.5 h-3.5 text-severity-medium" />,
   }[v.verdict];
 
   const relTime = v.analyzedAt
@@ -25,10 +26,13 @@ function VerdictRow({ v }: { v: AIVerdict }) {
     : "pending";
 
   return (
-    <div className="flex items-start gap-2 py-2 border-b border-border last:border-0">
+    <button
+      onClick={onClick}
+      className="w-full flex items-start gap-2 py-2 border-b border-border last:border-0 text-left hover:bg-bg-elevated/60 transition-colors rounded px-1 -mx-1 group"
+    >
       <span className="flex-shrink-0 mt-0.5">{statusIcon}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-text-primary truncate">{v.title}</p>
+        <p className="text-xs text-text-primary truncate group-hover:text-accent transition-colors">{v.title}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className={cn("text-2xs capitalize font-medium", {
             "text-severity-critical": v.verdict === "true_positive",
@@ -36,7 +40,7 @@ function VerdictRow({ v }: { v: AIVerdict }) {
             "text-text-muted":        v.verdict === "benign",
             "text-severity-medium":   v.verdict === "pending",
           })}>
-            {v.verdict.replace("_", " ")}
+            {v.verdict.replace(/_/g, " ")}
           </span>
           {v.confidence > 0 && (
             <span className="text-2xs text-text-muted">{v.confidence}% confidence</span>
@@ -44,7 +48,7 @@ function VerdictRow({ v }: { v: AIVerdict }) {
         </div>
       </div>
       <span className="text-2xs text-text-muted flex-shrink-0">{relTime}</span>
-    </div>
+    </button>
   );
 }
 
@@ -55,13 +59,14 @@ interface AIInvestigationWidgetProps {
 }
 
 export function AIInvestigationWidget({ timeRange }: AIInvestigationWidgetProps) {
-  const { data, isLoading, isRefetching, refetch } = useAIOperations(timeRange);
-  const navigate = useNavigate();
+  const { data, isLoading, isRefetching, isError, refetch } = useAIOperations(timeRange);
+  const navigate  = useNavigate();
+  const hasRole   = useTenantStore((s) => s.hasRole);
 
   const donutData = [
-    { name: "True Positive", value: data?.truePositiveCount ?? 0, color: CHART_COLORS.critical },
-    { name: "False Positive", value: data?.falsePositiveCount ?? 0, color: CHART_COLORS.success },
-    { name: "Pending",        value: data?.pendingCount ?? 0,       color: CHART_COLORS.warning },
+    { name: "True Positive", value: data?.truePositiveCount  ?? 0, color: CHART_COLORS.critical },
+    { name: "False Positive", value: data?.falsePositiveCount ?? 0, color: CHART_COLORS.success  },
+    { name: "Pending",        value: data?.pendingCount       ?? 0, color: CHART_COLORS.warning  },
   ];
 
   const hasData = donutData.some((d) => d.value > 0);
@@ -78,7 +83,7 @@ export function AIInvestigationWidget({ timeRange }: AIInvestigationWidgetProps)
             </span>
           )}
         </div>
-        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -139,22 +144,28 @@ export function AIInvestigationWidget({ timeRange }: AIInvestigationWidgetProps)
                 className="py-6"
               />
             ) : (
-              (data!.recentVerdicts).map((v) => (
-                <VerdictRow key={v.investigationId} v={v} />
+              (data?.recentVerdicts ?? []).map((v) => (
+                <VerdictRow
+                  key={`${v.investigationId}-${v.verdict}`}
+                  v={v}
+                  onClick={() => navigate(`/investigations/${v.investigationId}`)}
+                />
               ))
             )}
           </div>
         </div>
       </div>
 
-      <div className="px-4 py-2 border-t border-border flex-shrink-0">
-        <button
-          onClick={() => navigate("/copilot")}
-          className="text-xs text-accent hover:underline"
-        >
-          Open AI Copilot →
-        </button>
-      </div>
+      {hasRole("analyst") && (
+        <div className="px-4 py-2 border-t border-border flex-shrink-0">
+          <button
+            onClick={() => navigate("/copilot")}
+            className="text-xs text-accent hover:underline"
+          >
+            Open AI Copilot →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

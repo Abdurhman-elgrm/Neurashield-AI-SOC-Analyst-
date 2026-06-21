@@ -30,7 +30,7 @@ function formatTimestamp(iso: string, timeRange: DashboardTimeRange): string {
 }
 
 export function IngestionRateChart({ timeRange }: IngestionRateChartProps) {
-  const { data, isLoading, isRefetching, refetch } = useIngestionRate(timeRange);
+  const { data, isLoading, isRefetching, isError, refetch } = useIngestionRate(timeRange);
 
   const chartData = useMemo(
     () =>
@@ -43,7 +43,7 @@ export function IngestionRateChart({ timeRange }: IngestionRateChartProps) {
     [data, timeRange]
   );
 
-  const isFlat = chartData.every((d) => d.eps === 0);
+  const isFlat = chartData.length === 0 || chartData.every((d) => d.eps === 0);
 
   return (
     <div className="card flex flex-col h-full">
@@ -63,7 +63,7 @@ export function IngestionRateChart({ timeRange }: IngestionRateChartProps) {
               peak <span className="text-text-secondary">{formatEPS(data.peakEps)}</span>
             </span>
           )}
-          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
         </div>
       </div>
 

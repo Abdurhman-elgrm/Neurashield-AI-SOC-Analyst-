@@ -87,7 +87,7 @@ interface MitreHeatmapProps {
 }
 
 export function MitreHeatmap({ timeRange }: MitreHeatmapProps) {
-  const { data, isLoading, isRefetching, refetch } = useMitreCoverage(timeRange);
+  const { data, isLoading, isRefetching, isError, refetch } = useMitreCoverage(timeRange);
   const [selectedTechnique, setSelectedTechnique] = useState<string | null>(null);
 
   const counts = data?.techniqueCounts ?? {};
@@ -117,7 +117,7 @@ export function MitreHeatmap({ timeRange }: MitreHeatmapProps) {
               </span>
             ))}
           </div>
-          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
         </div>
       </div>
 
@@ -133,7 +133,7 @@ export function MitreHeatmap({ timeRange }: MitreHeatmapProps) {
               </div>
             ))}
           </div>
-        ) : data?.totalAlerts === 0 ? (
+        ) : (data?.totalAlerts ?? 0) === 0 ? (
           <EmptyState
             icon={<Shield className="w-6 h-6" />}
             title="No MITRE coverage data"

@@ -79,7 +79,7 @@ interface CorrelationWidgetProps {
 }
 
 export function CorrelationWidget({ timeRange }: CorrelationWidgetProps) {
-  const { data, isLoading, isRefetching, refetch } = useCorrelationActivity(timeRange);
+  const { data, isLoading, isRefetching, isError, refetch } = useCorrelationActivity(timeRange);
   const navigate = useNavigate();
 
   return (
@@ -89,7 +89,7 @@ export function CorrelationWidget({ timeRange }: CorrelationWidgetProps) {
           <GitMerge className="w-3.5 h-3.5 text-accent" />
           <h3 className="text-sm font-semibold text-text-primary">Correlation Activity</h3>
         </div>
-        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
       </div>
 
       {/* Summary stats */}
@@ -130,7 +130,7 @@ export function CorrelationWidget({ timeRange }: CorrelationWidgetProps) {
             className="py-10"
           />
         ) : (
-          (data!.recentCorrelations).map((ev) => (
+          (data?.recentCorrelations ?? []).map((ev) => (
             <CorrelationRow
               key={ev.id}
               event={ev}
@@ -140,7 +140,7 @@ export function CorrelationWidget({ timeRange }: CorrelationWidgetProps) {
         )}
       </div>
 
-      {data && data.recentCorrelations.length > 0 && (
+      {(data?.recentCorrelations ?? []).length > 0 && (
         <div className="px-4 py-2 border-t border-border flex-shrink-0">
           <button
             onClick={() => navigate("/investigations")}

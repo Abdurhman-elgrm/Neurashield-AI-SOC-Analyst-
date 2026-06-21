@@ -109,7 +109,7 @@ function RuleBar({ rule, maxCount }: { rule: DetectionRuleHealth; maxCount: numb
 // ─── DetectionHealthWidget ────────────────────────────────────────────────────
 
 export function DetectionHealthWidget({ timeRange }: { timeRange: DashboardTimeRange }) {
-  const { data, isLoading, isRefetching, refetch } = useDetectionHealth(timeRange);
+  const { data, isLoading, isRefetching, isError, refetch } = useDetectionHealth(timeRange);
 
   const topRules  = data?.topRules?.slice(0, 8) ?? [];
   const maxCount  = topRules.reduce((m, r) => Math.max(m, r.triggeredCount), 0);
@@ -118,17 +118,12 @@ export function DetectionHealthWidget({ timeRange }: { timeRange: DashboardTimeR
     <div className="card flex flex-col h-full">
 
       {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        flexShrink: 0,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Activity size={13} style={{ color: "#3B82F6" }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#F5F7FA" }}>Detection Health</span>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Activity className="w-3.5 h-3.5 text-accent" />
+          <h3 className="text-sm font-semibold text-text-primary">Detection Health</h3>
         </div>
-        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+        <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
       </div>
 
       <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12, minHeight: 0, overflowY: "auto" }}>

@@ -189,15 +189,23 @@ export function KPICardSkeleton() {
 export function WidgetRefreshButton({
   onClick,
   isRefetching,
+  isError = false,
 }: {
   onClick: () => void;
   isRefetching: boolean;
+  isError?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-subtle transition-colors"
-      aria-label="Refresh"
+      className={cn(
+        "p-1 rounded transition-colors",
+        isError
+          ? "text-severity-medium hover:text-severity-high hover:bg-severity-medium/10"
+          : "text-text-muted hover:text-text-primary hover:bg-bg-subtle"
+      )}
+      title={isError ? "Data unavailable — click to retry" : "Refresh"}
+      aria-label={isError ? "Data unavailable — click to retry" : "Refresh"}
     >
       <RefreshCw className={cn("w-3.5 h-3.5", isRefetching && "animate-spin")} />
     </button>

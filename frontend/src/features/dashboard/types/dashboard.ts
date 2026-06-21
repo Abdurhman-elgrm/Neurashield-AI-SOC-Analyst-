@@ -30,15 +30,15 @@ export interface AlertKPI {
   open: number;
   critical: number;
   high: number;
-  delta24h: number;           // absolute change vs previous period
-  criticalDelta24h: number;
+  delta24h: number;           // % change vs previous period (positive = more alerts)
+  criticalDelta24h: number;   // % change vs previous period
 }
 
 export interface InvestigationKPI {
   active: number;
   correlated: number;
   aiPending: number;
-  delta24h: number;
+  delta24h: number;           // % change vs previous period
 }
 
 export interface IngestionKPI {

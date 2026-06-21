@@ -87,7 +87,7 @@ interface LiveAlertsFeedProps {
 }
 
 export function LiveAlertsFeed({ timeRange, maxHeight = 400 }: LiveAlertsFeedProps) {
-  const { data: alerts = [], isLoading, isRefetching, refetch } = useAlertsFeed(timeRange);
+  const { data: alerts = [], isLoading, isRefetching, isError, refetch } = useAlertsFeed(timeRange);
   const navigate = useNavigate();
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -114,7 +114,7 @@ export function LiveAlertsFeed({ timeRange, maxHeight = 400 }: LiveAlertsFeedPro
             <span className="w-1.5 h-1.5 bg-status-online rounded-full animate-pulse" />
             Live
           </span>
-          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} />
+          <WidgetRefreshButton onClick={() => void refetch()} isRefetching={isRefetching} isError={isError} />
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export function LiveAlertsFeed({ timeRange, maxHeight = 400 }: LiveAlertsFeedPro
                     alert={alert}
                     onClick={() =>
                       alert.investigationId
-                        ? navigate(`/investigations?id=${alert.investigationId}`)
+                        ? navigate(`/investigations/${alert.investigationId}`)
                         : navigate(`/alerts?id=${alert.id}`)
                     }
                   />

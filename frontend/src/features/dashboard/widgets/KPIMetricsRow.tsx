@@ -18,10 +18,11 @@ interface KPIMetricsRowProps {
 }
 
 export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
-  const { data, isLoading } = useKPISummary(timeRange);
+  const { data, isPlaceholderData } = useKPISummary(timeRange);
   const navigate = useNavigate();
 
-  if (isLoading && !data) {
+  // Show skeleton only on the very first load before any data (real or placeholder) is cached
+  if (!data) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {Array.from({ length: 8 }).map((_, i) => (
@@ -31,7 +32,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
     );
   }
 
-  const s = data!;
+  const s = data;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
@@ -42,6 +43,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         icon={<AlertTriangle className="w-4 h-4" />}
         colorVariant="accent"
         isLive
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/alerts")}
       />
       <KPICard
@@ -50,6 +52,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         deltaPercent={s.alerts.criticalDelta24h}
         icon={<ShieldAlert className="w-4 h-4" />}
         colorVariant={s.alerts.critical > 0 ? "critical" : "default"}
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/alerts?severity=critical")}
       />
       <KPICard
@@ -58,6 +61,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         deltaPercent={s.investigations.delta24h}
         icon={<ShieldCheck className="w-4 h-4" />}
         colorVariant="accent"
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/investigations")}
       />
       <KPICard
@@ -67,6 +71,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         icon={<Zap className="w-4 h-4" />}
         colorVariant="low"
         isLive
+        isLoading={isPlaceholderData}
         formatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v)}
       />
       <KPICard
@@ -75,6 +80,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         icon={<Server className="w-4 h-4" />}
         colorVariant={s.agents.offline > 0 ? "high" : "low"}
         suffix={`/ ${s.agents.total}`}
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/agents")}
       />
       <KPICard
@@ -83,12 +89,14 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         deltaPercent={s.detection.delta24h}
         icon={<Activity className="w-4 h-4" />}
         colorVariant="accent"
+        isLoading={isPlaceholderData}
       />
       <KPICard
         label="Correlated"
         value={s.investigations.correlated}
         icon={<GitMerge className="w-4 h-4" />}
         colorVariant="medium"
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/investigations")}
       />
       <KPICard
@@ -96,6 +104,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         value={s.investigations.aiPending}
         icon={<Brain className="w-4 h-4" />}
         colorVariant={s.investigations.aiPending > 50 ? "high" : "accent"}
+        isLoading={isPlaceholderData}
         onClick={() => navigate("/copilot")}
       />
     </div>
