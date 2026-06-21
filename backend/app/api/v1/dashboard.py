@@ -70,15 +70,15 @@ class AlertKPI(BaseModel):
     open: int = 0
     critical: int = 0
     high: int = 0
-    delta24h: int = 0
-    criticalDelta24h: int = 0
+    delta24h: float = 0.0           # % change vs equal-length previous period
+    criticalDelta24h: float = 0.0   # % change vs equal-length previous period
 
 
 class InvestigationKPI(BaseModel):
     active: int = 0
     correlated: int = 0
     aiPending: int = 0
-    delta24h: int = 0
+    delta24h: float = 0.0           # % change vs equal-length previous period
 
 
 class IngestionKPI(BaseModel):
@@ -98,7 +98,7 @@ class DetectionKPI(BaseModel):
     rulesTriggered: int = 0
     activeRules: int = 0
     noisyRules: int = 0
-    delta24h: int = 0
+    delta24h: float = 0.0           # % change vs equal-length previous period
 
 
 class DashboardSummary(BaseModel):
@@ -209,6 +209,15 @@ def _score_to_severity(score: int) -> str:
     return "low"
 
 
+def _pct_delta(current: int, prev: int) -> float:
+    """Return % change from prev → current, capped at ±999.9%.
+    Returns 0.0 when prev is 0 (undefined percentage)."""
+    if prev == 0:
+        return 0.0
+    raw = ((current - prev) / prev) * 100.0
+    return round(max(min(raw, 999.9), -999.9), 1)
+
+
 # ─── /dashboard/summary ───────────────────────────────────────────────────────
 
 @router.get("/summary", response_model=APIResponse[DashboardSummary])
@@ -238,13 +247,18 @@ async def get_dashboard_summary(
           AND deleted_at IS NULL
     """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
 
+    curr_total    = alert_row.total    or 0
+    curr_critical = alert_row.critical or 0
+    prev_total    = alert_row.prev_total    or 0
+    prev_critical = alert_row.prev_critical or 0
+
     alerts = AlertKPI(
-        total=alert_row.total or 0,
+        total=curr_total,
         open=alert_row.open or 0,
-        critical=alert_row.critical or 0,
+        critical=curr_critical,
         high=alert_row.high or 0,
-        delta24h=(alert_row.total or 0) - (alert_row.prev_total or 0),
-        criticalDelta24h=(alert_row.critical or 0) - (alert_row.prev_critical or 0),
+        delta24h=_pct_delta(curr_total, prev_total),
+        criticalDelta24h=_pct_delta(curr_critical, prev_critical),
     )
 
     # ── Investigations ────────────────────────────────────────────────────────
@@ -259,11 +273,13 @@ async def get_dashboard_summary(
     """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
 
     inv_active = inv_row.active or 0
+    prev_active = inv_row.prev_active or 0
+
     investigations = InvestigationKPI(
         active=inv_active,
         correlated=inv_row.correlated or 0,
         aiPending=inv_row.ai_pending or 0,
-        delta24h=inv_active - (inv_row.prev_active or 0),
+        delta24h=_pct_delta(inv_active, prev_active),
     )
 
     # ── Events / ingestion ────────────────────────────────────────────────────
@@ -279,7 +295,7 @@ async def get_dashboard_summary(
     prev_events = ev_row.prev_total or 0
     period_secs = max((now - period_start).total_seconds(), 1)
     eps_now = round(total_events / period_secs, 3)
-    delta_pct = round(((total_events - prev_events) / max(prev_events, 1)) * 100, 1) if prev_events else 0.0
+    delta_pct = _pct_delta(total_events, prev_events)
 
     ingestion = IngestionKPI(
         epsNow=eps_now,
@@ -304,18 +320,31 @@ async def get_dashboard_summary(
         offline=ag_row.offline or 0,
     )
 
-    # ── Detection rules ───────────────────────────────────────────────────────
-    noisy_row = (await db.execute(text("""
-        SELECT
-            COUNT(*) FILTER (WHERE cnt > :threshold) AS noisy,
-            COUNT(*) AS triggered_rules
-        FROM (
-            SELECT rule_id, COUNT(*) AS cnt
+    # ── Detection rules — current + previous period in one CTE ───────────────
+    det_row = (await db.execute(text("""
+        WITH per_rule AS (
+            SELECT
+                rule_id,
+                COUNT(*) FILTER (WHERE created_at >= :ps)                          AS cnt_curr,
+                COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps) AS cnt_prev
             FROM alerts
-            WHERE tenant_id = CAST(:tid AS uuid) AND created_at >= :ps AND deleted_at IS NULL AND rule_id IS NOT NULL
+            WHERE tenant_id   = CAST(:tid AS uuid)
+              AND created_at >= :prev_ps
+              AND deleted_at  IS NULL
+              AND rule_id     IS NOT NULL
             GROUP BY rule_id
-        ) sub
-    """), {"tid": tid, "ps": period_start, "threshold": _NOISY_RULE_THRESHOLD})).fetchone()
+        )
+        SELECT
+            COUNT(*) FILTER (WHERE cnt_curr > :threshold)  AS noisy,
+            COUNT(*) FILTER (WHERE cnt_curr > 0)           AS triggered_rules,
+            COUNT(*) FILTER (WHERE cnt_prev > 0)           AS prev_triggered_rules
+        FROM per_rule
+    """), {
+        "tid": tid,
+        "ps": period_start,
+        "prev_ps": prev_start,
+        "threshold": _NOISY_RULE_THRESHOLD,
+    })).fetchone()
 
     rule_base = (await db.execute(text("""
         SELECT
@@ -325,11 +354,14 @@ async def get_dashboard_summary(
         WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
     """), {"tid": tid})).fetchone()
 
+    curr_triggered = det_row.triggered_rules      or 0
+    prev_triggered = det_row.prev_triggered_rules or 0
+
     detection = DetectionKPI(
         activeRules=rule_base.active or 0,
-        rulesTriggered=noisy_row.triggered_rules or 0,
-        noisyRules=noisy_row.noisy or 0,
-        delta24h=0,
+        rulesTriggered=curr_triggered,
+        noisyRules=det_row.noisy or 0,
+        delta24h=_pct_delta(curr_triggered, prev_triggered),
     )
 
     return APIResponse.ok(DashboardSummary(

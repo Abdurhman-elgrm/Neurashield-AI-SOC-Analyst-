@@ -303,6 +303,15 @@ $trigger = New-ScheduledTaskTrigger -AtStartup
 # Also add an AtLogon trigger so it starts when any user logs in
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn
 
+# Watchdog trigger: fires every 30 minutes.
+# Handles the case where the PC wakes from Sleep — AtStartup and AtLogon do NOT
+# fire on sleep-wake, so without this trigger the agent stays dead until next
+# full reboot or login. -StartWhenAvailable means if the PC was asleep when the
+# trigger fired, it runs immediately on wake. -MultipleInstances Queue ensures
+# two copies never run simultaneously.
+$watchdogTrigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 30) `
+    -Once -At ([datetime]::Today)
+
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit       (New-TimeSpan -Hours 0) `
     -RestartCount             10 `
@@ -316,7 +325,7 @@ $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccou
 Register-ScheduledTask `
     -TaskName  $TASK_NAME `
     -Action    $action `
-    -Trigger   @($trigger, $logonTrigger) `
+    -Trigger   @($trigger, $logonTrigger, $watchdogTrigger) `
     -Settings  $settings `
     -Principal $principal `
     -Force | Out-Null
