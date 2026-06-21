@@ -67,8 +67,8 @@ export function useAddNote(investigationId: string) {
 export function useAssignInvestigation(investigationId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, userName }: { userId: string; userName: string }) =>
-      assignInvestigation(investigationId, userId, userName),
+    mutationFn: ({ userId }: { userId: string; userName?: string }) =>
+      assignInvestigation(investigationId, userId),
     onSuccess: (updated) => {
       qc.setQueryData(investigationKeys.detail(investigationId), updated);
     },
