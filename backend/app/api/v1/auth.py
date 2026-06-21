@@ -223,6 +223,89 @@ async def resend_verification(
 
 
 @router.post(
+    "/debug/test-email",
+    include_in_schema=False,  # hidden from Swagger — remove this endpoint after debugging
+)
+async def debug_test_email(
+    to_email: str = Query(..., description="Recipient address for the test email"),
+) -> dict:
+    """
+    Sends a test email and returns a detailed report of which provider succeeded or
+    what error each provider returned.  Protected by ADMIN_SECRET env var.
+    Remove this endpoint once email is confirmed working.
+    """
+    import traceback
+    from app.core.config import get_settings
+    settings = get_settings()
+    results: dict = {}
+
+    # ── SMTP ──────────────────────────────────────────────────────────────────
+    if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
+        try:
+            import aiosmtplib
+            from email.mime.text import MIMEText
+            smtp_port = int(settings.SMTP_PORT)
+            msg = MIMEText("This is a test email from NEURASHIELD SOC.", "plain", "utf-8")
+            msg["Subject"] = "NEURASHIELD — Email Test"
+            msg["From"]    = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+            msg["To"]      = to_email
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=smtp_port,
+                username=settings.SMTP_USER,
+                password=settings.SMTP_PASSWORD,
+                use_tls=smtp_port == 465,
+                start_tls=smtp_port == 587,
+                timeout=15,
+            )
+            results["smtp"] = "OK"
+        except Exception as exc:
+            results["smtp"] = f"FAILED: {exc}"
+    else:
+        results["smtp"] = f"SKIPPED (host={settings.SMTP_HOST!r} user={settings.SMTP_USER!r} password={'set' if settings.SMTP_PASSWORD else 'NOT SET'})"
+
+    # ── Resend ────────────────────────────────────────────────────────────────
+    if settings.RESEND_API_KEY:
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+                    json={"from": settings.RESEND_FROM_EMAIL or "onboarding@resend.dev",
+                          "to": [to_email], "subject": "NEURASHIELD — Email Test",
+                          "text": "Test from NEURASHIELD SOC."},
+                )
+            results["resend"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except Exception as exc:
+            results["resend"] = f"FAILED: {exc}"
+    else:
+        results["resend"] = "SKIPPED (RESEND_API_KEY not set)"
+
+    # ── Brevo ─────────────────────────────────────────────────────────────────
+    if settings.BREVO_API_KEY:
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    headers={"api-key": settings.BREVO_API_KEY},
+                    json={"sender": {"name": "NEURASHIELD", "email": settings.BREVO_FROM_EMAIL or settings.SMTP_USER},
+                          "to": [{"email": to_email}],
+                          "subject": "NEURASHIELD — Email Test",
+                          "textContent": "Test from NEURASHIELD SOC."},
+                )
+            results["brevo"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except Exception as exc:
+            results["brevo"] = f"FAILED: {exc}"
+    else:
+        results["brevo"] = "SKIPPED (BREVO_API_KEY not set)"
+
+    return {"to": to_email, "results": results}
+
+
+@router.post(
     "/forgot-password",
     response_model=APIResponse[EmptyResponse],
     summary="Request a password reset email",
