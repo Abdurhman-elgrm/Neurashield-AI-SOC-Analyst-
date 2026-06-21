@@ -46,6 +46,17 @@ async def readiness() -> JSONResponse:
     if not redis_ok:
         all_healthy = False
 
+    # Worker liveness — True if the worker process has pinged Redis in the last 120 s.
+    # False means the Railway Worker service is down; events pile up in Redis unprocessed.
+    worker_ok = False
+    if redis_ok:
+        try:
+            from app.workers.main import WORKER_LIVENESS_KEY
+            worker_ok = bool(await redis_manager.get_client().exists(WORKER_LIVENESS_KEY))
+        except Exception:
+            pass
+    checks["worker"] = worker_ok
+
     status_code = 200 if all_healthy else 503
     return JSONResponse(
         status_code=status_code,

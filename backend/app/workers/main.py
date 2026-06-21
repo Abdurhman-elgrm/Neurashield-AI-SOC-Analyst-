@@ -113,6 +113,32 @@ async def _tenant_hot_reload(
             logger.warning("tenant_hot_reload_failed", exc_info=True)
 
 
+WORKER_LIVENESS_KEY = "worker:liveness"
+WORKER_LIVENESS_TTL = 120  # seconds — 2× the ping interval
+
+
+async def _worker_liveness_loop(stop_event: asyncio.Event) -> None:
+    """Writes a heartbeat key to Redis every 60 s with a 120 s TTL.
+    If the worker crashes the key expires and the API health endpoint reports
+    worker=false, making the problem immediately visible without checking Railway logs.
+    """
+    redis = redis_manager.get_client()
+    while not stop_event.is_set():
+        try:
+            import time as _time
+            await redis.setex(
+                WORKER_LIVENESS_KEY,
+                WORKER_LIVENESS_TTL,
+                str(int(_time.time())),
+            )
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=60)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def main() -> None:
     configure_logging(settings.LOG_LEVEL, settings.ENVIRONMENT)
     logger.info("worker_starting", worker_id=_WORKER_ID)
@@ -182,6 +208,13 @@ async def main() -> None:
     tasks.append(asyncio.create_task(
         _tenant_hot_reload(tenant_ids_set, worker_registry, stop_event),
         name="tenant-hot-reload",
+    ))
+
+    # Worker liveness heartbeat — writes to Redis every 60 s so the API health
+    # endpoint can report whether the worker process is actually running.
+    tasks.append(asyncio.create_task(
+        _worker_liveness_loop(stop_event),
+        name="worker-liveness",
     ))
 
     logger.info("worker_ready", task_count=len(tasks))

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
 NEURASHIELD SOC Agent v2.0
-Reads credentials from C:\\ProgramData\\SOCAnalyst\\credentials.json
+Reads credentials from C:\ProgramData\SOCAnalyst\credentials.json
 Uses V2 backend auth: X-Agent-ID + X-Agent-Token + X-Tenant-ID
 """
 
-import builtins as _builtins
 import datetime
 import hashlib
 import json
@@ -20,32 +19,58 @@ import threading
 import time
 import uuid as _uuid_mod
 
-# ── Config ────────────────────────────────────────────────────────────────────
+try:
+    import requests
+except ImportError:
+    os.system(f'"{sys.executable}" -m pip install requests --quiet')
+    import requests
 
-_AGENT_DIR = (
-    r"C:\ProgramData\SOCAnalyst"
-    if platform.system() == "Windows"
-    else "/opt/soc-analyst"
-)
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+_AGENT_DIR       = r"C:\ProgramData\SOCAnalyst"
 _CREDS_FILE      = os.path.join(_AGENT_DIR, "credentials.json")
 _LOG_PATH        = os.path.join(_AGENT_DIR, "agent_v2.log")
 _Q_DB_PATH       = os.path.join(_AGENT_DIR, "event_queue_v2.db")
 _CHECKPOINT_FILE = os.path.join(_AGENT_DIR, "checkpoint_v2.json")
 _LOG_MAX_BYTES   = 10 * 1024 * 1024
 
-# ── Logging (set up FIRST so startup crashes are captured in the log) ─────────
+
+def _load_credentials():
+    if not os.path.exists(_CREDS_FILE):
+        raise RuntimeError(
+            f"Credentials not found at {_CREDS_FILE}. "
+            "Run bootstrap.ps1 first to enroll this device."
+        )
+    with open(_CREDS_FILE, encoding="utf-8-sig") as f:
+        creds = json.load(f)
+    missing = [k for k in ("agent_id", "enrollment_token", "tenant_id", "api_url")
+               if not creds.get(k)]
+    if missing:
+        raise RuntimeError(f"credentials.json missing fields: {missing}")
+    return creds
+
+
+_creds           = _load_credentials()
+API_ENDPOINT     = _creds["api_url"].rstrip("/")
+AGENT_ID         = _creds["agent_id"]
+ENROLLMENT_TOKEN = _creds["enrollment_token"]
+TENANT_ID        = _creds["tenant_id"]
+_HOSTNAME        = _creds.get("hostname") or platform.node()
+_OS_TYPE         = "windows" if platform.system() == "Windows" else platform.system().lower()
+
+# â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _open_log():
     try:
-        os.makedirs(_AGENT_DIR, exist_ok=True)
-        return open(_LOG_PATH, "a", encoding="utf-8", errors="replace", buffering=1)
+        return open(_LOG_PATH, "a", encoding="utf-8-sig", errors="replace", buffering=1)
     except Exception:
         return None
 
 
 _LOG_FH = _open_log()
 
+import builtins as _builtins
 _orig_print = _builtins.print
 
 
@@ -78,46 +103,6 @@ def _tee_print(*a, **kw):
 
 _builtins.print = _tee_print
 
-# ── Third-party imports (after log setup so failures are captured) ────────────
-
-try:
-    import requests
-except ImportError:
-    print(f"[startup] requests not found — installing via pip...")
-    import subprocess as _sp
-    _sp.run([sys.executable, "-m", "pip", "install", "requests", "--quiet"], check=False)
-    try:
-        import requests
-    except ImportError as _e:
-        print(f"[startup] FATAL: cannot import requests: {_e}")
-        sys.exit(1)
-
-# ── Credentials ───────────────────────────────────────────────────────────────
-
-
-def _load_credentials():
-    if not os.path.exists(_CREDS_FILE):
-        raise RuntimeError(
-            f"Credentials not found at {_CREDS_FILE}. "
-            "Run bootstrap.ps1 first to enroll this device."
-        )
-    with open(_CREDS_FILE, encoding="utf-8-sig") as f:
-        creds = json.load(f)
-    missing = [k for k in ("agent_id", "enrollment_token", "tenant_id", "api_url")
-               if not creds.get(k)]
-    if missing:
-        raise RuntimeError(f"credentials.json missing fields: {missing}")
-    return creds
-
-
-_creds           = _load_credentials()
-API_ENDPOINT     = _creds["api_url"].rstrip("/")
-AGENT_ID         = _creds["agent_id"]
-ENROLLMENT_TOKEN = _creds["enrollment_token"]
-TENANT_ID        = _creds["tenant_id"]
-_HOSTNAME        = _creds.get("hostname") or platform.node()
-_OS_TYPE         = "windows" if platform.system() == "Windows" else platform.system().lower()
-
 
 def _now():
     return datetime.datetime.now().strftime("%H:%M:%S")
@@ -126,7 +111,27 @@ def _now():
 def _utc_iso():
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-# ── Auth headers (Bug 1 fixed: includes X-Tenant-ID) ─────────────────────────
+
+def _pywin_time_to_utc_iso(pywin_time) -> str:
+    """Convert a pywin32 TimeGenerated value to a proper UTC ISO-8601 string.
+
+    pywin32 returns TimeGenerated as a PyTime whose timetuple() gives LOCAL
+    time (not UTC).  Naively calling .strftime(...Z) stamps the local time
+    with a false UTC claim, causing every event to appear shifted by the
+    local UTC offset in the dashboard.
+
+    Fix: use time.mktime() (which treats the struct_time as LOCAL) to get
+    the true POSIX epoch, then format it as UTC.
+    """
+    import time as _tm
+    import datetime as _dt
+    try:
+        epoch = _tm.mktime(pywin_time.timetuple())
+        return _dt.datetime.utcfromtimestamp(epoch).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return _utc_iso()
+
+# â”€â”€ Auth headers (Bug 1 fixed: includes X-Tenant-ID) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _agent_headers():
@@ -137,7 +142,7 @@ def _agent_headers():
         "Content-Type":  "application/json",
     }
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
+# â”€â”€ HTTP helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _AGENT_REVOKED = False
 
@@ -156,7 +161,7 @@ def _post(path: str, payload: dict, timeout: int = 10) -> bool:
             )
             if r.status_code == 401:
                 _AGENT_REVOKED = True
-                print(f"[{_now()}] Agent credentials rejected (401) — re-enroll this device")
+                print(f"[{_now()}] Agent credentials rejected (401) â€” re-enroll this device")
                 return False
             if r.status_code == 410:
                 _AGENT_REVOKED = True
@@ -171,13 +176,13 @@ def _post(path: str, payload: dict, timeout: int = 10) -> bool:
                 print(f"[{_now()}] POST {path} failed: {exc}")
     return False
 
-# ── Heartbeat (correct HeartbeatRequest schema) ───────────────────────────────
+# â”€â”€ Heartbeat (correct HeartbeatRequest schema) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 HEARTBEAT_INTERVAL = 20
 
 
 def _heartbeat() -> bool:
-    """POST /api/v1/agents/heartbeat — HeartbeatRequest schema"""
+    """POST /api/v1/agents/heartbeat â€” HeartbeatRequest schema"""
     try:
         ip = socket.gethostbyname(socket.gethostname())
     except Exception:
@@ -190,7 +195,7 @@ def _heartbeat() -> bool:
     }
     return _post("/api/v1/agents/heartbeat", payload, timeout=5)
 
-# ── Event format conversion (Bug 2 fixed) ─────────────────────────────────────
+# â”€â”€ Event format conversion (Bug 2 fixed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _CATEGORY_MAP = {
     "network_monitor":  "network",
@@ -208,13 +213,35 @@ _CATEGORY_MAP = {
 }
 
 
+# Maps human-readable Security log labels (from _EVTID_FIELDS) to Windows field names
+# that the backend normalizer (windows.py) expects at the top level of the message.
+_LABEL_TO_FIELD = {
+    "Account Name":         "TargetUserName",
+    "Subject Account Name": "SubjectUserName",
+    "New Account Name":     "TargetUserName",
+    "Target Account Name":  "TargetUserName",
+    "Logon Account":        "TargetUserName",
+    "Network Address":      "__src_ip",
+    "New Process Name":     "Image",
+    "Creator Process Name": "ParentImage",
+    "Process Command Line": "CommandLine",
+    "Service Name":         "ServiceName",
+    "Image Path":           "Image",
+    "Group Name":           "GroupName",
+    "Member Name":          "MemberName",
+    "Process Name":         "Image",
+}
+
+
 def _to_v2_format(v1_events: list) -> list:
-    """Convert V1 log entries {source_name, timestamp, raw_message}
-    to V2 RawEventPayload format."""
+    """Convert V1 log entries to V2 RawEventPayload format with structured fields."""
     result = []
     for evt in v1_events:
-        source  = evt.get("source_name", "")
-        raw_msg = evt.get("raw_message", "")
+        source   = evt.get("source_name", "")
+        raw_msg  = evt.get("raw_message", "")
+        eid      = evt.get("event_id_windows")
+        fields   = evt.get("structured_fields", {})
+        is_xml   = evt.get("is_xml_fields", False)
 
         # Determine category
         category = "other"
@@ -233,7 +260,7 @@ def _to_v2_format(v1_events: list) -> list:
             else:
                 category = "auth"
 
-        result.append({
+        payload = {
             "event_id":  str(_uuid_mod.uuid4()),
             "timestamp": evt.get("timestamp", _utc_iso()),
             "category":  category,
@@ -243,10 +270,34 @@ def _to_v2_format(v1_events: list) -> list:
                 "message":     raw_msg,
                 "source_name": source,
             },
-        })
+        }
+
+        if eid:
+            payload["event_id_windows"] = eid
+
+        if fields:
+            if is_xml:
+                # Modern channel XML fields already use real Windows field names
+                # (e.g. Image, CommandLine, ProcessId, TargetUserName)
+                for k, v in fields.items():
+                    if v and v not in ("-", ""):
+                        payload[k] = v
+            else:
+                # Classic Security log: map human-readable labels → Windows field names
+                for label, value in fields.items():
+                    win_field = _LABEL_TO_FIELD.get(label)
+                    if win_field and value and value not in ("-", ""):
+                        payload[win_field] = value
+
+        # Resolve source IP — promote to top-level source_ip for enrichment
+        src_ip = payload.pop("__src_ip", None) or payload.pop("IpAddress", None)
+        if src_ip and src_ip not in ("-", "::1", "127.0.0.1", "0.0.0.0", ""):
+            payload["source_ip"] = src_ip
+
+        result.append(payload)
     return result
 
-# ── Queue ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _Q_BATCH_SIZE  = 20
 _Q_MAX_RETRIES = 5
@@ -364,7 +415,7 @@ class _QueueDrainer:
         # Convert to V2 RawEventPayload format
         v2_events = _to_v2_format(v1_clean)
 
-        # POST as plain JSON — backend expects IngestBatchRequest
+        # POST as plain JSON â€” backend expects IngestBatchRequest
         payload = {"events": v2_events}
 
         err = ""
@@ -406,7 +457,7 @@ def _init_queue():
         _queue   = _EventQueue(_Q_DB_PATH)
         _drainer = _QueueDrainer(_queue)
 
-# ── Monitoring constants ──────────────────────────────────────────────────────
+# â”€â”€ Monitoring constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _SUSPICIOUS_PORTS = {
     4444, 1337, 31337, 6666, 6667, 6668, 6669,
@@ -493,7 +544,7 @@ _EVTID_FIELDS = {
     7045: [("Service Name", 0), ("Image Path", 1), ("Service Type", 2)],
 }
 
-# ── Checkpoint ────────────────────────────────────────────────────────────────
+# â”€â”€ Checkpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _win_last_record:    dict = {}
 _win_modern_last_ts: dict = {}
@@ -523,7 +574,7 @@ def _save_checkpoint():
     except Exception:
         pass
 
-# ── Smart event filter ────────────────────────────────────────────────────────
+# â”€â”€ Smart event filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def should_send_event(event_id, inserts):
@@ -563,7 +614,7 @@ def should_send_event(event_id, inserts):
         return True
     return False
 
-# ── Event message formatter ───────────────────────────────────────────────────
+# â”€â”€ Event message formatter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _fmt_event_message(ev, channel):
@@ -589,14 +640,14 @@ def _fmt_event_message(ev, channel):
         return " ".join(str(s) for s in inserts)
     return ""
 
-# ── Windows log reader ────────────────────────────────────────────────────────
+# â”€â”€ Windows log reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _read_windows_logs() -> list:
     try:
         import win32evtlog
     except ImportError:
-        print(f"[{_now()}] pywin32 not installed — run: pip install pywin32")
+        print(f"[{_now()}] pywin32 not installed â€” run: pip install pywin32")
         return []
 
     logs = []
@@ -637,10 +688,20 @@ def _read_windows_logs() -> list:
                 elif not should_send_event(eid, ev.StringInserts):
                     continue
                 msg = _fmt_event_message(ev, channel)
+                inserts = ev.StringInserts or ()
+                structured = {}
+                if eid in _EVTID_FIELDS and inserts:
+                    for _lbl, _idx in _EVTID_FIELDS[eid]:
+                        if _idx < len(inserts):
+                            _val = str(inserts[_idx]).strip()
+                            if _val and _val != "-" and not _val.startswith("%%"):
+                                structured[_lbl] = _val
                 logs.append({
-                    "source_name": f"{channel}/{ev.SourceName}",
-                    "timestamp":   ev.TimeGenerated.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "raw_message": f"EventID {eid}: {msg or '(no message)'}",
+                    "source_name":       f"{channel}/{ev.SourceName}",
+                    "timestamp":         _pywin_time_to_utc_iso(ev.TimeGenerated),
+                    "raw_message":       f"EventID {eid}: {msg or '(no message)'}",
+                    "event_id_windows":  eid,
+                    "structured_fields": structured,
                 })
 
             _win_last_record[channel] = new_last
@@ -700,20 +761,25 @@ def _read_win_modern_channels() -> list:
                         ts      = ts_el.get("SystemTime") if ts_el is not None else _utc_iso()
                         eid_el  = sys_el.find(_EID) if sys_el is not None else None
                         eid     = eid_el.text if eid_el is not None else "0"
-                        parts   = []
+                        xml_fields = {}
                         for d in root.iter(_DAT):
                             n = d.get("Name", ""); v = (d.text or "").strip()
                             if n and v:
-                                parts.append(f"{n}={v}")
-                            elif v:
-                                parts.append(v)
-                        msg = "; ".join(parts) if parts else "(no data)"
+                                xml_fields[n] = v
                         if not new_ts or ts > new_ts:
                             new_ts = ts
+                        try:
+                            eid_int = int(eid)
+                        except (ValueError, TypeError):
+                            eid_int = 0
+                        msg_parts = "; ".join(f"{k}={v}" for k, v in xml_fields.items()) or "(no data)"
                         logs.append({
-                            "source_name": channel,
-                            "timestamp":   ts,
-                            "raw_message": f"EventID {eid}: {msg}",
+                            "source_name":       channel,
+                            "timestamp":         ts,
+                            "raw_message":       f"EventID {eid}: {msg_parts}",
+                            "event_id_windows":  eid_int,
+                            "structured_fields": xml_fields,
+                            "is_xml_fields":     True,
                         })
                         count += 1
                     except Exception:
@@ -724,7 +790,7 @@ def _read_win_modern_channels() -> list:
             continue
     return logs
 
-# ── Linux log reader ──────────────────────────────────────────────────────────
+# â”€â”€ Linux log reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class _FileTailer:
@@ -814,7 +880,7 @@ def _read_linux_logs() -> list:
                 })
     return logs
 
-# ── Network monitor ───────────────────────────────────────────────────────────
+# â”€â”€ Network monitor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _collect_network_connections() -> list:
@@ -858,7 +924,7 @@ def _collect_network_connections() -> list:
         print(f"[{_now()}] [NET] {exc}")
     return logs
 
-# ── Process monitor ───────────────────────────────────────────────────────────
+# â”€â”€ Process monitor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _collect_suspicious_processes() -> list:
@@ -898,7 +964,7 @@ def _collect_suspicious_processes() -> list:
         print(f"[{_now()}] [PROC] {exc}")
     return logs
 
-# ── FIM ───────────────────────────────────────────────────────────────────────
+# â”€â”€ FIM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _sha256_file(path: str) -> str:
@@ -930,6 +996,13 @@ def _collect_fim_events() -> list:
                 "timestamp":   _utc_iso(),
                 "raw_message": (f"FILE INTEGRITY VIOLATION: path={path} "
                                 f"prev={prev[:16]}... curr={current[:16]}..."),
+                # Structured fields forwarded to the normalization layer so the
+                # hash reaches threat-intel enrichment (MalwareBazaar IOC check).
+                "file": {
+                    "path":        path,
+                    "hash_sha256": current,
+                    "action":      "modified",
+                },
             })
     return logs
 
@@ -939,7 +1012,7 @@ def _collect_logs() -> list:
         return _read_windows_logs() + _read_win_modern_channels()
     return _read_linux_logs()
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# â”€â”€ Main loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 LOG_INTERVAL  = 10
 NET_INTERVAL  = 300
@@ -1019,7 +1092,7 @@ if __name__ == "__main__":
     try:
         _lock.bind(("127.0.0.1", 47333))
     except OSError:
-        print("Already running — exiting.")
+        print("Already running â€” exiting.")
         sys.exit(0)
 
     while True:
