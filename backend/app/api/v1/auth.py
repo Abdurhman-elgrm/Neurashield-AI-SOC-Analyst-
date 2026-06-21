@@ -223,6 +223,30 @@ async def resend_verification(
 
 
 @router.post(
+    "/debug/force-verify",
+    include_in_schema=False,
+)
+async def debug_force_verify(
+    email: str = Query(..., description="Email address to force-verify"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Force-verify an email address directly in the DB. Remove after use."""
+    from sqlalchemy import select, update
+    from app.models.user import User
+    result = await db.execute(select(User).where(User.email == email.lower().strip()))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return {"ok": False, "error": f"No user found with email {email!r}"}
+    if user.email_verified:
+        return {"ok": True, "message": "Already verified", "email": email}
+    user.email_verified = True
+    user.email_verification_token = None
+    user.email_verification_sent_at = None
+    await db.commit()
+    return {"ok": True, "message": "Email verified successfully", "email": email}
+
+
+@router.post(
     "/debug/test-email",
     include_in_schema=False,  # hidden from Swagger — remove this endpoint after debugging
 )
