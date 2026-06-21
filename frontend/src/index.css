@@ -622,6 +622,10 @@ input:-webkit-autofill:focus {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
 }
+@keyframes degraded-pulse {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 6px #F59E0B; }
+  50%       { opacity: 0.5; box-shadow: 0 0 2px #F59E0B; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

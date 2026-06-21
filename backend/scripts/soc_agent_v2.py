@@ -147,53 +147,59 @@ def _agent_headers():
 _AGENT_REVOKED = False
 
 
-def _post(path: str, payload: dict, timeout: int = 10) -> bool:
+def _post(path: str, payload: dict, timeout: int = 10, silent: bool = False) -> bool:
     global _AGENT_REVOKED
     if _AGENT_REVOKED:
         return False
     for attempt in range(3):
         try:
             r = requests.post(
-                f"{API_ENDPOINT}{path}",
+                f”{API_ENDPOINT}{path}”,
                 json=payload,
                 headers=_agent_headers(),
                 timeout=timeout,
             )
             if r.status_code == 401:
                 _AGENT_REVOKED = True
-                print(f"[{_now()}] Agent credentials rejected (401) â€” re-enroll this device")
+                print(f”[{_now()}] Agent credentials rejected (401) — re-enroll this device”)
                 return False
             if r.status_code == 410:
                 _AGENT_REVOKED = True
-                print(f"[{_now()}] Agent removed from dashboard (410)")
+                print(f”[{_now()}] Agent removed from dashboard (410)”)
                 return False
             r.raise_for_status()
             return True
         except requests.exceptions.RequestException as exc:
             if attempt < 2:
                 time.sleep(2 ** attempt)
-            else:
-                print(f"[{_now()}] POST {path} failed: {exc}")
+            elif not silent:
+                print(f”[{_now()}] POST {path} failed: {exc}”)
     return False
 
 # â”€â”€ Heartbeat (correct HeartbeatRequest schema) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-HEARTBEAT_INTERVAL = 20
+HEARTBEAT_INTERVAL     = 20   # seconds — normal cadence
+_HB_BACKOFF_DEGRADED   = 60   # seconds — after 1–2 consecutive failures
+_HB_BACKOFF_EXTENDED   = 120  # seconds — after 3+ consecutive failures
 
 
-def _heartbeat() -> bool:
-    """POST /api/v1/agents/heartbeat â€” HeartbeatRequest schema"""
+def _heartbeat(silent: bool = False) -> bool:
+    “””POST /api/v1/agents/heartbeat — HeartbeatRequest schema.
+
+    Pass silent=True to suppress the POST-failed log line when the caller
+    already knows connectivity is degraded and handles messaging itself.
+    “””
     try:
         ip = socket.gethostbyname(socket.gethostname())
     except Exception:
         ip = None
 
     payload = {
-        "agent_version": "2.0.0",
-        "ip_address":    ip,
-        "os_metrics":    {},
+        “agent_version”: “2.0.0”,
+        “ip_address”:    ip,
+        “os_metrics”:    {},
     }
-    return _post("/api/v1/agents/heartbeat", payload, timeout=5)
+    return _post(“/api/v1/agents/heartbeat”, payload, timeout=5, silent=silent)
 
 # â”€â”€ Event format conversion (Bug 2 fixed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1043,6 +1049,11 @@ def main():
 
     last_heartbeat = last_log = last_net = last_proc = last_fim = 0.0
 
+    # Adaptive heartbeat state: backs off during connectivity loss to reduce
+    # log noise and retry pressure, then recovers immediately on reconnect.
+    _hb_failures = 0
+    _hb_interval = HEARTBEAT_INTERVAL
+
     print(f"[{_now()}] Monitoring started.\n")
 
     while True:
@@ -1052,9 +1063,21 @@ def main():
 
         now = time.time()
 
-        if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-            if _heartbeat():
+        if now - last_heartbeat >= _hb_interval:
+            ok = _heartbeat(silent=_hb_failures > 0)
+            if ok:
+                if _hb_failures > 0:
+                    print(f"[{_now()}] [HB] Connectivity restored after {_hb_failures} failure(s)")
+                _hb_failures = 0
+                _hb_interval = HEARTBEAT_INTERVAL
                 print(f"[{_now()}] [HB] OK")
+            else:
+                _hb_failures += 1
+                if _hb_failures == 1:
+                    print(f"[{_now()}] [HB] Connectivity degraded — backing off")
+                _hb_interval = (
+                    _HB_BACKOFF_EXTENDED if _hb_failures >= 3 else _HB_BACKOFF_DEGRADED
+                )
             last_heartbeat = now
 
         if now - last_log >= LOG_INTERVAL:

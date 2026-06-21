@@ -50,7 +50,8 @@ function AgentStatusBadge({ status }: { status: string }) {
       <span style={{
         width: 5, height: 5, borderRadius: '50%',
         background: cfg.color, flexShrink: 0,
-        boxShadow: status === 'online' ? `0 0 6px ${cfg.color}` : 'none',
+        boxShadow: status !== 'offline' ? `0 0 6px ${cfg.color}` : 'none',
+        animation: status === 'degraded' ? 'degraded-pulse 2s ease-in-out infinite' : 'none',
       }} />
       {cfg.label}
     </span>
@@ -548,7 +549,8 @@ export function AgentsPage() {
 
   const agents = data?.items ?? []
   const total = data?.total ?? 0
-  const onlineCount = agents.filter(a => a.status === 'online').length
+  const onlineCount   = agents.filter(a => a.status === 'online').length
+  const degradedCount = agents.filter(a => a.status === 'degraded').length
 
   return (
     <div className="page-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }}>
@@ -572,6 +574,14 @@ export function AgentsPage() {
             <span style={{ color: '#10B981', fontWeight: 600 }}>
               {onlineCount} online
             </span>
+            {degradedCount > 0 && (
+              <>
+                {' · '}
+                <span style={{ color: '#F59E0B', fontWeight: 600 }}>
+                  {degradedCount} degraded
+                </span>
+              </>
+            )}
             {' · '}
             {total} total
           </p>

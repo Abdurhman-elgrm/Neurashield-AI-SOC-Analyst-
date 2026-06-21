@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, Search, LogOut, Settings, Plus, Loader } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -149,6 +150,7 @@ function TenantSelector() {
   const activeTenant   = useTenantStore((s) => s.activeTenant);
   const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
   const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
+  const queryClient    = useQueryClient();
 
   const [open,        setOpen]        = useState(false);
   const [tenants,     setTenants]     = useState<Tenant[]>([]);
@@ -175,6 +177,8 @@ function TenantSelector() {
     setStoreTenant(t, role);
     setAuthTenant(t.id);
     setOpen(false);
+    // Stale data from the previous workspace must not bleed into the new one.
+    queryClient.clear();
   };
 
   const handleCreate = async () => {
