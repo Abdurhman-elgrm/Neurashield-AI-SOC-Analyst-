@@ -10,6 +10,7 @@ import type {
   EventHuntFilter, EventHuntQuery, EventHuntResultEntry, EventHuntSummary,
 } from '@/api/hunt'
 import { formatRelativeTime, extractApiError } from '@/lib/utils'
+import { toastError } from '@/lib/toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -889,6 +890,7 @@ export function HuntPage() {
   const [filterLogic, setFilterLogic] = useState<FilterLogic>('and')
   const [savedHunts, setSavedHunts]   = useState<SavedHunt[]>([])
   const [showSaveModal, setShowSaveModal] = useState(false)
+  const [confirmDeleteHunt, setConfirmDeleteHunt] = useState<SavedHunt | null>(null)
 
   // ── Investigation Hunt ───────────────────────────────────────────────────────
   const [invFilters, setInvFilters]     = useState<HuntFilter[]>([{ field: 'threat_score', operator: 'gte', value: '60' }])
@@ -924,7 +926,7 @@ export function HuntPage() {
   useEffect(() => {
     huntApi.listSaved()
       .then(data => setSavedHunts(Array.isArray(data) ? data : []))
-      .catch(() => {})
+      .catch(e => toastError(extractApiError(e), 'Failed to load saved hunts'))
   }, [])
 
   // ── Investigation Hunt handlers ──────────────────────────────────────────────
@@ -956,7 +958,7 @@ export function HuntPage() {
       const res = await huntApi.run(buildInvQuery(invCursor))
       setInvResults(prev => [...prev, ...res.entries])
       setInvCursor(res.next_cursor); setInvHasMore(res.has_more)
-    } catch { /* silent */ }
+    } catch (e) { toastError(extractApiError(e), 'Failed to load more results') }
     finally { setInvLoadMore(false) }
   }
 
@@ -996,7 +998,7 @@ export function HuntPage() {
       const res = await huntApi.runEventHunt(buildEvtQuery(evtCursor))
       setEvtResults(prev => [...prev, ...res.entries])
       setEvtCursor(res.next_cursor); setEvtHasMore(res.has_more)
-    } catch { /* silent */ }
+    } catch (e) { toastError(extractApiError(e), 'Failed to load more results') }
     finally { setEvtLoadMore(false) }
   }
 
@@ -1038,13 +1040,18 @@ export function HuntPage() {
   }
 
   // Gap 3 — delete saved hunt ─────────────────────────────────────────────────
-  const handleDeleteSavedHunt = async (hunt: SavedHunt, e: React.MouseEvent) => {
+  const handleDeleteSavedHunt = (hunt: SavedHunt, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!window.confirm(`Delete saved hunt "${hunt.name}"?`)) return
+    setConfirmDeleteHunt(hunt)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteHunt) return
     try {
-      await huntApi.deleteSavedHunt(hunt.hunt_id)
-      setSavedHunts(prev => prev.filter(h => h.hunt_id !== hunt.hunt_id))
-    } catch { /* silent — already deleted or network error */ }
+      await huntApi.deleteSavedHunt(confirmDeleteHunt.hunt_id)
+      setSavedHunts(prev => prev.filter(h => h.hunt_id !== confirmDeleteHunt.hunt_id))
+    } catch (e) { toastError(extractApiError(e), 'Delete failed') }
+    finally { setConfirmDeleteHunt(null) }
   }
 
   const isRunning = mode === 'investigation' ? invRunning : evtRunning
@@ -1551,6 +1558,38 @@ export function HuntPage() {
       {/* Save Modal */}
       {showSaveModal && (
         <SaveModal onSave={handleSave} onClose={() => setShowSaveModal(false)} />
+      )}
+
+      {/* Delete Confirm */}
+      {confirmDeleteHunt && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setConfirmDeleteHunt(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: 380, background: '#111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#F5F7FA' }}>Delete Saved Hunt</div>
+            <p style={{ fontSize: 13, color: '#8B95A7', margin: 0 }}>
+              Are you sure you want to delete <strong style={{ color: '#F5F7FA' }}>"{confirmDeleteHunt.name}"</strong>? This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmDeleteHunt(null)}
+                style={{ padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8B95A7', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{ padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', color: '#F87171', cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './client'
+import { apiGet, apiPost, apiPut } from './client'
 
 // ─── Compliance types ─────────────────────────────────────────────────────────
 
@@ -126,5 +126,5 @@ export const playbookAutoApi = {
     apiGet<AutoPlaybookConfig>('/playbooks/auto-config'),
 
   updateConfig: (payload: AutoPlaybookConfig): Promise<AutoPlaybookConfig> =>
-    apiPost<AutoPlaybookConfig>('/playbooks/auto-config', payload),
+    apiPut<AutoPlaybookConfig>('/playbooks/auto-config', payload),
 }

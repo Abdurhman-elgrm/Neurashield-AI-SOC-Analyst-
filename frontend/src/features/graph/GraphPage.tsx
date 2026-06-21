@@ -311,7 +311,7 @@ export function GraphPage() {
     queryFn:  () => listInvestigations({ limit: 50 }),
     staleTime: 30_000,
   })
-  // InvestigationListResponse.data contains the array of items
+  // InvestigationListResponse.data contains the array of items (keyed by investigation_id)
   const invList: InvestigationListItem[] = invListRaw?.data ?? []
 
   // Graph data
@@ -367,7 +367,7 @@ export function GraphPage() {
     setSelectedNode(prev => prev?.node_id === raw.node_id ? null : raw)
   }, [])
 
-  const selectedInv = invList.find(i => i.investigation_group_id === selectedId)
+  const selectedInv = invList.find(i => i.investigation_id === selectedId)
   const statusColor = (s: string) =>
     ({ open: '#F59E0B', in_progress: '#60A5FA', closed: '#10B981' }[s] ?? '#5C6373')
 
@@ -407,12 +407,12 @@ export function GraphPage() {
               {searchInv ? 'No results.' : 'No investigations.'}
             </div>
           ) : filteredInvs.map((inv: InvestigationListItem) => {
-            const isActive = inv.investigation_group_id === selectedId
-            const label = inv.title || inv.executive_summary?.slice(0, 60) || inv.investigation_group_id.slice(0, 12)
+            const isActive = inv.investigation_id === selectedId
+            const label = inv.title || inv.executive_summary?.slice(0, 60) || inv.investigation_id.slice(0, 12)
             return (
               <button
-                key={inv.investigation_group_id}
-                onClick={() => { setSelectedId(inv.investigation_group_id); setSelectedNode(null); setShowPaths(false) }}
+                key={inv.investigation_id}
+                onClick={() => { setSelectedId(inv.investigation_id); setSelectedNode(null); setShowPaths(false) }}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '9px 12px 9px 14px',

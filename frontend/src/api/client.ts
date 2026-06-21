@@ -16,14 +16,18 @@ function resolveApiBaseUrl(): string {
       "[API] VITE_API_URL is not set. Add it to your Railway frontend Variables (e.g. https://your-backend.up.railway.app).",
     );
   }
-  console.warn("[API] VITE_API_URL not set — using http://localhost:8000 for local development.");
+  if (import.meta.env.DEV) {
+    console.warn("[API] VITE_API_URL not set — using http://localhost:8000 for local development.");
+  }
   return "http://localhost:8000";
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
 const API_PREFIX = "/api/v1";
 
-console.info(`[API] Base URL: ${API_BASE_URL}${API_PREFIX}`);
+if (import.meta.env.DEV) {
+  console.info(`[API] Base URL: ${API_BASE_URL}${API_PREFIX}`);
+}
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
@@ -116,6 +120,10 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch {
         useAuthStore.getState().clearAuth();
+        useTenantStore.getState().clearTenant();
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
         return Promise.reject(error);
       } finally {
         isRefreshing = false;
@@ -138,6 +146,14 @@ export async function apiGet<T>(url: string, params?: Record<string, unknown>): 
 
 export async function apiPost<T>(url: string, data?: unknown): Promise<T> {
   const response = await apiClient.post<APIResponse<T>>(url, data);
+  if (response.data.error) {
+    throw new ApiError(response.data.error.code, response.data.error.message, response.data.error.details);
+  }
+  return response.data.data as T;
+}
+
+export async function apiPut<T>(url: string, data?: unknown): Promise<T> {
+  const response = await apiClient.put<APIResponse<T>>(url, data);
   if (response.data.error) {
     throw new ApiError(response.data.error.code, response.data.error.message, response.data.error.details);
   }

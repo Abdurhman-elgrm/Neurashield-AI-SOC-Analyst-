@@ -1,5 +1,5 @@
 import * as Toast from "@radix-ui/react-toast";
-import { X, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { X, AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -9,7 +9,7 @@ import type { Notification } from "@/stores/notificationStore";
 
 export function Toaster() {
   const { notifications, markRead } = useNotificationStore();
-  const recentUnread = notifications.filter((n) => !n.read).slice(0, 3);
+  const recentUnread = notifications.filter((n) => !n.read).slice(0, 5);
 
   return (
     <Toast.Provider swipeDirection="right" duration={5000}>
@@ -28,15 +28,29 @@ export function Toaster() {
 const ICONS: Record<string, React.ReactNode> = {
   alert:         <AlertTriangle className="w-4 h-4" />,
   investigation: <Info className="w-4 h-4" />,
-  system:        <CheckCircle2 className="w-4 h-4" />,
+  system:        <Info className="w-4 h-4" />,
   info:          <Info className="w-4 h-4" />,
+  error:         <XCircle className="w-4 h-4" />,
+  success:       <CheckCircle2 className="w-4 h-4" />,
+};
+
+const TYPE_ICON_COLOR: Record<string, string> = {
+  error:   "text-red-400",
+  success: "text-emerald-400",
+  alert:   "text-amber-400",
+};
+
+const TYPE_BORDER: Record<string, string> = {
+  error:   "border-red-500/30",
+  success: "border-emerald-500/25",
+  alert:   "border-amber-500/25",
 };
 
 const SEVERITY_CLASSES: Record<string, string> = {
-  critical: "text-severity-critical",
-  high:     "text-severity-high",
-  medium:   "text-severity-medium",
-  low:      "text-severity-low",
+  critical: "text-red-400",
+  high:     "text-orange-400",
+  medium:   "text-amber-400",
+  low:      "text-blue-400",
 };
 
 function ToastItem({
@@ -48,7 +62,7 @@ function ToastItem({
 }) {
   const iconColor = notification.severity
     ? SEVERITY_CLASSES[notification.severity]
-    : "text-text-muted";
+    : TYPE_ICON_COLOR[notification.type] ?? "text-text-muted";
 
   return (
     <Toast.Root
@@ -64,7 +78,8 @@ function ToastItem({
         className={cn(
           "bg-bg-elevated border border-border rounded-lg shadow-elevated",
           "p-3.5 flex items-start gap-3",
-          notification.severity === "critical" && "border-severity-critical/30"
+          TYPE_BORDER[notification.type],
+          notification.severity === "critical" && "border-red-500/30"
         )}
       >
         <span className={cn("mt-0.5 flex-shrink-0", iconColor)}>

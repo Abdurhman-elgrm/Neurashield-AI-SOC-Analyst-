@@ -37,9 +37,7 @@ export const useTenantStore = create<TenantState>()((set, get) => ({
     const { memberRole } = get();
     if (!memberRole) return false;
     const minKey = minimum as MemberRole;
-    // Unknown role strings are treated as maximum privilege so UI stays accessible
-    // while the backend enforces real RBAC on every request.
-    if (!(minKey in ROLE_HIERARCHY)) return true;
+    if (!(minKey in ROLE_HIERARCHY)) return false;
     return ROLE_HIERARCHY[memberRole] >= ROLE_HIERARCHY[minKey];
   },
 }));

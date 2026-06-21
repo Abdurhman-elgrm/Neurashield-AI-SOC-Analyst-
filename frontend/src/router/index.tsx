@@ -230,9 +230,9 @@ const router = createBrowserRouter([
       { path: "investigations/:id", element: <S><RequireRole min="analyst"><InvestigationDetailPage /></RequireRole></S> },
       { path: "hunt",               element: <S><RequireRole min="analyst"><HuntPage /></RequireRole></S> },
       { path: "copilot",            element: <S><RequireRole min="analyst"><CopilotPage /></RequireRole></S> },
-      // viewer+
-      { path: "rules",              element: <S><RulesPage /></S> },
-      { path: "graph",              element: <S><GraphPage /></S> },
+      // analyst+ only
+      { path: "rules",              element: <S><RequireRole min="analyst"><RulesPage /></RequireRole></S> },
+      { path: "graph",              element: <S><RequireRole min="analyst"><GraphPage /></RequireRole></S> },
       // playbooks
       { path: "playbooks",          element: <S><RequireRole min="analyst"><PlaybooksPage /></RequireRole></S> },
       { path: "playbooks/:id",      element: <S><RequireRole min="analyst"><PlaybookDetailPage /></RequireRole></S> },

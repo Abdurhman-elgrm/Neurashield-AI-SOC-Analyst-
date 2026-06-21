@@ -46,12 +46,24 @@ interface KPICardProps {
   icon: React.ElementType;
   accent: string;
   live?: boolean;
+  deltaPercent?: number;
   formatter?: (v: number) => string;
 }
 
-function KPICard({ label, value, icon: Icon, accent, live, formatter }: KPICardProps) {
+function KPICard({ label, value, icon: Icon, accent, live, deltaPercent, formatter }: KPICardProps) {
   const display = useCountUp(value);
   const formatted = formatter ? formatter(display) : display.toLocaleString();
+
+  const trendText = deltaPercent == null
+    ? "—"
+    : deltaPercent === 0
+    ? "0%"
+    : `${deltaPercent > 0 ? "+" : ""}${deltaPercent.toFixed(1)}%`;
+  const trendColor = deltaPercent == null || deltaPercent === 0
+    ? undefined
+    : deltaPercent > 0
+    ? "#EF4444"
+    : "#10B981";
 
   return (
     <div className="kpi-card" style={{ cursor: "default" }}>
@@ -70,7 +82,9 @@ function KPICard({ label, value, icon: Icon, accent, live, formatter }: KPICardP
       <div className="kpi-value" style={{ color: value > 0 ? accent : "#F5F7FA" }}>
         {formatted}
       </div>
-      <div className="kpi-trend">— 0% vs prev period</div>
+      <div className="kpi-trend" style={trendColor ? { color: trendColor } : undefined}>
+        {trendText} vs prev period
+      </div>
     </div>
   );
 }
@@ -170,18 +184,21 @@ export function DashboardPage() {
           icon={Bell}
           accent="#EF4444"
           live
+          deltaPercent={s?.alerts?.delta24h}
         />
         <KPICard
           label="CRITICAL P1"
           value={s?.alerts?.critical ?? 0}
           icon={AlertTriangle}
           accent="#EF4444"
+          deltaPercent={s?.alerts?.criticalDelta24h}
         />
         <KPICard
           label="ACTIVE INVEST."
           value={s?.investigations?.active ?? 0}
           icon={FolderSearch}
           accent="#3B82F6"
+          deltaPercent={s?.investigations?.delta24h}
         />
         <KPICard
           label="EVENTS / SEC"
@@ -189,6 +206,7 @@ export function DashboardPage() {
           icon={Activity}
           accent="#10B981"
           live
+          deltaPercent={s?.ingestion?.deltaPercent}
           formatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v)}
         />
       </div>

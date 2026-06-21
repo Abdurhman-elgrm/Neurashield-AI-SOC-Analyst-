@@ -12,6 +12,9 @@ import { eventsApi, type EventResponse, type EventSearchRequest } from '@/api/ev
 import { formatDateTime } from '@/lib/timezone'
 import { SearchAutocomplete } from './SearchAutocomplete'
 import { parseSearchQuery } from './queryParser'
+import { CreateInvestigationModal } from '@/features/investigations/components/CreateInvestigationModal'
+import { toastError } from '@/lib/toast'
+import { extractApiError } from '@/lib/utils'
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
@@ -638,6 +641,7 @@ function EventRow({
 // ─── EventDrawer (full detail panel) ─────────────────────────────────────────
 
 function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => void }) {
+  const [showCreateInv, setShowCreateInv] = useState(false)
   const cat = categoryConfig[event.category] ?? { icon: Activity, color: '#64748B', label: 'Other' }
   const CatIcon = cat.icon
 
@@ -906,14 +910,25 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
           display: 'flex', gap: 8, flexShrink: 0,
         }}>
           <Button variant="secondary" size="sm" style={{ flex: 1 }}
-            onClick={() => navigator.clipboard.writeText(JSON.stringify(event, null, 2))}>
+            onClick={() => {
+              navigator.clipboard.writeText(JSON.stringify(event, null, 2)).catch(e => toastError(extractApiError(e), 'Copy failed'))
+            }}>
             <Copy size={12} /> Copy JSON
           </Button>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={() => setShowCreateInv(true)}>
             <FolderSearch size={12} /> Investigate
           </Button>
         </div>
       </div>
+      {showCreateInv && (
+        <CreateInvestigationModal
+          open={showCreateInv}
+          onClose={() => setShowCreateInv(false)}
+          prefillTitle={event.process_name
+            ? `Investigate ${event.process_name} on ${event.host_name ?? 'unknown host'}`
+            : `Investigate ${event.category} event on ${event.host_name ?? 'unknown host'}`}
+        />
+      )}
     </>
   )
 }
@@ -1023,7 +1038,7 @@ export function EventsPage() {
       const a = document.createElement('a')
       a.href = url; a.download = `events.${format}`; a.click()
       URL.revokeObjectURL(url)
-    } catch { /* silent */ }
+    } catch (e) { toastError(extractApiError(e), 'Export failed') }
   }
 
   const hasSearch = !!(queryText || agentId)

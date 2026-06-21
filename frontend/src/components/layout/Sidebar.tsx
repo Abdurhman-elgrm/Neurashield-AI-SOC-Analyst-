@@ -15,6 +15,7 @@ import {
   FileBarChart,
   Download,
   Upload,
+  Network,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -181,6 +182,9 @@ export function Sidebar() {
           <NavItem to="/hunt"  icon={Crosshair} label="Threat Hunt" />
         )}
         <NavItem to="/rules" icon={Shield} label="Detection Rules" />
+        {hasRole('analyst') && (
+          <NavItem to="/graph" icon={Network} label="Attack Graph" />
+        )}
 
         <div className="sec-label">AI &amp; Response</div>
         {hasRole('analyst') && (

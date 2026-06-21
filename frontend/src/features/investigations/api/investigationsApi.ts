@@ -92,11 +92,10 @@ export async function addInvestigationNote(
 export async function assignInvestigation(
   id: string,
   userId: string,
-  userName: string
 ): Promise<Investigation> {
-  const { data } = await apiClient.post<APIResponse<Investigation>>(
+  const { data } = await apiClient.patch<APIResponse<Investigation>>(
     `/investigations/${id}/assign`,
-    { user_id: userId, user_name: userName }
+    { assigned_to: userId }
   );
   return data.data!;
 }
@@ -119,7 +118,7 @@ export async function updateInvestigationVerdict(
   verdict: InvestigationVerdict,
   reasoning?: string
 ): Promise<Investigation> {
-  const { data } = await apiClient.post<APIResponse<Investigation>>(
+  const { data } = await apiClient.patch<APIResponse<Investigation>>(
     `/investigations/${id}/verdict`,
     { verdict, reasoning }
   );

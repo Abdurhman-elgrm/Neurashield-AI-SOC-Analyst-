@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
+import { toastError } from '@/lib/toast'
+import { extractApiError } from '@/lib/utils'
 
 // ─── Backend types ────────────────────────────────────────────────────────────
 
@@ -241,7 +243,11 @@ export function useInvSetVerdict(id: string) {
   return useMutation({
     mutationFn: (verdict: string) =>
       apiClient.patch(`/investigations/${id}/verdict`, { verdict }),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ['inv-detail', id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inv-detail', id] })
+    },
+    onError: (err) => {
+      toastError(extractApiError(err), 'Failed to set verdict')
+    },
   })
 }

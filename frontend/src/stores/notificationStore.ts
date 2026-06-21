@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { AlertSeverity } from "@/types/alerts";
 
-export type NotificationType = "alert" | "investigation" | "system" | "info";
+export type NotificationType = "alert" | "investigation" | "system" | "info" | "error" | "success";
 
 export interface Notification {
   id: string;

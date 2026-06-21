@@ -15,6 +15,7 @@ import { authApi } from '@/api/auth'
 import { invitationsApi } from '@/api/invitations'
 import type { Invitation } from '@/api/invitations'
 import { extractApiError } from '@/lib/utils'
+import { toastError, toastSuccess } from '@/lib/toast'
 import { TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { playbookAutoApi } from '@/api/reports'
 import type { AutoPlaybookConfig } from '@/api/reports'
@@ -195,7 +196,7 @@ function ProfileTab() {
       setJobTitle(p.job_title ?? '')
       setBio(p.bio ?? '')
       setAvatarUrl(p.avatar_url ?? '')
-    }).catch(console.error)
+    }).catch(e => toastError(extractApiError(e), 'Failed to load profile'))
   }, [])
 
   const handleSave = async () => {
@@ -491,7 +492,7 @@ function OrgTab() {
       setEventRetention(t.event_retention_days ?? 90)
       setAlertRetention(t.alert_retention_days ?? 365)
       setLogoUrl(t.logo_url ?? null)
-    }).catch(console.error)
+    }).catch(e => toastError(extractApiError(e), 'Failed to load organization'))
   }, [activeTenantId])
 
   const handleSave = async () => {
@@ -1309,14 +1310,14 @@ function MembersTab() {
     ]).then(([m, inv]) => {
       setMembers(m)
       setInvitations(inv)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(e => toastError(extractApiError(e), 'Failed to load members')).finally(() => setLoading(false))
   }, [activeTenantId])
 
   const handleRevoke = async (invId: string) => {
     try {
       await invitationsApi.revoke(invId)
       setInvitations(prev => prev.filter(i => i.id !== invId))
-    } catch { /* silently ignore */ }
+    } catch (e) { toastError(extractApiError(e), 'Failed to revoke invitation') }
   }
 
   const handlePermSaved = (userId: string, grant: string[], revoke: string[]) => {
@@ -1696,7 +1697,7 @@ function AutomationTab() {
   useEffect(() => {
     playbookAutoApi.getConfig()
       .then(c => setCfg(c))
-      .catch(console.error)
+      .catch(e => toastError(extractApiError(e), 'Failed to load automation config'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -1706,6 +1707,7 @@ function AutomationTab() {
       const updated = await playbookAutoApi.updateConfig(cfg)
       setCfg(updated)
       setSaved(true)
+      toastSuccess('Automation configuration saved', 'Saved')
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       setError(extractApiError(err))
