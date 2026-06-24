@@ -147,8 +147,9 @@ async def _get_or_create_user(db: AsyncSession, tenant: Tenant) -> User:
 # ─── Wipe ─────────────────────────────────────────────────────────────────────
 
 async def _wipe_tenant_data(db: AsyncSession, tenant_id: str) -> None:
+    # playbook_steps has no tenant_id — it cascades from playbooks deletion
     for table in [
-        "playbook_steps", "playbook_runs", "playbooks",
+        "playbook_runs", "playbooks",
         "suppression_rules", "audit_logs",
         "alerts", "investigations",
         "detection_rules", "heartbeats", "agents",
