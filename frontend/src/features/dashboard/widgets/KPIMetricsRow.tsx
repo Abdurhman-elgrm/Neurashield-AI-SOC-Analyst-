@@ -8,6 +8,7 @@ import {
   GitMerge,
   Brain,
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { KPICard, KPICardSkeleton } from "./KPICard";
 import { useKPISummary } from "@/features/dashboard/hooks/useDashboardData";
@@ -40,7 +41,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         label="Total Alerts"
         value={s.alerts.total}
         deltaPercent={s.alerts.delta24h}
-        icon={<AlertTriangle className="w-4 h-4" />}
+        icon={<AlertTriangle size={12} />}
         colorVariant="accent"
         isLive
         isLoading={isPlaceholderData}
@@ -50,7 +51,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         label="Critical Alerts"
         value={s.alerts.critical}
         deltaPercent={s.alerts.criticalDelta24h}
-        icon={<ShieldAlert className="w-4 h-4" />}
+        icon={<ShieldAlert size={12} />}
         colorVariant={s.alerts.critical > 0 ? "critical" : "default"}
         isLoading={isPlaceholderData}
         onClick={() => navigate("/alerts?severity=critical")}
@@ -59,7 +60,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         label="Active Investigations"
         value={s.investigations.active}
         deltaPercent={s.investigations.delta24h}
-        icon={<ShieldCheck className="w-4 h-4" />}
+        icon={<ShieldCheck size={12} />}
         colorVariant="accent"
         isLoading={isPlaceholderData}
         onClick={() => navigate("/investigations")}
@@ -68,7 +69,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         label="Events / Sec"
         value={s.ingestion.epsNow}
         deltaPercent={s.ingestion.deltaPercent}
-        icon={<Zap className="w-4 h-4" />}
+        icon={<Zap size={12} />}
         colorVariant="low"
         isLive
         isLoading={isPlaceholderData}
@@ -77,7 +78,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
       <KPICard
         label="Online Agents"
         value={s.agents.online}
-        icon={<Server className="w-4 h-4" />}
+        icon={<Server size={12} />}
         colorVariant={s.agents.offline > 0 ? "high" : "low"}
         suffix={`/ ${s.agents.total}`}
         isLoading={isPlaceholderData}
@@ -87,14 +88,14 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         label="Rules Triggered"
         value={s.detection.rulesTriggered}
         deltaPercent={s.detection.delta24h}
-        icon={<Activity className="w-4 h-4" />}
+        icon={<Activity size={12} />}
         colorVariant="accent"
         isLoading={isPlaceholderData}
       />
       <KPICard
         label="Correlated"
         value={s.investigations.correlated}
-        icon={<GitMerge className="w-4 h-4" />}
+        icon={<GitMerge size={12} />}
         colorVariant="medium"
         isLoading={isPlaceholderData}
         onClick={() => navigate("/investigations")}
@@ -102,7 +103,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
       <KPICard
         label="AI Queue"
         value={s.investigations.aiPending}
-        icon={<Brain className="w-4 h-4" />}
+        icon={<Brain size={12} />}
         colorVariant={s.investigations.aiPending > 50 ? "high" : "accent"}
         isLoading={isPlaceholderData}
         onClick={() => navigate("/copilot")}

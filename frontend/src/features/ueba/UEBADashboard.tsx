@@ -7,7 +7,6 @@ import {
 import { User, AlertTriangle, MapPin, TrendingUp, Shield, Activity } from "lucide-react";
 import { uebaApi } from "@/api/ueba";
 import type { RiskyUser } from "@/api/ueba";
-import { cn } from "@/lib/utils";
 import { WidgetErrorBoundary } from "@/components/ui/WidgetErrorBoundary";
 
 // ─── Risk tier helpers ────────────────────────────────────────────────────────
@@ -260,7 +259,7 @@ export function UEBADashboard() {
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 12, marginBottom: 12 }} className="grid" style={{ gridTemplateColumns: "2fr 1fr" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 12 }}>
         {/* Risky users list */}
         <div style={{ background: "#0D0D0D", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, overflow: "hidden" }}>
           {/* List header + filter */}

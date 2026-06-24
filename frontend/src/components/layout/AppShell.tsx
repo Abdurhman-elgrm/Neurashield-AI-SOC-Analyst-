@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { DemoBanner } from "./DemoBanner";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { Toaster } from "@/components/ui/Toaster";
 import { ShortcutsModal } from "@/components/ui/ShortcutsModal";
@@ -39,6 +40,9 @@ export function AppShell() {
         overflow: "hidden",
         transition: "margin-left 200ms cubic-bezier(0.4,0,0.2,1)",
       }}>
+        {/* Demo mode notice */}
+        <DemoBanner />
+
         {/* Fixed-height topbar */}
         <TopBar />
 

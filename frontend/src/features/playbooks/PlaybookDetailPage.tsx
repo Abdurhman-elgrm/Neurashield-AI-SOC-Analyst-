@@ -1,11 +1,22 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Play, CheckCircle, Circle, AlertCircle, ChevronDown, ChevronUp, Zap } from 'lucide-react'
+import { ArrowLeft, Play, CheckCircle, Circle, AlertCircle, ChevronDown, ChevronUp, Zap, Shield, Search, Eye, Trash2, RefreshCw, MessageSquare } from 'lucide-react'
 import { playbooksApi, type PlaybookStep } from '@/api/playbooks'
 import { Button } from '@/components/ui/Button'
 import { extractApiError } from '@/lib/utils'
 import { formatDateTime } from '@/lib/timezone'
+
+// IR phase ordering + config
+const PHASE_ORDER = ['detection', 'investigation', 'containment', 'eradication', 'recovery', 'communication']
+const PHASE_CONFIG: Record<string, { label: string; color: string; icon: typeof Shield }> = {
+  detection:     { label: 'Detection',     color: '#3B82F6', icon: Eye            },
+  investigation: { label: 'Investigation', color: '#8B5CF6', icon: Search         },
+  containment:   { label: 'Containment',   color: '#EF4444', icon: Shield         },
+  eradication:   { label: 'Eradication',   color: '#F97316', icon: Trash2         },
+  recovery:      { label: 'Recovery',      color: '#10B981', icon: RefreshCw      },
+  communication: { label: 'Communication', color: '#F59E0B', icon: MessageSquare  },
+}
 
 // ─── Step status icon ─────────────────────────────────────────────────────────
 
@@ -209,6 +220,18 @@ export function PlaybookDetailPage() {
   const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
   const isExecuting = playbook?.status === 'in_progress'
 
+  // Group steps by IR phase in canonical order
+  const phaseGroups = useMemo(() => {
+    const grouped: Record<string, PlaybookStep[]> = {}
+    for (const step of steps) {
+      const ph = step.category in PHASE_CONFIG ? step.category : 'detection'
+      ;(grouped[ph] ??= []).push(step)
+    }
+    return PHASE_ORDER
+      .filter(ph => ph in grouped)
+      .map(ph => ({ phase: ph, steps: grouped[ph]! }))
+  }, [steps])
+
   const severityColor =
     playbook?.severity === 'critical' ? '#EF4444' :
     playbook?.severity === 'high'     ? '#F97316' :
@@ -291,27 +314,54 @@ export function PlaybookDetailPage() {
         )}
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar + phase summary */}
       {!isLoading && steps.length > 0 && (
-        <div style={{
-          padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: '#8B95A7' }}>
-              Progress: {completedCount} / {steps.length} steps
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: progress === 100 ? '#10B981' : '#3B82F6' }}>
+        <div style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0 }}>
+          {/* Main progress row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${progress}%`,
+                background: progress === 100 ? '#10B981' : 'linear-gradient(90deg, #3B82F6, #60A5FA)',
+                borderRadius: 3, transition: 'width 300ms ease',
+              }} />
+            </div>
+            <span style={{
+              fontSize: 13, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
+              color: progress === 100 ? '#10B981' : '#60A5FA', flexShrink: 0, minWidth: 36, textAlign: 'right',
+            }}>
               {progress}%
             </span>
+            <span style={{ fontSize: 10, color: '#5C6373', flexShrink: 0 }}>
+              {completedCount}/{steps.length}
+            </span>
           </div>
-          <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
-            <div style={{
-              height: '100%', borderRadius: 2,
-              width: `${progress}%`,
-              background: progress === 100 ? '#10B981' : '#3B82F6',
-              transition: 'width 300ms ease',
-            }} />
-          </div>
+
+          {/* Phase chip strip */}
+          {phaseGroups.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              {phaseGroups.map(({ phase, steps: pSteps }) => {
+                const cfg = PHASE_CONFIG[phase] ?? PHASE_CONFIG['detection']!
+                const done = pSteps.filter(s => s.status === 'completed').length
+                const allDone = done === pSteps.length
+                return (
+                  <div key={phase} style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '2px 7px', borderRadius: 4,
+                    background: allDone ? `${cfg.color}15` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${allDone ? `${cfg.color}30` : 'rgba(255,255,255,0.06)'}`,
+                  }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: allDone ? cfg.color : '#5C6373', letterSpacing: '0.5px' }}>
+                      {cfg.label}
+                    </span>
+                    <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: allDone ? cfg.color : '#3A4150', fontWeight: 700 }}>
+                      {done}/{pSteps.length}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -338,15 +388,50 @@ export function PlaybookDetailPage() {
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#5C6373', fontSize: 13 }}>
             No steps generated for this playbook.
           </div>
+        ) : phaseGroups.length > 1 ? (
+          // Phase-grouped view
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {phaseGroups.map(({ phase, steps: pSteps }) => {
+              const cfg = PHASE_CONFIG[phase] ?? PHASE_CONFIG['detection']!
+              const PhaseIcon = cfg.icon
+              const done = pSteps.filter(s => s.status === 'completed').length
+              return (
+                <div key={phase}>
+                  {/* Phase section header */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    marginBottom: 8, paddingBottom: 8,
+                    borderBottom: `1px solid ${cfg.color}20`,
+                  }}>
+                    <PhaseIcon size={12} style={{ color: cfg.color, flexShrink: 0 }} />
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                      letterSpacing: '1.5px', color: cfg.color,
+                    }}>
+                      {cfg.label}
+                    </span>
+                    <span style={{ fontSize: 10, color: '#3A4150', fontFamily: "'JetBrains Mono', monospace" }}>
+                      {done}/{pSteps.length}
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: `${cfg.color}15` }} />
+                    {done === pSteps.length && (
+                      <CheckCircle size={12} style={{ color: cfg.color, flexShrink: 0 }} />
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {pSteps.map(step => (
+                      <StepCard key={step.id} step={step} playbookId={id} isExecuting={isExecuting} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         ) : (
+          // Flat view (single phase)
           <div style={{ display: 'grid', gap: 8 }}>
             {steps.map(step => (
-              <StepCard
-                key={step.id}
-                step={step}
-                playbookId={id}
-                isExecuting={isExecuting}
-              />
+              <StepCard key={step.id} step={step} playbookId={id} isExecuting={isExecuting} />
             ))}
           </div>
         )}

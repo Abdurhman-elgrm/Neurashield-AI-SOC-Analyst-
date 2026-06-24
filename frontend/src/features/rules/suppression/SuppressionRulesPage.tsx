@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Edit2, Trash2, Shield, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Shield, X, Search, Clock, VolumeX } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { suppressionApi } from "@/api/suppression";
 import type {
@@ -167,11 +167,25 @@ export function SuppressionRulesPage() {
   const [editTarget,   setEditTarget]   = useState<SuppressionRule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SuppressionRule | null>(null);
 
-  const { data: rules, isLoading } = useQuery({
+  const [search,       setSearch]       = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("");
+
+  const { data: rules = [], isLoading } = useQuery({
     queryKey: ["suppression"],
     queryFn: suppressionApi.list,
     staleTime: 30_000,
   });
+
+  const filteredRules = useMemo(() => {
+    let list = rules;
+    if (search.trim()) list = list.filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
+    if (statusFilter) list = list.filter(r => r.status === statusFilter);
+    return list;
+  }, [rules, search, statusFilter]);
+
+  const activeCount       = rules.filter(r => r.status === "active").length;
+  const totalSuppressed   = rules.reduce((s, r) => s + r.alert_count, 0);
+  const indefiniteCount   = rules.filter(r => r.duration === "indefinite").length;
 
   const createMutation = useMutation({
     mutationFn: (p: CreateSuppressionPayload) => suppressionApi.create(p),
@@ -203,6 +217,59 @@ export function SuppressionRulesPage() {
         </button>
       </div>
 
+      {/* KPI strip */}
+      {!isLoading && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
+          {[
+            { label: "Total Rules",     value: rules.length,     color: "#8B95A7", icon: Shield,    sublabel: "configured" },
+            { label: "Active",          value: activeCount,      color: "#10B981", icon: Shield,    sublabel: "currently muting" },
+            { label: "Alerts Muted",    value: totalSuppressed,  color: "#3B82F6", icon: VolumeX,   sublabel: "lifetime count" },
+            { label: "Indefinite",      value: indefiniteCount,  color: "#F59E0B", icon: Clock,     sublabel: "no expiry set" },
+          ].map(({ label, value, color, icon: Icon, sublabel }) => (
+            <div key={label} style={{
+              background: "#0D0D0D", border: "1px solid rgba(255,255,255,0.06)",
+              borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "12px 14px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <Icon size={11} style={{ color, flexShrink: 0 }} />
+                <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "#5C6373" }}>{label}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: 10, color: "#3A4150", marginTop: 4 }}>{sublabel}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Search + filter toolbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
+          <Search size={12} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#5C6373", pointerEvents: "none" }} />
+          <input
+            value={search} onChange={e => setSearch(e.target.value)} placeholder="Search rules…"
+            style={{
+              width: "100%", paddingLeft: 26, height: 30, borderRadius: 6, fontSize: 12,
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+              color: "#F5F7FA", outline: "none", boxSizing: "border-box",
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: 2 }}>
+          {[
+            { value: "" as const,        label: "All",     color: "#8B95A7" },
+            { value: "active" as const,  label: "Active",  color: "#10B981" },
+            { value: "expired" as const, label: "Expired", color: "#5C6373" },
+          ].map(({ value, label, color }) => (
+            <button key={value || "all"} onClick={() => setStatusFilter(value)} style={{
+              padding: "3px 10px", borderRadius: 4, border: "none", cursor: "pointer",
+              fontSize: 11, fontWeight: 600, transition: "all 100ms",
+              background: statusFilter === value ? `${color}18` : "transparent",
+              color: statusFilter === value ? color : "#5C6373",
+            }}>{label}</button>
+          ))}
+        </div>
+      </div>
+
       <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-xs">
           <thead className="bg-bg-elevated border-b border-border">
@@ -218,11 +285,11 @@ export function SuppressionRulesPage() {
               <tr key={i} className="border-b border-border/50">
                 {Array.from({ length: 8 }, (_, j) => <td key={j} className="px-3 py-2.5"><div className="skel h-4 rounded" /></td>)}
               </tr>
-            )) : (rules ?? []).length === 0 ? (
+            )) : filteredRules.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-text-muted">
-                No suppression rules yet. Create one to mute noisy alerts.
+                {search || statusFilter ? "No rules match your filters." : "No suppression rules yet. Create one to mute noisy alerts."}
               </td></tr>
-            ) : (rules ?? []).map((r) => (
+            ) : filteredRules.map((r) => (
               <tr key={r.id} className="border-b border-border/50 hover:bg-bg-elevated/50 transition-colors">
                 <td className="px-3 py-2.5 font-medium text-text-primary">{r.name}</td>
                 <td className="px-3 py-2.5 text-text-muted">

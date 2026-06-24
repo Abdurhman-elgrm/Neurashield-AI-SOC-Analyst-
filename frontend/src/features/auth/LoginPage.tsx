@@ -1,7 +1,7 @@
 import { useState, FormEvent } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, AlertCircle, MailCheck, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, MailCheck, RefreshCw, CheckCircle2, Zap } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
 import { authApi } from "@/api/auth";
@@ -25,6 +25,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Email-not-verified state
@@ -84,6 +85,31 @@ export function LoginPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleDemoLogin() {
+    setIsDemoLoading(true);
+    setError(null);
+    try {
+      const tokens = await authApi.demoLogin();
+      setAuth(
+        { id: "", email: "demo@neurashield.io", full_name: "Demo Analyst", is_active: true, created_at: "" },
+        tokens.access_token,
+      );
+      try {
+        const tenants = await fetchMyTenants();
+        if (tenants.length > 0) {
+          const tenant = tenants[0];
+          setStoreTenant(tenant, "admin" as MemberRole);
+          setAuthTenant(tenant.id);
+        }
+      } catch { /* ignore, navigate anyway */ }
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(extractApiError(err));
+    } finally {
+      setIsDemoLoading(false);
     }
   }
 
@@ -300,7 +326,7 @@ export function LoginPage() {
             <button
               type="submit"
               className={cn("btn-primary w-full mt-2", isLoading && "opacity-70 cursor-not-allowed")}
-              disabled={isLoading}
+              disabled={isLoading || isDemoLoading}
             >
               {isLoading ? (
                 <>
@@ -312,6 +338,53 @@ export function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* ── Demo separator ── */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 0" }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+            <span style={{ fontSize: 10, color: "#3A4150", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.8px" }}>or</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+          </div>
+
+          {/* ── Try Demo button ── */}
+          <button
+            onClick={handleDemoLogin}
+            disabled={isDemoLoading || isLoading}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              width: "100%", marginTop: 12, padding: "10px 0",
+              borderRadius: 8, border: "1px solid rgba(6,182,212,0.3)",
+              background: isDemoLoading ? "rgba(6,182,212,0.08)" : "rgba(6,182,212,0.05)",
+              color: "#22D3EE", fontSize: 13, fontWeight: 700,
+              cursor: isDemoLoading || isLoading ? "not-allowed" : "pointer",
+              transition: "all 120ms",
+              opacity: isDemoLoading || isLoading ? 0.7 : 1,
+            }}
+            onMouseEnter={e => {
+              if (!isDemoLoading && !isLoading)
+                (e.currentTarget as HTMLButtonElement).style.background = "rgba(6,182,212,0.10)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background =
+                isDemoLoading ? "rgba(6,182,212,0.08)" : "rgba(6,182,212,0.05)";
+            }}
+          >
+            {isDemoLoading ? (
+              <>
+                <span style={{ width: 14, height: 14, border: "2px solid rgba(34,211,238,0.3)", borderTop: "2px solid #22D3EE", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                Loading demo…
+              </>
+            ) : (
+              <>
+                <Zap size={14} />
+                Try Demo — No sign up required
+              </>
+            )}
+          </button>
+
+          <p style={{ fontSize: 10, color: "#3A4150", textAlign: "center", marginTop: 8 }}>
+            Pre-loaded with realistic SOC data · Resets every 24 h
+          </p>
         </div>
 
         <p className="text-center text-sm text-text-muted mt-5">
@@ -320,6 +393,25 @@ export function LoginPage() {
             Create one
           </Link>
         </p>
+
+        {/* Trust strip */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          gap: 20, marginTop: 24, paddingTop: 20,
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          {[
+            { label: "SOC 2 Type II", sub: "Certified" },
+            { label: "ISO 27001",     sub: "Compliant"  },
+            { label: "AES-256",       sub: "Encrypted"  },
+            { label: "MFA",           sub: "Supported"  },
+          ].map(({ label, sub }) => (
+            <div key={label} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#5C6373", fontFamily: "'JetBrains Mono', monospace" }}>{label}</div>
+              <div style={{ fontSize: 9, color: "#3A4150", marginTop: 1 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
       </motion.div>
     </div>
   );

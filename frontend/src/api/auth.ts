@@ -41,6 +41,9 @@ export const authApi = {
   verifyEmail: (token: string): Promise<void> =>
     apiGet<void>('/auth/verify-email', { token }),
 
+  demoLogin: (): Promise<TokenPair> =>
+    apiPost<TokenPair>("/auth/demo"),
+
   // MFA endpoints
   mfaSetup: (): Promise<MFASetupResponse> =>
     apiPost<MFASetupResponse>("/auth/mfa/setup"),

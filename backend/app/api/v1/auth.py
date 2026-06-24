@@ -402,6 +402,23 @@ async def change_password(
     return APIResponse.ok(EmptyResponse())
 
 
+# ─── Demo mode endpoint ──────────────────────────────────────────────────────
+
+@router.post(
+    "/demo",
+    response_model=APIResponse[TokenPair],
+    summary="One-click demo login — no credentials required",
+)
+async def demo_login(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> APIResponse[TokenPair]:
+    from app.services.demo_service import demo_login as _demo_login
+    token_pair = await _demo_login(db)
+    _set_refresh_cookie(response, token_pair.refresh_token)
+    return APIResponse.ok(token_pair)
+
+
 # ─── MFA endpoints ────────────────────────────────────────────────────────────
 
 class MFASetupResponse(BaseModel):

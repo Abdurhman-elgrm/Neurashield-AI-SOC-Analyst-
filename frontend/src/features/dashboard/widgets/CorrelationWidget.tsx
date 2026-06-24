@@ -1,7 +1,6 @@
 import { GitMerge, Layers, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonText } from "@/components/ui/Skeleton";
@@ -93,20 +92,27 @@ export function CorrelationWidget({ timeRange }: CorrelationWidgetProps) {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-3 divide-x divide-border border-b border-border flex-shrink-0">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         {[
-          { label: "Active Invs.", value: data?.activeInvestigations ?? 0 },
-          { label: "Grouped Alerts", value: data?.totalGroupedAlerts ?? 0 },
-          { label: "Entities", value: data?.totalEntities ?? 0 },
-        ].map(({ label, value }) => (
-          <div key={label} className="flex flex-col items-center py-2.5">
-            <span className={cn(
-              "text-lg font-bold tabular-nums",
-              isLoading ? "text-text-muted animate-pulse" : "text-text-primary"
-            )}>
+          { label: "Active Invs.",   value: data?.activeInvestigations ?? 0, color: "#3B82F6" },
+          { label: "Grouped Alerts", value: data?.totalGroupedAlerts ?? 0,   color: "#F97316" },
+          { label: "Entities",       value: data?.totalEntities ?? 0,         color: "#8B5CF6" },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+            padding: "8px 4px", borderRadius: 6,
+            background: `${color}08`, border: `1px solid ${color}18`,
+          }}>
+            <span style={{
+              fontSize: 18, fontWeight: 800, lineHeight: 1,
+              fontFamily: "'JetBrains Mono', monospace",
+              color: isLoading ? "#3A4150" : color,
+            }}>
               {isLoading ? "—" : value.toLocaleString()}
             </span>
-            <span className="text-2xs text-text-muted">{label}</span>
+            <span style={{ fontSize: 9, color: "#5C6373", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 600 }}>
+              {label}
+            </span>
           </div>
         ))}
       </div>
