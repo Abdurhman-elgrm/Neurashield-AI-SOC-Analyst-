@@ -548,9 +548,18 @@ export function AgentsPage() {
   const deleteAgent = useDeleteAgent()
 
   const agents = data?.items ?? []
-  const total = data?.total ?? 0
-  const onlineCount   = agents.filter(a => a.status === 'online').length
+  const total        = data?.total ?? 0
+  const onlineCount  = agents.filter(a => a.status === 'online').length
   const degradedCount = agents.filter(a => a.status === 'degraded').length
+  const offlineCount = agents.filter(a => a.status === 'offline').length
+  const containedCount = agents.filter(a => a.containment_state && a.containment_state !== 'none').length
+
+  const STATUS_CHIPS: Array<{ value: string; label: string; count: number; color: string }> = [
+    { value: '',         label: 'All',      count: total,         color: '#8B95A7' },
+    { value: 'online',   label: 'Online',   count: onlineCount,   color: '#10B981' },
+    { value: 'degraded', label: 'Degraded', count: degradedCount, color: '#F59E0B' },
+    { value: 'offline',  label: 'Offline',  count: offlineCount,  color: '#4B5563' },
+  ]
 
   return (
     <div className="page-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }}>
@@ -564,26 +573,14 @@ export function AgentsPage() {
         flexShrink: 0,
       }}>
         <div>
-          <h1 style={{
-            fontSize: 17, fontWeight: 800, color: '#F5F7FA',
-            fontFamily: "'Space Grotesk', sans-serif",
-          }}>
+          <h1 style={{ fontSize: 17, fontWeight: 800, color: '#F5F7FA', fontFamily: "'Space Grotesk', sans-serif" }}>
             Agents
           </h1>
           <p style={{ fontSize: 12, color: '#5C6373', marginTop: 3 }}>
-            <span style={{ color: '#10B981', fontWeight: 600 }}>
-              {onlineCount} online
-            </span>
-            {degradedCount > 0 && (
-              <>
-                {' · '}
-                <span style={{ color: '#F59E0B', fontWeight: 600 }}>
-                  {degradedCount} degraded
-                </span>
-              </>
+            Device telemetry collectors — <span style={{ color: '#F5F7FA', fontWeight: 500 }}>{total}</span> enrolled
+            {containedCount > 0 && (
+              <> · <span style={{ color: '#EF4444', fontWeight: 600 }}>{containedCount} contained</span></>
             )}
-            {' · '}
-            {total} total
           </p>
         </div>
         <Button variant="primary" size="sm" onClick={() => navigate('/installer')}>
@@ -591,38 +588,60 @@ export function AgentsPage() {
         </Button>
       </div>
 
-      {/* Filter bar */}
+      {/* Health summary + filters */}
       <div style={{
         display: 'flex', gap: 8, padding: '8px 0',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
-        alignItems: 'center', flexShrink: 0,
+        alignItems: 'center', flexShrink: 0, flexWrap: 'wrap',
       }}>
+        {/* Status chips */}
+        {STATUS_CHIPS.map(({ value, label, count, color }) => {
+          const active = statusFilter === value
+          return (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 11px', borderRadius: 6, cursor: 'pointer',
+                fontSize: 11, fontWeight: 600,
+                background: active ? `${color}15` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${active ? `${color}40` : 'rgba(255,255,255,0.06)'}`,
+                color: active ? color : '#5C6373',
+                transition: 'all 120ms',
+              }}
+            >
+              {value === 'online' && (
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981', flexShrink: 0 }} />
+              )}
+              {label}
+              <span style={{
+                fontSize: 9, fontWeight: 800,
+                fontFamily: "'JetBrains Mono', monospace",
+                color: active ? color : '#3A4150',
+              }}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Search */}
         <div style={{ position: 'relative' }}>
           <Search size={12} style={{
             position: 'absolute', left: 9, top: '50%',
-            transform: 'translateY(-50%)', color: '#5C6373',
-            pointerEvents: 'none',
+            transform: 'translateY(-50%)', color: '#5C6373', pointerEvents: 'none',
           }} />
           <input
             className="inp"
-            style={{ width: 240, paddingLeft: 28 }}
-            placeholder="Search hostname..."
+            style={{ width: 220, paddingLeft: 28 }}
+            placeholder="Search hostname…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-
-        <select
-          className="inp"
-          style={{ width: 130 }}
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-        >
-          <option value="">All Status</option>
-          <option value="online">Online</option>
-          <option value="offline">Offline</option>
-          <option value="degraded">Degraded</option>
-        </select>
       </div>
 
       {/* Table */}

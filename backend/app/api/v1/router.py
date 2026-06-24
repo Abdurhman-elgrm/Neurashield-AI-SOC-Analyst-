@@ -8,8 +8,11 @@ from app.api.v1 import notification_channels, suppressions
 from app.api.v1 import playbooks
 from app.api.v1 import sigma
 from app.api.v1 import imports
+from app.api.v1 import fleet, ueba, iocs
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
+from app.api.v1.mssp_api import router as mssp_router
+from app.api.v1.threat_intel_api import router as threat_intel_router
 from app.ingestion.router import router as ingestion_router
 from app.connectors.router import router as connectors_router
 from app.realtime.router import router as ws_router
@@ -83,6 +86,13 @@ api_router.include_router(sigma.router)
 
 # ─── Log Import ───────────────────────────────────────────────────────────────
 api_router.include_router(imports.router)
+
+# ─── Fleet, UEBA, MSSP, Threat Intel, IOC Enrichment ─────────────────────────
+api_router.include_router(fleet.router)
+api_router.include_router(ueba.router)
+api_router.include_router(mssp_router)
+api_router.include_router(threat_intel_router)
+api_router.include_router(iocs.router)
 
 # ─── Phase 2: WebSocket (registered at root level, no prefix) ────────────────
 api_router.include_router(ws_router)

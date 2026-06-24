@@ -131,6 +131,47 @@ function CreateTenantDialog({ open, onClose }: { open: boolean; onClose: () => v
   );
 }
 
+// ─── Aggregate KPI row ────────────────────────────────────────────────────────
+
+function AggregateKPIs({ tenants }: { tenants: TenantHealthCard[] }) {
+  const totalCritical = tenants.reduce((s, t) => s + t.open_critical_alerts, 0);
+  const totalOpen     = tenants.reduce((s, t) => s + t.unresolved_investigations, 0);
+  const totalAgents   = tenants.reduce((s, t) => s + t.agents_online, 0);
+  const breachedCount = tenants.filter((t) => t.breach_status === "red").length;
+  const atRiskCount   = tenants.filter((t) => t.breach_status === "amber").length;
+
+  const kpis = [
+    { label: "Critical Alerts",        value: totalCritical, color: "#EF4444", icon: AlertTriangle },
+    { label: "Open Investigations",     value: totalOpen,     color: "#F59E0B", icon: CheckCircle  },
+    { label: "Agents Online",           value: totalAgents,   color: "#10B981", icon: CheckCircle  },
+    { label: "SLA Breached Tenants",    value: breachedCount, color: "#EF4444", icon: AlertTriangle },
+    { label: "At-Risk Tenants",         value: atRiskCount,   color: "#F97316", icon: AlertTriangle },
+    { label: "Healthy Tenants",         value: tenants.length - breachedCount - atRiskCount, color: "#10B981", icon: CheckCircle },
+  ];
+
+  return (
+    <div className="grid grid-cols-6 gap-2 mb-4">
+      {kpis.map(({ label, value, color, icon: Icon }) => (
+        <div key={label} style={{
+          background: "#0D0D0D",
+          border: `1px solid ${value > 0 && color !== "#10B981" ? `${color}22` : "rgba(255,255,255,0.06)"}`,
+          borderRadius: 8, padding: "12px 14px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <Icon size={11} style={{ color: value > 0 ? color : "#3A4150" }} />
+            <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#5C6373" }}>
+              {label}
+            </span>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: value > 0 ? color : "#3A4150", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>
+            {value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── MSSPOverviewPage ─────────────────────────────────────────────────────────
 
 export function MSSPOverviewPage() {
@@ -144,7 +185,10 @@ export function MSSPOverviewPage() {
     refetchInterval: 60_000,
   });
 
-  // Build chart data from cross-tenant alert trend
+  const sortedTenants = [...(data?.tenants ?? [])].sort((a, b) => {
+    const order = { red: 0, amber: 1, green: 2 };
+    return (order[a.breach_status as keyof typeof order] ?? 2) - (order[b.breach_status as keyof typeof order] ?? 2);
+  });
   const chartTenantNames = data?.tenants.map((t) => t.tenant_name) ?? [];
 
   return (
@@ -152,21 +196,35 @@ export function MSSPOverviewPage() {
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-text-primary font-display">MSSP Portal</h1>
-          <p className="text-xs text-text-muted mt-0.5">Cross-tenant health overview — owner access only</p>
+          <p className="text-xs text-text-muted mt-0.5">
+            Cross-tenant health overview — <span className="text-text-secondary font-semibold">{data?.tenants.length ?? 0} workspaces</span>
+          </p>
         </div>
         <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm flex items-center gap-1.5">
           <Plus size={13} /> New Tenant
         </button>
       </div>
 
-      {/* Tenant cards grid */}
+      {/* Aggregate KPIs */}
+      {!isLoading && data?.tenants && <AggregateKPIs tenants={data.tenants} />}
+      {isLoading && <div className="grid grid-cols-6 gap-2 mb-4">{Array.from({ length: 6 }, (_, i) => <div key={i} className="skel h-16 rounded-lg" />)}</div>}
+
+      {/* Tenant cards grid — sorted by breach status */}
       {isLoading ? (
         <div className="grid grid-cols-3 gap-3 mb-4">
           {Array.from({ length: 6 }, (_, i) => <div key={i} className="skel h-36 rounded-xl" />)}
         </div>
+      ) : sortedTenants.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Building size={36} className="text-text-disabled opacity-30" />
+          <div className="text-sm text-text-muted">No tenants yet</div>
+          <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm">
+            <Plus size={13} /> Create First Tenant
+          </button>
+        </div>
       ) : (
         <div className="grid grid-cols-3 gap-3 mb-4">
-          {(data?.tenants ?? []).map((t) => <TenantCard key={t.tenant_id} tenant={t} />)}
+          {sortedTenants.map((t) => <TenantCard key={t.tenant_id} tenant={t} />)}
         </div>
       )}
 

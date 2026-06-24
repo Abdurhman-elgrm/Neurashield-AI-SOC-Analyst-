@@ -642,6 +642,117 @@ input:-webkit-autofill:focus {
   50%       { opacity: 0.5; box-shadow: 0 0 2px #F59E0B; }
 }
 
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+@keyframes spinOnce {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes glow-pulse {
+  0%,100% { box-shadow: 0 0 8px rgba(59,130,246,0.3); }
+  50%      { box-shadow: 0 0 20px rgba(59,130,246,0.6); }
+}
+@keyframes critical-glow {
+  0%,100% { box-shadow: 0 0 4px rgba(239,68,68,0.3); }
+  50%      { box-shadow: 0 0 16px rgba(239,68,68,0.7); }
+}
+
+/* ─── Animation utility classes ─────────────────────────────────────────────── */
+.animate-fade-in-up    { animation: fadeInUp    200ms ease both; }
+.animate-fade-in-down  { animation: fadeInDown  200ms ease both; }
+.animate-scale-in      { animation: scaleIn     160ms cubic-bezier(0.16,1,0.3,1) both; }
+.animate-slide-in-left { animation: slideInLeft 200ms cubic-bezier(0.16,1,0.3,1) both; }
+.animate-glow-blue     { animation: glow-pulse  2.5s ease-in-out infinite; }
+.animate-critical      { animation: critical-glow 2s ease-in-out infinite; }
+
+/* ─── Data density ───────────────────────────────────────────────────────────── */
+[data-density="compact"] .data-table th { padding: 5px 10px; }
+[data-density="compact"] .data-table td { padding: 5px 10px; font-size: 11px; }
+[data-density="compact"] .kpi-card       { padding: 10px 12px; }
+[data-density="compact"] .kpi-value      { font-size: 22px; margin: 4px 0 2px; }
+
+[data-density="comfortable"] .data-table th { padding: 12px 16px; }
+[data-density="comfortable"] .data-table td { padding: 12px 16px; font-size: 13px; }
+[data-density="comfortable"] .kpi-card       { padding: 20px; }
+[data-density="comfortable"] .kpi-value      { font-size: 36px; margin: 12px 0 6px; }
+
+/* ─── Markdown content (Copilot) ─────────────────────────────────────────────── */
+.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+  color: #F5F7FA;
+  font-family: 'Space Grotesk', sans-serif;
+  margin: 12px 0 6px;
+  font-weight: 700;
+}
+.markdown-content h1 { font-size: 15px; }
+.markdown-content h2 { font-size: 13px; }
+.markdown-content h3 { font-size: 12px; color: #B8C0CC; }
+.markdown-content p  { margin: 6px 0; color: #B8C0CC; line-height: 1.65; }
+.markdown-content ul, .markdown-content ol {
+  padding-left: 20px; margin: 6px 0; color: #8B95A7;
+}
+.markdown-content li { margin-bottom: 3px; line-height: 1.5; }
+.markdown-content code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #93C5FD;
+}
+.markdown-content pre {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.markdown-content pre code {
+  background: none; border: none; padding: 0;
+  font-size: 11px; color: #6EE7B7;
+}
+.markdown-content strong { color: #F5F7FA; font-weight: 700; }
+.markdown-content em     { color: #B8C0CC; font-style: italic; }
+.markdown-content blockquote {
+  border-left: 3px solid rgba(59,130,246,0.4);
+  padding-left: 12px;
+  color: #5C6373;
+  font-style: italic;
+  margin: 8px 0;
+}
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin: 12px 0;
+}
+.markdown-content a { color: #60A5FA; text-decoration: underline; }
+
+/* ─── Hover preview ───────────────────────────────────────────────────────────── */
+.hover-preview {
+  animation: fadeInUp 150ms ease both;
+  pointer-events: none;
+}
+
+/* ─── Critical alert row pulse ───────────────────────────────────────────────── */
+.data-table tbody tr.critical-flash {
+  animation: critical-glow 3s ease-in-out 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

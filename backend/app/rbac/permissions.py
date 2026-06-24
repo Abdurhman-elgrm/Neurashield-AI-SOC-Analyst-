@@ -54,3 +54,19 @@ class Permission(str, Enum):
 
     # ─── Response Actions / Agent Containment ────────────────────────────────
     RESPONSE_EXECUTE  = "response:execute"    # quarantine, isolate, release agents
+
+    # ─── Fleet Management ─────────────────────────────────────────────────────
+    FLEET_READ        = "fleet:read"          # view fleet dashboard
+    FLEET_MANAGE      = "fleet:manage"        # bulk update/reinstall agents
+
+    # ─── UEBA ─────────────────────────────────────────────────────────────────
+    UEBA_READ         = "ueba:read"           # view behavioral analytics
+
+    # ─── MSSP Portal ──────────────────────────────────────────────────────────
+    MSSP_READ         = "mssp:read"           # view cross-tenant MSSP overview
+    MSSP_MANAGE       = "mssp:manage"         # provision new tenant workspaces
+
+    # ─── Threat Intelligence ──────────────────────────────────────────────────
+    THREAT_INTEL_READ   = "threat_intel:read"    # view feeds and IOCs
+    THREAT_INTEL_MANAGE = "threat_intel:manage"  # CRUD feeds, import IOCs
+    IOC_ENRICH          = "ioc:enrich"           # on-demand IOC enrichment

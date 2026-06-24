@@ -1,44 +1,44 @@
-import { apiClient } from "./client";
+import { apiGet } from "./client";
 
 export interface RiskyUser {
-  user_id: string;
-  username: string;
-  email?: string;
-  department?: string;
-  ueba_score: number;
-  top_flags: string[];
+  user_id:        string;
+  username:       string;
+  email?:         string;
+  department?:    string;
+  ueba_score:     number;
+  top_flags:      string[];
   last_anomaly_at: string | null;
-  alert_count: number;
+  alert_count:    number;
 }
 
 export interface UEBARiskPoint {
-  date: string;
+  date:  string;
   score: number;
 }
 
 export interface UEBAFlagCount {
-  flag: string;
+  flag:  string;
   count: number;
 }
 
 export interface ImpossibleTravelEntry {
-  username: string;
-  location_1: string;
-  location_2: string;
+  username:           string;
+  location_1:         string;
+  location_2:         string;
   time_delta_minutes: number;
-  detected_at: string;
+  detected_at:        string;
 }
 
 export const uebaApi = {
   getTopUsers: (limit = 20) =>
-    apiClient.get<RiskyUser[]>(`/ueba/top-users?limit=${limit}`).then((r) => r.data),
+    apiGet<RiskyUser[]>("/ueba/top-users", { limit }),
 
   getUserTimeline: (userId: string, timeRange = "30d") =>
-    apiClient.get<UEBARiskPoint[]>(`/ueba/user-timeline?user_id=${userId}&timeRange=${timeRange}`).then((r) => r.data),
+    apiGet<UEBARiskPoint[]>("/ueba/user-timeline", { user_id: userId, timeRange }),
 
   getFlagDistribution: () =>
-    apiClient.get<UEBAFlagCount[]>("/ueba/flag-distribution").then((r) => r.data),
+    apiGet<UEBAFlagCount[]>("/ueba/flag-distribution"),
 
   getImpossibleTravel: () =>
-    apiClient.get<ImpossibleTravelEntry[]>("/ueba/impossible-travel").then((r) => r.data),
+    apiGet<ImpossibleTravelEntry[]>("/ueba/impossible-travel"),
 };

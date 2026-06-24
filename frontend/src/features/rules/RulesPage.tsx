@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit2, Trash2, Shield, ChevronDown, Download, Sparkles } from 'lucide-react'
+import { Plus, Edit2, Trash2, Shield, Download, Sparkles, Search } from 'lucide-react'
 import { rulesApi } from '@/api/rules'
 import { apiClient } from '@/api/client'
 import { AIRuleGeneratorModal } from './AIRuleGeneratorModal'
@@ -682,19 +682,34 @@ export function RulesPage() {
     }
   }
 
-  const filterSel = (_label: string, val: string, opts: Array<{label: string; value: string}>, onSet: (v: string) => void) => (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <select
-        className="inp"
-        value={val}
-        onChange={e => onSet(e.target.value)}
-        style={{ paddingRight: 28, fontSize: 12 }}
-      >
-        {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <ChevronDown size={12} style={{ position: 'absolute', right: 8, pointerEvents: 'none', color: '#5C6373' }} />
+  const chipGroup = <T extends string>(
+    opts: Array<{ label: string; value: T; color?: string }>,
+    val: T,
+    onSet: (v: T) => void
+  ) => (
+    <div style={{
+      display: 'flex', gap: 0.5,
+      background: 'rgba(255,255,255,0.03)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 7, padding: 3,
+    }}>
+      {opts.map(o => (
+        <button key={o.value} onClick={() => onSet(o.value)} style={{
+          padding: '4px 10px', borderRadius: 4, border: 'none',
+          cursor: 'pointer', fontSize: 11, fontWeight: 600,
+          transition: 'all 100ms',
+          background: val === o.value ? (o.color ? `${o.color}18` : 'rgba(59,130,246,0.12)') : 'transparent',
+          color: val === o.value ? (o.color ?? '#60A5FA') : '#5C6373',
+        }}>
+          {o.label}
+        </button>
+      ))}
     </div>
   )
+
+  const enabledCount  = rules.filter(r => r.enabled).length
+  const criticalCount = rules.filter(r => r.severity === 'critical').length
+  const patternCount  = rules.filter(r => r.rule_type === 'pattern').length
 
   return (
     <div style={{ background: '#050505', minHeight: 'calc(100vh - 50px - 40px)', padding: '0 0 40px' }}>
@@ -703,80 +718,120 @@ export function RulesPage() {
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '20px 24px 0', marginBottom: 20,
+        padding: '20px 24px 0', marginBottom: 16,
       }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#F5F7FA', margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: '#F5F7FA', margin: 0 }}>
             Detection Rules
           </h1>
           <p style={{ fontSize: 12, color: '#5C6373', margin: '3px 0 0' }}>
-            {loading ? 'Loading...' : `${rules.length} rule${rules.length !== 1 ? 's' : ''} configured`}
+            {loading ? 'Loading…' : `${rules.length} rule${rules.length !== 1 ? 's' : ''} configured — ${enabledCount} active`}
           </p>
         </div>
         {canManage && (
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setShowAIModal(true)} style={{
               display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 16px', borderRadius: 8,
+              padding: '8px 14px', borderRadius: 8,
               background: 'rgba(139,92,246,0.12)',
               border: '1px solid rgba(139,92,246,0.35)',
-              color: '#C4B5FD', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              color: '#C4B5FD', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}>
-              <Sparkles size={14} /> Generate with AI
+              <Sparkles size={13} /> Generate with AI
             </button>
             <button onClick={handleImportDefaults} disabled={importing} style={{
               display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 16px', borderRadius: 8,
-              background: 'rgba(59,130,246,0.12)',
-              border: '1px solid rgba(59,130,246,0.35)',
-              color: '#93C5FD', fontSize: 13, fontWeight: 600,
+              padding: '8px 14px', borderRadius: 8,
+              background: 'rgba(59,130,246,0.08)',
+              border: '1px solid rgba(59,130,246,0.3)',
+              color: '#93C5FD', fontSize: 12, fontWeight: 600,
               cursor: importing ? 'not-allowed' : 'pointer',
               opacity: importing ? 0.6 : 1,
             }}>
-              <Download size={14} /> {importing ? 'Importing…' : 'Import Defaults'}
+              <Download size={13} /> {importing ? 'Importing…' : 'Import Defaults'}
             </button>
             <button onClick={openCreate} style={{
               display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 16px', borderRadius: 8,
+              padding: '8px 14px', borderRadius: 8,
               background: '#3B82F6', border: 'none', color: '#fff',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}>
-              <Plus size={14} /> New Rule
+              <Plus size={13} /> New Rule
             </button>
           </div>
         )}
       </div>
 
+      {/* KPI strip */}
+      {!loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 24px 16px' }}>
+          {[
+            { label: 'Total Rules',    value: rules.length,  color: '#8B95A7' },
+            { label: 'Active',         value: enabledCount,  color: '#10B981' },
+            { label: 'Critical',       value: criticalCount, color: '#EF4444' },
+            { label: 'Pattern Rules',  value: patternCount,  color: '#3B82F6' },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{
+              background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 8, padding: '10px 14px',
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.2px', color: '#3A4150', marginBottom: 4 }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Filters + Search bar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        padding: '0 24px 16px',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        padding: '0 24px 14px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
-        {filterSel('Type', filterType, [
-          { label: 'All Types', value: 'all' },
-          { label: 'Pattern', value: 'pattern' },
-          { label: 'Threshold', value: 'threshold' },
-        ], v => setFilterType(v as typeof filterType))}
-        {filterSel('Severity', filterSev, [
-          { label: 'All Severity', value: 'all' },
-          { label: 'Critical', value: 'critical' },
-          { label: 'High', value: 'high' },
-          { label: 'Medium', value: 'medium' },
-          { label: 'Low', value: 'low' },
-        ], v => setFilterSev(v as typeof filterSev))}
-        {filterSel('Status', filterEnabled, [
-          { label: 'All Status', value: 'all' },
-          { label: 'Enabled', value: 'enabled' },
-          { label: 'Disabled', value: 'disabled' },
-        ], v => setFilterEnabled(v as FilterEnabled))}
-        <input
-          className="inp"
-          placeholder="Search rules..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: '1 1 200px', minWidth: 160, fontSize: 12 }}
-        />
+        {chipGroup([
+          { label: 'All Types', value: 'all' as const },
+          { label: 'Pattern',   value: 'pattern' as const,   color: '#3B82F6' },
+          { label: 'Threshold', value: 'threshold' as const, color: '#8B5CF6' },
+        ], filterType, v => setFilterType(v as typeof filterType))}
+
+        {chipGroup([
+          { label: 'All',      value: 'all' as const },
+          { label: 'Critical', value: 'critical' as const, color: '#EF4444' },
+          { label: 'High',     value: 'high' as const,     color: '#F97316' },
+          { label: 'Medium',   value: 'medium' as const,   color: '#F59E0B' },
+          { label: 'Low',      value: 'low' as const,      color: '#6B7280' },
+        ], filterSev, v => setFilterSev(v as typeof filterSev))}
+
+        {chipGroup([
+          { label: 'All',      value: 'all' as const      },
+          { label: 'Enabled',  value: 'enabled' as const,  color: '#10B981' },
+          { label: 'Disabled', value: 'disabled' as const, color: '#EF4444' },
+        ], filterEnabled, v => setFilterEnabled(v as FilterEnabled))}
+
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
+          <Search size={12} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#5C6373', pointerEvents: 'none' }} />
+          <input
+            placeholder="Search rules…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: '100%', paddingLeft: 28, height: 32, borderRadius: 6,
+              fontSize: 12, background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              color: '#F5F7FA', outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {filtered.length !== rules.length && (
+          <span style={{ fontSize: 11, color: '#5C6373', flexShrink: 0 }}>
+            {filtered.length}/{rules.length}
+          </span>
+        )}
       </div>
 
       {/* Table */}

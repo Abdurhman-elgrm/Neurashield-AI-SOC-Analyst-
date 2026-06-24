@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, Search, LogOut, Settings, Plus, Loader, ClipboardList } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ChevronDown, Search, LogOut, Settings, Plus, Loader, ClipboardList, ChevronRight, Home } from "lucide-react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -18,6 +18,91 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/Dropdown";
 
+// ─── Route → breadcrumb label map ─────────────────────────────────────────────
+
+const ROUTE_LABELS: Record<string, string> = {
+  dashboard:         "Overview",
+  alerts:            "Alert Triage",
+  investigations:    "Investigations",
+  events:            "Event Explorer",
+  hunt:              "Threat Hunt",
+  rules:             "Detection Rules",
+  graph:             "Attack Graph",
+  copilot:           "AI Copilot",
+  playbooks:         "Playbooks",
+  reports:           "Reports",
+  "compliance-reports": "Compliance",
+  "soc-metrics":     "SOC Metrics",
+  sla:               "SLA Dashboard",
+  mitre:             "MITRE ATT&CK",
+  "threat-intel":    "Threat Intel",
+  ueba:              "UEBA",
+  assets:            "Assets",
+  suppression:       "Suppressions",
+  agents:            "Agents",
+  installer:         "Device Enrollment",
+  fleet:             "Fleet",
+  import:            "Log Import",
+  "audit-log":       "Audit Log",
+  mssp:              "MSSP Portal",
+  settings:          "Settings",
+};
+
+function useBreadcrumbs() {
+  const location = useLocation();
+  const segments = location.pathname.split("/").filter(Boolean);
+  return segments.map((seg, idx) => ({
+    label: ROUTE_LABELS[seg] ?? seg,
+    path:  "/" + segments.slice(0, idx + 1).join("/"),
+    isLast: idx === segments.length - 1,
+  }));
+}
+
+// ─── Breadcrumb ───────────────────────────────────────────────────────────────
+
+function Breadcrumb() {
+  const crumbs = useBreadcrumbs();
+  if (crumbs.length === 0) return null;
+
+  return (
+    <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <Link to="/dashboard" style={{ color: "#5C6373", textDecoration: "none", display: "flex", alignItems: "center" }}>
+        <Home size={11} />
+      </Link>
+      {crumbs.map((crumb) => (
+        <span key={crumb.path} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <ChevronRight size={10} style={{ color: "#3A4150", flexShrink: 0 }} />
+          {crumb.isLast ? (
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#F5F7FA",
+              whiteSpace: "nowrap",
+            }}>
+              {crumb.label}
+            </span>
+          ) : (
+            <Link
+              to={crumb.path}
+              style={{
+                fontSize: 12,
+                color: "#5C6373",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+                transition: "color 120ms",
+              }}
+              onMouseOver={(e) => ((e.target as HTMLElement).style.color = "#B8C0CC")}
+              onMouseOut={(e)  => ((e.target as HTMLElement).style.color = "#5C6373")}
+            >
+              {crumb.label}
+            </Link>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 // ─── Clock ────────────────────────────────────────────────────────────────────
 
 function Clock() {
@@ -29,7 +114,7 @@ function Clock() {
   return (
     <span style={{
       fontFamily: "'JetBrains Mono', monospace",
-      fontSize: 12,
+      fontSize: 11,
       color: "#5C6373",
       letterSpacing: "0.05em",
     }}>
@@ -42,9 +127,10 @@ function Clock() {
 
 function ConnectionStatus() {
   const state = useRealtimeStore((s) => s.connectionState);
-  const isLive = state === "connected";
+  const isLive       = state === "connected";
   const isConnecting = state === "connecting" || state === "reconnecting";
   const color = isLive ? "#10B981" : isConnecting ? "#F59E0B" : "#5C6373";
+  const label = isLive ? "Live" : isConnecting ? "…" : "Offline";
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color }}>
@@ -53,7 +139,7 @@ function ConnectionStatus() {
       ) : (
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
       )}
-      <span>{isLive ? "Live" : isConnecting ? "Connecting…" : "Offline"}</span>
+      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>{label}</span>
     </div>
   );
 }
@@ -86,7 +172,6 @@ function UserMenu() {
           padding: "3px 6px",
           transition: "all 120ms",
         }}>
-          {/* Avatar: photo when available, gradient initial as fallback */}
           <div style={{
             width: 26,
             height: 26,
@@ -96,7 +181,6 @@ function UserMenu() {
             flexShrink: 0,
             background: "linear-gradient(135deg, #2563EB, #38BDF8)",
           }}>
-            {/* Initial — always rendered behind the photo */}
             <div style={{
               position: "absolute", inset: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -104,7 +188,6 @@ function UserMenu() {
             }}>
               {initial}
             </div>
-            {/* Photo — overlays initial; hides on load error */}
             {user?.avatar_url && (
               <img
                 src={user.avatar_url}
@@ -178,7 +261,6 @@ function TenantSelector() {
     setStoreTenant(t, role);
     setAuthTenant(t.id);
     setOpen(false);
-    // Stale data from the previous workspace must not bleed into the new one.
     queryClient.clear();
   };
 
@@ -200,24 +282,29 @@ function TenantSelector() {
 
   return (
     <div style={{ position: "relative" }}>
-      {/* Trigger */}
       <button
         onClick={openDropdown}
         style={{
           display: "flex", alignItems: "center", gap: 5,
-          fontSize: 13, fontWeight: activeTenant ? 600 : 400,
-          color: activeTenant ? "#F5F7FA" : "#F59E0B",
-          background: activeTenant ? "none" : "rgba(245,158,11,0.08)",
-          border: activeTenant ? "none" : "1px solid rgba(245,158,11,0.2)",
-          borderRadius: 6, padding: activeTenant ? 0 : "3px 8px",
+          fontSize: 12, fontWeight: activeTenant ? 600 : 400,
+          color: activeTenant ? "#B8C0CC" : "#F59E0B",
+          background: activeTenant ? "rgba(255,255,255,0.03)" : "rgba(245,158,11,0.08)",
+          border: activeTenant ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(245,158,11,0.2)",
+          borderRadius: 6, padding: "3px 8px",
           cursor: "pointer",
+          maxWidth: 160,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          transition: "all 120ms",
         }}
       >
-        {activeTenant ? activeTenant.name : "No tenant — click to set"}
-        <ChevronDown size={12} style={{ color: "#5C6373" }} />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {activeTenant ? activeTenant.name : "No workspace"}
+        </span>
+        <ChevronDown size={11} style={{ color: "#5C6373", flexShrink: 0 }} />
       </button>
 
-      {/* Dropdown */}
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
@@ -250,14 +337,16 @@ function TenantSelector() {
                       transition: "background 120ms",
                     }}
                   >
-                    {t.name}
+                    <span style={{ flex: 1 }}>{t.name}</span>
+                    {activeTenant?.id === t.id && (
+                      <span style={{ fontSize: 9, color: "#60A5FA", fontFamily: "monospace" }}>ACTIVE</span>
+                    )}
                   </button>
                 ))}
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "4px 0" }} />
               </>
             )}
 
-            {/* Create workspace */}
             {!loading && (
               <div style={{ padding: "8px 10px" }}>
                 {!creating ? (
@@ -310,6 +399,12 @@ function TenantSelector() {
   );
 }
 
+// ─── Divider ──────────────────────────────────────────────────────────────────
+
+function Divider() {
+  return <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />;
+}
+
 // ─── TopBar ───────────────────────────────────────────────────────────────────
 
 export function TopBar() {
@@ -319,99 +414,117 @@ export function TopBar() {
 
   return (
     <>
-    <header style={{
-      height: 50,
-      background: "#0A0A0A",
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      display: "flex",
-      alignItems: "center",
-      padding: "0 20px",
-      gap: 16,
-      flexShrink: 0,
-    }}>
-      {/* Tenant selector */}
-      <TenantSelector />
+      <header style={{
+        height: 50,
+        background: "#0A0A0A",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        display: "flex",
+        alignItems: "center",
+        padding: "0 20px",
+        gap: 12,
+        flexShrink: 0,
+      }}>
 
-      {/* Right side */}
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Left: Tenant selector + breadcrumb */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+          <TenantSelector />
+          <Divider />
+          <Breadcrumb />
+        </div>
 
-        {/* Clock */}
-        <Clock />
+        {/* Right: actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+          {/* Clock */}
+          <Clock />
 
-        {/* Command palette trigger */}
-        <button
-          onClick={openCommandPalette}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            padding: "3px 8px",
-            borderRadius: 5,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            color: "#5C6373",
-            fontSize: 11,
-            cursor: "pointer",
-            transition: "all 120ms",
-          }}
-          aria-label="Open command palette"
-        >
-          <Search size={11} />
-          <span>Search</span>
-          <kbd style={{ fontSize: 9, opacity: 0.6, fontFamily: "monospace" }}>⌘K</kbd>
-        </button>
+          <Divider />
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+          {/* Search / Command Palette trigger */}
+          <button
+            onClick={openCommandPalette}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 10px",
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              color: "#8B95A7",
+              fontSize: 12,
+              cursor: "pointer",
+              transition: "all 120ms",
+              minWidth: 160,
+            }}
+            aria-label="Open command palette (⌘K)"
+            onMouseOver={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.07)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.14)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#F5F7FA";
+            }}
+            onMouseOut={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.09)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#8B95A7";
+            }}
+          >
+            <Search size={12} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, textAlign: "left" }}>Search…</span>
+            <kbd style={{
+              fontSize: 9, color: "#5C6373", fontFamily: "monospace",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 3,
+              padding: "1px 4px",
+            }}>⌘K</kbd>
+          </button>
 
-        {/* Shift handoff — analyst/admin only */}
-        {hasRole("analyst") && (
-          <>
-            <button
-              onClick={() => setHandoffOpen(true)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "3px 8px",
-                borderRadius: 5,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.07)",
-                color: "#5C6373",
-                fontSize: 11,
-                cursor: "pointer",
-                transition: "all 120ms",
-              }}
-              aria-label="Open shift handoff"
-            >
-              <ClipboardList size={11} />
-              <span>Handoff</span>
-            </button>
-            <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
-          </>
-        )}
+          <Divider />
 
-        {/* Connection status */}
-        <ConnectionStatus />
+          {/* Shift handoff */}
+          {hasRole("analyst") && (
+            <>
+              <button
+                onClick={() => setHandoffOpen(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "4px 9px",
+                  borderRadius: 5,
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  color: "#5C6373",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  transition: "all 120ms",
+                }}
+                aria-label="Open shift handoff"
+              >
+                <ClipboardList size={11} />
+                <span>Handoff</span>
+              </button>
+              <Divider />
+            </>
+          )}
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+          {/* Connection status */}
+          <ConnectionStatus />
 
-        {/* Notification bell */}
-        <NotificationBell />
+          <Divider />
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.06)" }} />
+          {/* Notification bell */}
+          <NotificationBell />
 
-        {/* User menu */}
-        <UserMenu />
-      </div>
-    </header>
+          <Divider />
 
-    <ShiftHandoffModal open={handoffOpen} onClose={() => setHandoffOpen(false)} />
+          {/* User menu */}
+          <UserMenu />
+        </div>
+      </header>
+
+      <ShiftHandoffModal open={handoffOpen} onClose={() => setHandoffOpen(false)} />
     </>
   );
 }

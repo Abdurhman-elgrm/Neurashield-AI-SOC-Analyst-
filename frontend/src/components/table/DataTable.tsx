@@ -34,6 +34,9 @@ export function DataTable<TData>({
   enableVirtualization = false,
   stickyHeader = true,
   onRowClick,
+  onRowMouseEnter,
+  onRowMouseLeave,
+  highlightRowId,
   getRowId,
   isLoading = false,
   emptyMessage = "No results found",
@@ -146,12 +149,15 @@ export function DataTable<TData>({
             <tr
               key={row.id}
               onClick={() => onRowClick?.(row.original)}
+              onMouseEnter={(e) => onRowMouseEnter?.(row.original, e)}
+              onMouseLeave={(e) => onRowMouseLeave?.(row.original, e)}
               data-selected={row.getIsSelected()}
               className={cn(
                 "border-b border-border transition-colors duration-100",
                 "hover:bg-bg-elevated",
                 onRowClick && "cursor-pointer",
                 row.getIsSelected() && "bg-accent/5",
+                highlightRowId && getRowId?.(row.original) === highlightRowId && "bg-accent/5",
                 getRowClassName?.(row.original)
               )}
             >

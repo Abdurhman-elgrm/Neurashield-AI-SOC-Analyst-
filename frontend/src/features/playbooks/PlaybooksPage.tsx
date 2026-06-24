@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Plus, ChevronRight, Zap, Clock, CheckCircle, XCircle, X, Bot } from 'lucide-react'
+import { BookOpen, Plus, ChevronRight, Zap, Clock, CheckCircle, XCircle, X, Bot, Search } from 'lucide-react'
 import { playbooksApi, type Playbook } from '@/api/playbooks'
 import { Button } from '@/components/ui/Button'
 import { extractApiError } from '@/lib/utils'
@@ -349,10 +349,19 @@ function GenerateModal({ onClose, onGenerated }: { onClose: () => void; onGenera
 
 // ─── PlaybooksPage ────────────────────────────────────────────────────────────
 
+const STATUS_CHIPS = [
+  { value: '',            label: 'All',         color: '#8B95A7' },
+  { value: 'draft',       label: 'Draft',       color: '#F59E0B' },
+  { value: 'in_progress', label: 'In Progress', color: '#3B82F6' },
+  { value: 'completed',   label: 'Completed',   color: '#10B981' },
+  { value: 'failed',      label: 'Failed',      color: '#EF4444' },
+] as const
+
 export function PlaybooksPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState('')
+  const [titleSearch, setTitleSearch] = useState('')
   const [showGenerate, setShowGenerate] = useState(false)
 
   // Auto-open generate modal when coming from investigation page
@@ -362,17 +371,21 @@ export function PlaybooksPage() {
     }
   }, [searchParams])
 
-  const { data: playbooks = [], isLoading } = useQuery({
+  const { data: rawPlaybooks = [], isLoading } = useQuery({
     queryKey: ['playbooks', statusFilter],
     queryFn: () => playbooksApi.list(statusFilter ? { status: statusFilter } : undefined),
     refetchInterval: 30_000,
   })
 
+  const playbooks = titleSearch.trim()
+    ? rawPlaybooks.filter(p => p.title.toLowerCase().includes(titleSearch.toLowerCase()))
+    : rawPlaybooks
+
   const counts = {
-    total:       playbooks.length,
-    in_progress: playbooks.filter(p => p.status === 'in_progress').length,
-    completed:   playbooks.filter(p => p.status === 'completed').length,
-    draft:       playbooks.filter(p => p.status === 'draft').length,
+    total:       rawPlaybooks.length,
+    in_progress: rawPlaybooks.filter(p => p.status === 'in_progress').length,
+    completed:   rawPlaybooks.filter(p => p.status === 'completed').length,
+    draft:       rawPlaybooks.filter(p => p.status === 'draft').length,
   }
 
   const statCards = [
@@ -400,7 +413,7 @@ export function PlaybooksPage() {
           </p>
         </div>
         <Button variant="primary" size="sm" onClick={() => setShowGenerate(true)}>
-          <Plus size={13} /> Generate Playbook
+          <Bot size={13} /> Generate Playbook
         </Button>
       </div>
 
@@ -414,35 +427,68 @@ export function PlaybooksPage() {
             background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: 8, padding: '10px 14px',
           }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "'Space Grotesk', sans-serif" }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "'JetBrains Mono', monospace" }}>
               {value}
             </div>
-            <div style={{ fontSize: 10, color: '#5C6373', textTransform: 'uppercase', letterSpacing: '1px', marginTop: 2 }}>
+            <div style={{ fontSize: 9, color: '#5C6373', textTransform: 'uppercase', letterSpacing: '1.2px', marginTop: 3, fontWeight: 700 }}>
               {label}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Filter */}
+      {/* Filter toolbar */}
       <div style={{
-        display: 'flex', gap: 8, padding: '4px 0 8px',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 10px',
+        borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0,
       }}>
-        <select
-          className="inp"
-          style={{ width: 140 }}
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-        >
-          <option value="">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+        {/* Status chips */}
+        <div style={{
+          display: 'flex', gap: 0.5,
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 8, padding: 3,
+        }}>
+          {STATUS_CHIPS.map(chip => (
+            <button
+              key={chip.value}
+              onClick={() => setStatusFilter(chip.value)}
+              style={{
+                padding: '4px 11px', borderRadius: 5, cursor: 'pointer',
+                fontSize: 11, fontWeight: 600, border: 'none',
+                transition: 'all 120ms',
+                background: statusFilter === chip.value ? `${chip.color}18` : 'transparent',
+                color: statusFilter === chip.value ? chip.color : '#5C6373',
+              }}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Title search */}
+        <div style={{ position: 'relative', flex: 1, maxWidth: 280 }}>
+          <Search size={12} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#5C6373', pointerEvents: 'none' }} />
+          <input
+            value={titleSearch}
+            onChange={e => setTitleSearch(e.target.value)}
+            placeholder="Search playbooks…"
+            style={{
+              width: '100%', paddingLeft: 28, paddingRight: 10,
+              height: 30, borderRadius: 6, fontSize: 12,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              color: '#F5F7FA', outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {titleSearch && (
+          <span style={{ fontSize: 11, color: '#5C6373' }}>
+            {playbooks.length} of {rawPlaybooks.length} shown
+          </span>
+        )}
       </div>
 
       {/* Table */}

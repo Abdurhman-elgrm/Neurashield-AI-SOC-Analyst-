@@ -119,7 +119,7 @@ export function AuditLogPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="relative flex-1 min-w-44">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           <input type="search" placeholder="Filter by actor…" value={actor}
@@ -129,16 +129,23 @@ export function AuditLogPage() {
         <input type="search" placeholder="Action type…" value={action}
           onChange={(e) => setAction(e.target.value)}
           className="bg-bg-elevated border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent w-44" />
-        <select value={resType} onChange={(e) => setResType(e.target.value)}
-          className="bg-bg-elevated border border-border rounded-lg px-3 py-1.5 text-sm text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent">
-          <option value="">All resources</option>
-          <option value="alert">Alert</option>
-          <option value="investigation">Investigation</option>
-          <option value="rule">Rule</option>
-          <option value="agent">Agent</option>
-          <option value="user">User</option>
-          <option value="tenant">Tenant</option>
-        </select>
+      </div>
+      {/* Resource type chips */}
+      <div className="flex items-center gap-1 mb-4 flex-wrap">
+        {['', 'alert', 'investigation', 'rule', 'agent', 'user', 'tenant'].map((v) => (
+          <button
+            key={v || 'all'}
+            onClick={() => setResType(v)}
+            style={{
+              padding: '3px 10px', borderRadius: 5, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600, transition: 'all 100ms',
+              background: resType === v ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)',
+              color: resType === v ? '#60A5FA' : '#5C6373',
+            }}
+          >
+            {v ? v.charAt(0).toUpperCase() + v.slice(1) : 'All Resources'}
+          </button>
+        ))}
       </div>
 
       {/* Table */}

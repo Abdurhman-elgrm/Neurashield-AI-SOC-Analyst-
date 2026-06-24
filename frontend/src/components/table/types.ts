@@ -37,6 +37,11 @@ export interface DataTableProps<TData> {
   // Realtime
   realtimeKey?: string | number;    // when changed, flash new rows
   className?: string;
+  // Row hover callbacks (used by AlertsPage hover preview)
+  onRowMouseEnter?: (row: TData, event: React.MouseEvent<HTMLTableRowElement>) => void;
+  onRowMouseLeave?: (row: TData, event: React.MouseEvent<HTMLTableRowElement>) => void;
+  // Highlighted row (for hover preview targeting)
+  highlightRowId?: string;
 }
 
 export interface DataTableToolbarProps {

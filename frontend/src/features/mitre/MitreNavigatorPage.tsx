@@ -68,9 +68,16 @@ export function MitreNavigatorPage() {
 
   const maxTechs = Math.max(...MITRE_TACTICS.map((t) => t.techniques.length));
 
+  // Coverage stats
+  const totalTechniques = MITRE_TACTICS.reduce((s, t) => s + t.techniques.length, 0);
+  const coveredCount    = MITRE_TACTICS.reduce((s, t) => s + t.techniques.filter(tech => coverageMap.has(tech.id)).length, 0);
+  const coveragePct     = totalTechniques > 0 ? Math.round((coveredCount / totalTechniques) * 100) : 0;
+  const totalRules      = [...coverageMap.values()].reduce((s, n) => s + n, 0);
+  const highCovTactics  = MITRE_TACTICS.filter(t => t.techniques.some(tech => (coverageMap.get(tech.id) ?? 0) > 20)).length;
+
   return (
     <div className="pb-6">
-      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-text-primary font-display">MITRE ATT&CK Navigator</h1>
           <p className="text-xs text-text-muted mt-0.5">Enterprise Matrix v14 — {MITRE_TACTICS.length} tactics, detection coverage overlay</p>
@@ -87,6 +94,32 @@ export function MitreNavigatorPage() {
             <Download size={12} /> Export PNG
           </button>
         </div>
+      </div>
+
+      {/* Coverage stats strip */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 8, marginBottom: 16,
+      }}>
+        {[
+          { label: 'Coverage',          value: `${coveragePct}%`,      sublabel: `${coveredCount}/${totalTechniques} techniques`, color: coveragePct >= 70 ? '#10B981' : coveragePct >= 40 ? '#F59E0B' : '#EF4444' },
+          { label: 'Active Rules',      value: String(totalRules),      sublabel: 'mapped to techniques',                          color: '#3B82F6' },
+          { label: 'Tactics Covered',   value: `${MITRE_TACTICS.length}/${MITRE_TACTICS.length}`, sublabel: 'all 14 enterprise tactics', color: '#8B5CF6' },
+          { label: 'High Coverage',     value: String(highCovTactics),  sublabel: 'tactics with 21+ rules',                        color: '#10B981' },
+        ].map(({ label, value, sublabel, color }) => (
+          <div key={label} style={{
+            background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 8, padding: '10px 14px',
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.2px', color: '#5C6373', marginBottom: 4 }}>
+              {label}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1, marginBottom: 4 }}>
+              {value}
+            </div>
+            <div style={{ fontSize: 10, color: '#3A4150' }}>{sublabel}</div>
+          </div>
+        ))}
       </div>
 
       <div id="mitre-matrix" className="overflow-x-auto">

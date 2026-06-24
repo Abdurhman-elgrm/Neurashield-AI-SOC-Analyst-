@@ -759,18 +759,31 @@ export function HuntPage() {
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {/* Time range + logic */}
-          <div className="flex gap-3 mb-4 items-end">
-            <div className="flex-1">
+          <div className="flex gap-3 mb-4 items-end flex-wrap">
+            <div>
               <label className="block text-2xs font-bold uppercase tracking-widest text-text-disabled mb-1.5">Time Range</label>
-              <select className="inp w-full" value={timeRange} onChange={(e) => setTimeRange(e.target.value)}>
-                {TIME_RANGES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
+              <div className="flex gap-0.5 bg-white/3 border border-white/7 rounded-lg p-0.5">
+                {TIME_RANGES.map((t) => (
+                  <button
+                    key={t.value}
+                    onClick={() => setTimeRange(t.value)}
+                    className={cn(
+                      "px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border-none",
+                      timeRange === t.value
+                        ? "bg-accent/15 text-blue-300"
+                        : "bg-transparent text-text-disabled hover:text-text-muted",
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="block text-2xs font-bold uppercase tracking-widest text-text-disabled mb-1.5">Filter Logic</label>
-              <div className="flex gap-1">
+              <div className="flex gap-1 bg-white/3 border border-white/7 rounded-lg p-0.5">
                 {(["and", "or"] as FilterLogic[]).map((lg) => (
-                  <button key={lg} onClick={() => setFilterLogic(lg)} className={cn("px-4 py-1.5 rounded-md text-xs font-bold uppercase cursor-pointer border transition-all", filterLogic === lg ? "bg-accent/15 border-accent/40 text-blue-300" : "bg-white/4 border-white/8 text-text-disabled hover:text-text-muted")}>{lg}</button>
+                  <button key={lg} onClick={() => setFilterLogic(lg)} className={cn("px-4 py-1 rounded-md text-xs font-bold uppercase cursor-pointer border-none transition-all", filterLogic === lg ? "bg-accent/15 text-blue-300" : "bg-transparent text-text-disabled hover:text-text-muted")}>{lg}</button>
                 ))}
               </div>
             </div>

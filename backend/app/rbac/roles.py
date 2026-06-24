@@ -31,6 +31,9 @@ _ANALYST_PERMISSIONS: frozenset[Permission] = _VIEWER_PERMISSIONS | frozenset({
     Permission.HUNT_QUERY,
     Permission.PLAYBOOKS_READ,
     Permission.PLAYBOOKS_MANAGE,   # generate, execute, complete steps
+    Permission.UEBA_READ,
+    Permission.THREAT_INTEL_READ,
+    Permission.IOC_ENRICH,
 })
 
 _ADMIN_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset({
@@ -45,6 +48,11 @@ _ADMIN_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset({
     Permission.INVESTIGATIONS_MANAGE,
     Permission.PLAYBOOKS_ADMIN,    # manage templates
     Permission.RESPONSE_EXECUTE,   # quarantine / isolate agents
+    Permission.FLEET_READ,
+    Permission.FLEET_MANAGE,
+    Permission.MSSP_READ,
+    Permission.MSSP_MANAGE,
+    Permission.THREAT_INTEL_MANAGE,
 })
 
 _OWNER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS | frozenset({

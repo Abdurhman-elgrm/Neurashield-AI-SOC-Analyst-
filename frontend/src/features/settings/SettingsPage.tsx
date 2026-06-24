@@ -3,7 +3,7 @@ import {
   User, Building2, Key, Users, Bell, Bot,
   Plus, Copy, Check, Trash2, CheckCircle,
   Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle, Lock, Camera, Loader,
-  Zap, Ticket, Gauge, BarChart3, BellRing,
+  Zap, Ticket, Gauge, BarChart3, BellRing, Monitor,
 } from 'lucide-react'
 import { NotificationRulesSection } from './NotificationRulesSection'
 import { SeverityThresholdsSection } from './SeverityThresholdsSection'
@@ -1842,6 +1842,82 @@ function AutomationTab() {
   )
 }
 
+// ─── Display section ──────────────────────────────────────────────────────────
+
+type Density = 'compact' | 'default' | 'comfortable'
+
+function DisplaySection() {
+  const [density, setDensity] = useState<Density>(() => {
+    return (localStorage.getItem('neurashield-density') as Density) || 'default'
+  })
+
+  const applyDensity = (d: Density) => {
+    setDensity(d)
+    localStorage.setItem('neurashield-density', d)
+    if (d === 'default') {
+      document.documentElement.removeAttribute('data-density')
+    } else {
+      document.documentElement.setAttribute('data-density', d)
+    }
+  }
+
+  useEffect(() => {
+    const saved = (localStorage.getItem('neurashield-density') as Density) || 'default'
+    if (saved !== 'default') document.documentElement.setAttribute('data-density', saved)
+  }, [])
+
+  const options: Array<{ value: Density; label: string; description: string }> = [
+    { value: 'compact',     label: 'Compact',     description: 'Smaller rows and cards — fits more data on screen' },
+    { value: 'default',     label: 'Default',     description: 'Balanced density for everyday use'                },
+    { value: 'comfortable', label: 'Comfortable', description: 'More whitespace — easier to scan individual rows'  },
+  ]
+
+  return (
+    <div>
+      <SectionHeader title="Display" description="Customize the visual density and appearance of the interface" />
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 12 }}>
+          Data Density
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 420 }}>
+          {options.map(({ value, label, description }) => (
+            <button
+              key={value}
+              onClick={() => applyDensity(value)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: density === value ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.02)',
+                border: `1px solid ${density === value ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                transition: 'all 120ms',
+              }}
+            >
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                background: density === value ? '#3B82F6' : 'rgba(255,255,255,0.06)',
+                border: `2px solid ${density === value ? '#3B82F6' : 'rgba(255,255,255,0.12)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {density === value && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: density === value ? '#F5F7FA' : '#8B95A7' }}>{label}</div>
+                <div style={{ fontSize: 11, color: '#5C6373', marginTop: 2 }}>{description}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', maxWidth: 420 }}>
+        <div style={{ fontSize: 11, color: '#8B95A7', lineHeight: 1.6 }}>
+          Density setting is saved locally and applies immediately across all pages. Changes take effect without reloading.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
 
 import type { MemberRole } from '@/types/tenant'
@@ -1857,14 +1933,57 @@ const ALL_TABS = [
   { id: 'ticketing',            label: 'Integrations',        icon: Ticket,    minRole: 'admin'   as MemberRole },
   { id: 'quota',                label: 'Quota & Usage',       icon: Gauge,     minRole: 'admin'   as MemberRole },
   { id: 'automation',           label: 'Automation',          icon: Zap,       minRole: 'admin'   as MemberRole },
+  { id: 'display',              label: 'Display',             icon: Monitor,   minRole: 'viewer'  as MemberRole },
 ] as const
 
 type TabId = typeof ALL_TABS[number]['id']
+
+const TAB_GROUPS: Array<{ label: string; ids: TabId[] }> = [
+  { label: 'Account',        ids: ['profile', 'notifications', 'display'] },
+  { label: 'Administration', ids: ['org', 'members', 'api-keys', 'members'] },
+  { label: 'Operations',     ids: ['notification-rules', 'severity-thresholds', 'automation'] },
+  { label: 'Platform',       ids: ['ticketing', 'quota'] },
+]
 
 export function SettingsPage() {
   const hasRole = useTenantStore(s => s.hasRole)
   const TABS = ALL_TABS.filter(t => hasRole(t.minRole))
   const [activeTab, setActiveTab] = useState<TabId>('profile')
+
+  const renderNavItem = (tab: (typeof ALL_TABS)[number]) => {
+    const Icon = tab.icon
+    const active = activeTab === tab.id
+    return (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          width: '100%', padding: '7px 14px',
+          fontSize: 12, cursor: 'pointer',
+          background: active ? 'rgba(59,130,246,0.08)' : 'transparent',
+          borderLeft: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+          border: 'none',
+          color: active ? '#93C5FD' : '#8B95A7',
+          fontWeight: active ? 600 : 400,
+          transition: 'all 120ms', textAlign: 'left',
+        }}
+      >
+        <Icon size={13} style={{ opacity: active ? 1 : 0.45, flexShrink: 0 }} />
+        {tab.label}
+      </button>
+    )
+  }
+
+  // Build grouped nav — skip empty groups
+  const groupedTabs = TAB_GROUPS.map(g => ({
+    label: g.label,
+    tabs: TABS.filter(t => g.ids.includes(t.id)),
+  })).filter(g => g.tabs.length > 0)
+
+  // Any tab not in a group goes at the top ungrouped (fallback)
+  const groupedIds = new Set(TAB_GROUPS.flatMap(g => g.ids))
+  const ungrouped  = TABS.filter(t => !groupedIds.has(t.id))
 
   return (
     <div
@@ -1875,38 +1994,21 @@ export function SettingsPage() {
       <div style={{
         width: 200, flexShrink: 0,
         borderRight: '1px solid rgba(255,255,255,0.06)',
-        paddingTop: 4,
+        paddingTop: 4, overflowY: 'auto',
       }}>
-        <div style={{
-          padding: '0 14px 12px',
-          fontSize: 9, fontWeight: 700,
-          textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373',
-        }}>
-          Settings
-        </div>
-        {TABS.map(tab => {
-          const Icon = tab.icon
-          const active = activeTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 9,
-                width: '100%', padding: '8px 14px',
-                fontSize: 13, cursor: 'pointer',
-                background: active ? 'rgba(59,130,246,0.08)' : 'transparent',
-                borderLeft: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
-                border: 'none',
-                color: active ? '#93C5FD' : '#8B95A7',
-                transition: 'all 120ms', textAlign: 'left',
-              }}
-            >
-              <Icon size={14} style={{ opacity: active ? 0.9 : 0.45, flexShrink: 0 }} />
-              {tab.label}
-            </button>
-          )
-        })}
+        {ungrouped.map(renderNavItem)}
+        {groupedTabs.map(group => (
+          <div key={group.label} style={{ marginBottom: 4 }}>
+            <div style={{
+              padding: '10px 14px 4px',
+              fontSize: 9, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '1.5px', color: '#3A4150',
+            }}>
+              {group.label}
+            </div>
+            {group.tabs.map(renderNavItem)}
+          </div>
+        ))}
       </div>
 
       {/* Content */}
@@ -1921,6 +2023,7 @@ export function SettingsPage() {
         {activeTab === 'ticketing'           && <TicketingConfigSection  />}
         {activeTab === 'quota'               && <QuotaDashboardSection   />}
         {activeTab === 'automation'          && <AutomationTab           />}
+        {activeTab === 'display'             && <DisplaySection          />}
       </div>
     </div>
   )

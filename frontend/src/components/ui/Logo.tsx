@@ -62,10 +62,14 @@ export function LogoFull({ size = 44, className = '' }: LogoProps) {
   )
 }
 
-export function LogoCompact({ className = '' }: { className?: string }) {
+// compact=true: icon-only (used by collapsed sidebar rail)
+export function LogoCompact({ className = '', compact = false }: { className?: string; compact?: boolean }) {
+  if (compact) {
+    return <LogoIcon size={26} className={className} />
+  }
   return (
     <div className={className} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <LogoIcon size={44} />
+      <LogoIcon size={26} />
       <span style={{
         fontFamily: "'Orbitron', sans-serif",
         fontSize: 13,
@@ -77,6 +81,7 @@ export function LogoCompact({ className = '' }: { className?: string }) {
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
         backgroundClip: 'text',
+        whiteSpace: 'nowrap',
       }}>
         NEURASHIELD
       </span>

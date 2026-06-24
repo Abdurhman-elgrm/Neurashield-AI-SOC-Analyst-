@@ -141,16 +141,27 @@ export function AssetsPage() {
             className="w-full bg-bg-elevated border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
-        <select
-          value={osFilter}
-          onChange={(e) => setOsFilter(e.target.value)}
-          className="bg-bg-elevated border border-border rounded-lg px-3 py-1.5 text-sm text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent"
-        >
-          <option value="">All OS</option>
-          <option value="windows">Windows</option>
-          <option value="linux">Linux</option>
-          <option value="macos">macOS</option>
-        </select>
+        <div style={{
+          display: 'flex', gap: 2,
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 7, padding: 3,
+        }}>
+          {[
+            { value: '', label: 'All OS' },
+            { value: 'windows', label: 'Windows' },
+            { value: 'linux',   label: 'Linux'   },
+            { value: 'macos',   label: 'macOS'   },
+          ].map(({ value, label }) => (
+            <button key={value || 'all'} onClick={() => setOsFilter(value)} style={{
+              padding: '4px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600, transition: 'all 100ms',
+              background: osFilter === value ? 'rgba(59,130,246,0.12)' : 'transparent',
+              color: osFilter === value ? '#60A5FA' : '#5C6373',
+            }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stats strip */}

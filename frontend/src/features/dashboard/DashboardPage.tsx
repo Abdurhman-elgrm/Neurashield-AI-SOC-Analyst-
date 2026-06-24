@@ -14,6 +14,7 @@ import { TopEntitiesWidget } from "./widgets/TopEntitiesWidget";
 import { AlertVolumeHeatmap } from "./widgets/AlertVolumeHeatmap";
 import { MTTRTrendChart } from "./widgets/MTTRTrendChart";
 import { CustomDashboardBuilder } from "./widgets/CustomDashboardBuilder";
+import { SecurityPostureScore } from "./widgets/SecurityPostureScore";
 import { WidgetErrorBoundary } from "@/components/ui/WidgetErrorBoundary";
 import type { DashboardTimeRange } from "./types/dashboard";
 import { TIME_RANGE_LABELS } from "./types/dashboard";
@@ -50,6 +51,22 @@ function TimeRangePicker({
   );
 }
 
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <h2 style={{
+        fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+        letterSpacing: "1.5px", color: "#5C6373", margin: 0,
+      }}>{title}</h2>
+      {subtitle && (
+        <p style={{ fontSize: 10, color: "#3A4150", margin: "2px 0 0" }}>{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Dashboard page ───────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -60,12 +77,12 @@ export function DashboardPage() {
   useDashboardRealtime(timeRange);
 
   return (
-    <div className="pb-6">
+    <div className="pb-8">
 
       {/* Page header */}
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-extrabold text-text-primary font-display">
+          <h1 className="text-xl font-extrabold text-text-primary font-display tracking-tight">
             Security Overview
           </h1>
           <p className="text-xs text-text-muted mt-0.5">
@@ -92,61 +109,83 @@ export function DashboardPage() {
       {/* Custom Dashboard Builder (edit mode only) */}
       <CustomDashboardBuilder editMode={editMode} />
 
-      {/* Row 1: 8-card KPI strip */}
-      <div className="mb-3">
+      {/* ── Row 0: Security Posture Score ── */}
+      <div className="mb-4">
+        <SectionHeader title="Security Posture" subtitle="Composite readiness score" />
+        <WidgetErrorBoundary title="Security Posture Score">
+          <SecurityPostureScore />
+        </WidgetErrorBoundary>
+      </div>
+
+      {/* ── Row 1: KPI strip ── */}
+      <div className="mb-4">
+        <SectionHeader title="Key Performance Indicators" subtitle="Click any metric to drill into the data" />
         <WidgetErrorBoundary title="KPI Metrics">
           <KPIMetricsRow timeRange={timeRange} />
         </WidgetErrorBoundary>
       </div>
 
-      {/* Row 2: Live Alerts + Ingestion Rate + Detection Health */}
-      <div className="grid mb-3" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) 300px", gap: 12 }}>
-        <WidgetErrorBoundary title="Live Alerts Feed">
-          <LiveAlertsFeed timeRange={timeRange} maxHeight={380} />
-        </WidgetErrorBoundary>
-        <WidgetErrorBoundary title="Ingestion Rate">
-          <IngestionRateChart timeRange={timeRange} />
-        </WidgetErrorBoundary>
-        <WidgetErrorBoundary title="Detection Health">
-          <DetectionHealthWidget timeRange={timeRange} />
-        </WidgetErrorBoundary>
+      {/* ── Row 2: Live alerts + ingestion + detection health ── */}
+      <div className="mb-4">
+        <SectionHeader title="Operations" subtitle="Real-time alert stream and data ingestion" />
+        <div className="grid mb-0" style={{ gridTemplateColumns: "minmax(0,1.2fr) minmax(0,1fr) 290px", gap: 12 }}>
+          <WidgetErrorBoundary title="Live Alerts Feed">
+            <LiveAlertsFeed timeRange={timeRange} maxHeight={360} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary title="Ingestion Rate">
+            <IngestionRateChart timeRange={timeRange} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary title="Detection Health">
+            <DetectionHealthWidget timeRange={timeRange} />
+          </WidgetErrorBoundary>
+        </div>
       </div>
 
-      {/* Row 3: MITRE ATT&CK + Correlation Activity */}
-      <div className="grid mb-3" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
-        <WidgetErrorBoundary title="MITRE ATT&CK">
-          <MitreHeatmap timeRange={timeRange} />
-        </WidgetErrorBoundary>
-        <WidgetErrorBoundary title="Correlation Activity">
-          <CorrelationWidget timeRange={timeRange} />
-        </WidgetErrorBoundary>
+      {/* ── Row 3: MITRE ATT&CK + Correlation ── */}
+      <div className="mb-4">
+        <SectionHeader title="Threat Intelligence" subtitle="ATT&CK coverage and correlation activity" />
+        <div className="grid" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
+          <WidgetErrorBoundary title="MITRE ATT&CK">
+            <MitreHeatmap timeRange={timeRange} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary title="Correlation Activity">
+            <CorrelationWidget timeRange={timeRange} />
+          </WidgetErrorBoundary>
+        </div>
       </div>
 
-      {/* Row 4: AI Operations */}
-      <div className="mb-3">
+      {/* ── Row 4: AI Investigations ── */}
+      <div className="mb-4">
+        <SectionHeader title="AI Operations" subtitle="AI-powered investigation queue and recommendations" />
         <WidgetErrorBoundary title="AI Investigations">
           <AIInvestigationWidget timeRange={timeRange} />
         </WidgetErrorBoundary>
       </div>
 
-      {/* Row 5: Geo Threat Map + Top Entities */}
-      <div className="grid mb-3" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
-        <WidgetErrorBoundary title="Geo Threat Map">
-          <GeoThreatMap timeRange={timeRange} />
-        </WidgetErrorBoundary>
-        <WidgetErrorBoundary title="Top Entities">
-          <TopEntitiesWidget timeRange={timeRange} />
-        </WidgetErrorBoundary>
+      {/* ── Row 5: Geo threat map + top entities ── */}
+      <div className="mb-4">
+        <SectionHeader title="Geospatial Intelligence" subtitle="Threat origin mapping and top entity monitoring" />
+        <div className="grid" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
+          <WidgetErrorBoundary title="Geo Threat Map">
+            <GeoThreatMap timeRange={timeRange} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary title="Top Entities">
+            <TopEntitiesWidget timeRange={timeRange} />
+          </WidgetErrorBoundary>
+        </div>
       </div>
 
-      {/* Row 6: Alert Volume Heatmap + MTTR Trend */}
-      <div className="grid" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
-        <WidgetErrorBoundary title="Alert Volume Heatmap">
-          <AlertVolumeHeatmap timeRange={timeRange} />
-        </WidgetErrorBoundary>
-        <WidgetErrorBoundary title="MTTR Trend">
-          <MTTRTrendChart timeRange={timeRange} />
-        </WidgetErrorBoundary>
+      {/* ── Row 6: Alert volume heatmap + MTTR trend ── */}
+      <div>
+        <SectionHeader title="Performance Trends" subtitle="Alert volume patterns and mean time to resolution" />
+        <div className="grid" style={{ gridTemplateColumns: "3fr 2fr", gap: 12 }}>
+          <WidgetErrorBoundary title="Alert Volume Heatmap">
+            <AlertVolumeHeatmap timeRange={timeRange} />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary title="MTTR Trend">
+            <MTTRTrendChart timeRange={timeRange} />
+          </WidgetErrorBoundary>
+        </div>
       </div>
     </div>
   );

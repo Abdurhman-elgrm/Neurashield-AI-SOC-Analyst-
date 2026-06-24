@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { RefreshCw, SlidersHorizontal } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { RefreshCw, SlidersHorizontal, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/table/DataTable";
 import { TablePagination } from "@/components/table/TablePagination";
@@ -13,10 +13,15 @@ import { NewAlertsIndicator } from "./components/NewAlertsIndicator";
 import { SavedViewsBar, useSavedViews } from "./components/SavedViewsBar";
 import { useAlertsList, useAlertsSummary } from "./hooks/useAlerts";
 import { useAlertsRealtime } from "./hooks/useAlertsRealtime";
+import { updateAlert } from "@/services/alertsApi";
 import type { Alert, AlertSeverity, AlertStatus, AlertListParams } from "./types";
 import type { FilterState, ActiveFilter } from "@/components/filters/types";
 import type { PaginationState, RowSelectionState } from "@/components/table/types";
 import type { SortingState, VisibilityState } from "@tanstack/react-table";
+import { useQueryClient } from "@tanstack/react-query";
+import { alertsKeys } from "./hooks/useAlerts";
+import { useTenantStore } from "@/stores/tenantStore";
+import { toastSuccess, toastError } from "@/lib/toast";
 
 // ─── Column visibility localStorage ──────────────────────────────────────────
 
@@ -30,13 +35,37 @@ function saveColVisibility(v: VisibilityState) {
   localStorage.setItem(COL_VIS_KEY, JSON.stringify(v));
 }
 
-// ─── Status KPI band ──────────────────────────────────────────────────────────
+// ─── Status KPI band with trend deltas ───────────────────────────────────────
 
 const STATUS_ITEMS = [
-  { key: "open"           as AlertStatus, label: "OPEN",           color: "#60A5FA" },
-  { key: "acknowledged"   as AlertStatus, label: "ACKNOWLEDGED",   color: "#F59E0B" },
-  { key: "closed"         as AlertStatus, label: "CLOSED",         color: "#4B5563" },
-  { key: "false_positive" as AlertStatus, label: "FALSE POSITIVE", color: "#10B981" },
+  {
+    key: "open"           as AlertStatus,
+    label: "Open",
+    color: "#60A5FA",
+    glowColor: "rgba(96,165,250,0.15)",
+    description: "Awaiting triage",
+  },
+  {
+    key: "acknowledged"   as AlertStatus,
+    label: "Acknowledged",
+    color: "#F59E0B",
+    glowColor: "rgba(245,158,11,0.12)",
+    description: "In progress",
+  },
+  {
+    key: "closed"         as AlertStatus,
+    label: "Closed",
+    color: "#4B5563",
+    glowColor: "rgba(75,85,99,0.10)",
+    description: "Resolved",
+  },
+  {
+    key: "false_positive" as AlertStatus,
+    label: "False Positive",
+    color: "#10B981",
+    glowColor: "rgba(16,185,129,0.12)",
+    description: "Noise reduction",
+  },
 ] as const;
 
 function StatusKPIBand({
@@ -55,46 +84,246 @@ function StatusKPIBand({
     false_positive: summary?.false_positive ?? 0,
   };
 
+  // Synthetic trend: show arrows based on relative proportion
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
   return (
-    <div className="flex flex-shrink-0 border-b border-border">
-      {STATUS_ITEMS.map((item) => (
-        <button
-          key={item.key}
-          onClick={() => onSelect(activeStatus === item.key ? null : item.key)}
-          className={cn(
-            "flex-1 p-2.5 px-4 text-left border-r border-border/50 last:border-r-0 transition-all duration-100",
-            "border-b-2",
-            activeStatus === item.key
-              ? "bg-accent/5 border-b-accent"
-              : "bg-transparent border-b-transparent hover:bg-bg-hover",
-          )}
-        >
-          <div className="text-2xs font-bold uppercase tracking-widest text-text-muted mb-1">
-            {item.label}
-          </div>
-          <div
-            className="font-mono text-xl font-bold tabular-nums"
-            style={{ color: item.color }}
+    <div
+      style={{
+        display: "flex",
+        flexShrink: 0,
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      {STATUS_ITEMS.map((item, idx) => {
+        const count = counts[item.key];
+        const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
+        const isActive = activeStatus === item.key;
+
+        return (
+          <button
+            key={item.key}
+            onClick={() => onSelect(isActive ? null : item.key)}
+            style={{
+              flex: 1,
+              padding: "12px 16px",
+              textAlign: "left",
+              background: isActive ? `${item.glowColor}` : "transparent",
+              borderRight: idx < STATUS_ITEMS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+              borderBottom: `2px solid ${isActive ? item.color : "transparent"}`,
+              cursor: "pointer",
+              transition: "all 120ms",
+              position: "relative",
+            }}
           >
-            {counts[item.key]}
-          </div>
-        </button>
-      ))}
+            {/* Active glow bar at bottom */}
+            {isActive && (
+              <div style={{
+                position: "absolute", bottom: -1, left: "20%", right: "20%",
+                height: 1, background: item.color,
+                filter: `blur(3px)`,
+              }} />
+            )}
+
+            <div style={{
+              fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "1.5px", color: "#5C6373", marginBottom: 4,
+            }}>
+              {item.label}
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 22,
+                fontWeight: 800,
+                color: isActive ? item.color : "#F5F7FA",
+                lineHeight: 1,
+                transition: "color 120ms",
+              }}>
+                {count.toLocaleString()}
+              </span>
+              <span style={{
+                fontSize: 10, color: "#5C6373",
+                fontFamily: "'JetBrains Mono', monospace",
+              }}>
+                {pct}%
+              </span>
+            </div>
+            <div style={{ fontSize: 9, color: "#3A4150", marginTop: 3 }}>
+              {item.description}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-// ─── Row severity highlighting ────────────────────────────────────────────────
+// ─── Alert hover preview card ─────────────────────────────────────────────────
 
-function getAlertRowClassName(alert: Alert): string {
-  switch (alert.severity) {
-    case "critical": return "border-l-2 border-l-severity-critical bg-severity-critical/[0.03]";
-    case "high":     return "border-l-2 border-l-severity-high";
-    default:         return "";
-  }
+function AlertHoverPreview({
+  alert,
+  anchorRect,
+}: {
+  alert: Alert;
+  anchorRect: DOMRect;
+}) {
+  const SEV_COLORS: Record<string, string> = {
+    critical: "#EF4444", high: "#F97316", medium: "#F59E0B",
+    low: "#3B82F6", info: "#6B7280",
+  };
+  const color = SEV_COLORS[alert.severity] ?? "#6B7280";
+
+  // Determine if card should flip above or below
+  const viewportH = window.innerHeight;
+  const spaceBelow = viewportH - anchorRect.bottom;
+  const cardHeight = 180;
+  const top = spaceBelow > cardHeight + 12
+    ? anchorRect.bottom + 4
+    : anchorRect.top - cardHeight - 4;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top,
+        left: Math.min(anchorRect.left, window.innerWidth - 340),
+        width: 330,
+        background: "#111111",
+        border: `1px solid rgba(255,255,255,0.1)`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 8,
+        padding: "12px 14px",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+        zIndex: 9999,
+        pointerEvents: "none",
+        animation: "fadeInUp 100ms ease both",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#F5F7FA", lineHeight: 1.4, marginBottom: 4 }}>
+            {alert.title}
+          </div>
+          <div style={{ fontSize: 10, color: "#5C6373", fontFamily: "monospace" }}>
+            {alert.ruleName}
+          </div>
+        </div>
+        <span style={{
+          padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+          fontFamily: "monospace", textTransform: "uppercase" as const,
+          background: `${color}18`, color,
+          flexShrink: 0,
+        }}>
+          {alert.severity}
+        </span>
+      </div>
+
+      {alert.description && (
+        <div style={{
+          fontSize: 11, color: "#8B95A7", lineHeight: 1.5, marginBottom: 8,
+          overflow: "hidden", display: "-webkit-box",
+          WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const,
+        }}>
+          {alert.description}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const }}>
+        {alert.hostname && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 8, color: "#3A4150", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1px" }}>Host</span>
+            <span style={{ fontSize: 10, color: "#B8C0CC", fontFamily: "monospace" }}>{alert.hostname}</span>
+          </div>
+        )}
+        {alert.sourceIp && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 8, color: "#3A4150", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1px" }}>Source IP</span>
+            <span style={{ fontSize: 10, color: "#B8C0CC", fontFamily: "monospace" }}>{alert.sourceIp}</span>
+          </div>
+        )}
+        {alert.username && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 8, color: "#3A4150", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1px" }}>User</span>
+            <span style={{ fontSize: 10, color: "#B8C0CC" }}>{alert.username}</span>
+          </div>
+        )}
+        {alert.mitre && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 8, color: "#3A4150", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1px" }}>MITRE</span>
+            <span style={{ fontSize: 10, color: "#93C5FD", fontFamily: "monospace" }}>{alert.mitre.techniqueId}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Keyboard hint */}
+      <div style={{
+        marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)",
+        fontSize: 9, color: "#3A4150", display: "flex", gap: 10,
+      }}>
+        <span><kbd style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace" }}>A</kbd> Acknowledge</span>
+        <span><kbd style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace" }}>F</kbd> False Positive</span>
+        <span><kbd style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 4px", fontFamily: "monospace" }}>E</kbd> Escalate</span>
+      </div>
+    </div>
+  );
 }
 
-// ─── Filter state → API params ────────────────────────────────────────────────
+// ─── Keyboard shortcuts help pill ─────────────────────────────────────────────
+
+function KeyboardHintPill() {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setShow((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          padding: "3px 8px", borderRadius: 5,
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          color: "#5C6373", fontSize: 10, cursor: "pointer",
+        }}
+        title="Keyboard shortcuts"
+      >
+        <Keyboard size={10} />
+        <span>Shortcuts</span>
+      </button>
+      {show && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+          background: "#111111", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 8, padding: "12px 14px", minWidth: 240,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#5C6373", marginBottom: 8 }}>
+            When drawer is open
+          </div>
+          {[
+            ["A", "Acknowledge alert"],
+            ["C", "Close alert"],
+            ["F", "Mark false positive"],
+            ["E", "Escalate to investigation"],
+            ["N", "Next alert"],
+            ["P", "Previous alert"],
+            ["Esc", "Close drawer"],
+          ].map(([key, desc]) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+              <kbd style={{
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 4, padding: "2px 6px", fontSize: 10, fontFamily: "monospace",
+                color: "#B8C0CC", minWidth: 28, textAlign: "center", flexShrink: 0,
+              }}>{key}</kbd>
+              <span style={{ fontSize: 11, color: "#8B95A7" }}>{desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sorting helpers ──────────────────────────────────────────────────────────
 
 function sortingToParam(sorting: SortingState): string {
   if (!sorting.length) return "-created_at";
@@ -132,10 +361,23 @@ function filtersToParams(filterState: FilterState, pagination: PaginationState, 
   return params;
 }
 
+// ─── Row severity highlighting ────────────────────────────────────────────────
+
+function getAlertRowClassName(alert: Alert): string {
+  switch (alert.severity) {
+    case "critical": return "border-l-2 border-l-severity-critical bg-severity-critical/[0.03]";
+    case "high":     return "border-l-2 border-l-severity-high";
+    default:         return "";
+  }
+}
+
 // ─── AlertsPage ───────────────────────────────────────────────────────────────
 
 export function AlertsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const tenantId = useTenantStore((s) => s.activeTenant?.id) ?? "";
 
   // URL-synced alert selection
   const selectedAlertId = searchParams.get("alert");
@@ -180,6 +422,11 @@ export function AlertsPage() {
   const [colVisibility, setColVisibility] = useState<VisibilityState>(loadColVisibility);
   const [showColMenu, setShowColMenu] = useState(false);
 
+  // Hover preview state
+  const [hoverAlert, setHoverAlert] = useState<Alert | null>(null);
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const savedViews = useSavedViews();
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
 
@@ -217,6 +464,78 @@ export function AlertsPage() {
     });
   };
 
+  // ── Keyboard triage shortcuts ──────────────────────────────────────────────
+  const alerts = data?.items ?? [];
+  const selectedIndex = alerts.findIndex((a) => a.id === selectedAlertId);
+
+  const quickAction = useCallback(async (status: AlertStatus) => {
+    if (!selectedAlertId) return;
+    try {
+      await updateAlert(selectedAlertId, { status });
+      queryClient.invalidateQueries({ queryKey: alertsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: alertsKeys.summary(tenantId) });
+      toastSuccess(`Alert ${status.replace(/_/g, " ")}`);
+    } catch {
+      toastError("Failed to update alert");
+    }
+  }, [selectedAlertId, queryClient, tenantId]);
+
+  const escalateToInvestigation = useCallback(() => {
+    if (!selectedAlertId) return;
+    navigate(`/investigations?createFrom=${selectedAlertId}`);
+  }, [selectedAlertId, navigate]);
+
+  useEffect(() => {
+    if (!selectedAlertId) return;
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) return;
+
+      switch (e.key.toUpperCase()) {
+        case "A": void quickAction("acknowledged"); break;
+        case "C": void quickAction("closed"); break;
+        case "F": void quickAction("false_positive"); break;
+        case "E": escalateToInvestigation(); break;
+        case "N": {
+          const next = alerts[selectedIndex + 1];
+          if (next) setSelectedAlertId(next.id);
+          break;
+        }
+        case "P": {
+          const prev = alerts[selectedIndex - 1];
+          if (prev) setSelectedAlertId(prev.id);
+          break;
+        }
+        case "ESCAPE":
+          setSelectedAlertId(null);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedAlertId, quickAction, escalateToInvestigation, alerts, selectedIndex, setSelectedAlertId]);
+
+  // ── Row hover preview ──────────────────────────────────────────────────────
+  const handleRowMouseEnter = useCallback((alert: Alert, e: React.MouseEvent) => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverTimeout.current = setTimeout(() => {
+      setHoverAlert(alert);
+      setHoverRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+    }, 250);
+  }, []);
+
+  const handleRowMouseLeave = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverTimeout.current = setTimeout(() => {
+      setHoverAlert(null);
+      setHoverRect(null);
+    }, 100);
+  }, []);
+
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 50px - 40px)" }}>
 
@@ -226,7 +545,7 @@ export function AlertsPage() {
           <h1 className="text-lg font-extrabold text-text-primary font-display">Alert Triage</h1>
           <p className="text-xs text-text-muted mt-0.5">
             {data?.total != null ? (
-              <><span className="text-text-primary font-medium">{data.total}</span> alerts total</>
+              <><span className="text-text-primary font-medium">{data.total.toLocaleString()}</span> alerts total</>
             ) : (
               "Security alert triage workspace"
             )}
@@ -238,12 +557,14 @@ export function AlertsPage() {
             since={newAlertsSince.current}
             onDismiss={() => { setNewAlertCount(0); newAlertsSince.current = null; }}
           />
+          <KeyboardHintPill />
           <button
             className="btn btn-ghost btn-sm flex items-center gap-1 text-xs"
             aria-label="Refresh alerts"
             onClick={() => refetch()}
           >
-            <RefreshCw size={12} /> Refresh
+            <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+            Refresh
           </button>
         </div>
       </div>
@@ -260,7 +581,7 @@ export function AlertsPage() {
               filterState={filterState}
               onFilterChange={handleFilterChange}
               showSearch
-              searchPlaceholder="Search alerts, rules, hosts..."
+              searchPlaceholder="Search alerts, rules, hosts, IPs…"
             />
           </div>
           <div className="relative flex-shrink-0">
@@ -271,11 +592,11 @@ export function AlertsPage() {
               className="btn btn-ghost btn-sm flex items-center gap-1 text-xs"
             >
               <SlidersHorizontal size={12} />
-              Cols
+              Columns
             </button>
             {showColMenu && (
               <div className="absolute right-0 top-full mt-1 z-30 bg-bg-card border border-border rounded-lg p-2 shadow-elevated w-44">
-                <p className="text-2xs font-bold uppercase tracking-widest text-text-muted px-1 mb-1.5">Columns</p>
+                <p className="text-2xs font-bold uppercase tracking-widest text-text-muted px-1 mb-1.5">Show / Hide Columns</p>
                 {alertColumns
                   .filter((c) => "id" in c && c.id && c.id !== "select")
                   .map((c) => {
@@ -319,12 +640,12 @@ export function AlertsPage() {
       {/* Table + drawer */}
       <div className={cn("flex-1 min-h-0 card overflow-hidden flex flex-col mt-2")}>
         <DataTable
-          data={data?.items ?? []}
+          data={alerts}
           columns={alertColumns}
           isLoading={isLoading}
           emptyMessage={
             activeStatus
-              ? `No ${activeStatus} alerts`
+              ? `No ${activeStatus.replace(/_/g, " ")} alerts`
               : "No alerts yet — detections will appear here once the agent starts sending events"
           }
           enableRowSelection
@@ -332,6 +653,8 @@ export function AlertsPage() {
           onRowSelectionChange={setRowSelection}
           getRowId={(row) => row.id}
           onRowClick={(alert) => setSelectedAlertId(alert.id)}
+          onRowMouseEnter={handleRowMouseEnter}
+          onRowMouseLeave={handleRowMouseLeave}
           getRowClassName={getAlertRowClassName}
           pagination={pagination}
           onPaginationChange={setPagination}
@@ -343,6 +666,7 @@ export function AlertsPage() {
           onSortingChange={handleSortingChange}
           columnVisibility={colVisibility}
           className="flex-1 min-h-0"
+          highlightRowId={selectedAlertId ?? undefined}
         />
         <div className="flex-shrink-0 border-t border-border">
           <TablePagination
@@ -354,11 +678,16 @@ export function AlertsPage() {
         </div>
       </div>
 
-      {/* Alert detail drawer — selection synced to URL */}
+      {/* Alert detail drawer */}
       <AlertDrawer alertId={selectedAlertId} onClose={() => setSelectedAlertId(null)} />
 
       {/* Floating bulk action bar */}
       <BulkActionBar selectedIds={selectedIds} onClear={() => setRowSelection({})} />
+
+      {/* Row hover preview */}
+      {hoverAlert && hoverRect && !selectedAlertId && (
+        <AlertHoverPreview alert={hoverAlert} anchorRect={hoverRect} />
+      )}
     </div>
   );
 }
