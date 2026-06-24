@@ -233,7 +233,7 @@ AGENT_DEFS = [
     ("DB-CLUSTER-01",    "linux",   "online",  "4.2.1", "10.0.3.5",     ["database", "critical-asset"]),
     ("EXEC-LAPTOP-CEO",  "macos",   "online",  "4.2.1", "192.168.1.3",  ["executive", "sensitive"]),
     ("JUMPBOX-01",       "linux",   "online",  "4.2.1", "10.0.1.5",     ["jumpbox", "bastion"]),
-    ("LEGACY-SERVER-01", "windows", "stale",   "3.9.2", "10.0.4.50",    ["legacy", "eol"]),
+    ("LEGACY-SERVER-01", "windows", "degraded", "3.9.2", "10.0.4.50",    ["legacy", "eol"]),
     ("IOT-GATEWAY-01",   "linux",   "offline", "4.0.1", "10.0.5.1",     ["iot", "gateway"]),
     ("BACKUP-SRV-01",    "linux",   "online",  "4.2.0", "10.0.3.10",    ["backup", "storage"]),
 ]
@@ -256,7 +256,7 @@ async def _seed_agents(db: AsyncSession, tid) -> list[Agent]:
         agents.append(a)
         await db.flush()
 
-        if status in ("online", "stale"):
+        if status in ("online", "degraded"):
             for i in range(24):
                 db.add(Heartbeat(
                     id=uuid4(), agent_id=a.id, tenant_id=tid,

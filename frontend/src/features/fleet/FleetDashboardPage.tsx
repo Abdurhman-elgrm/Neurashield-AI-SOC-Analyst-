@@ -105,7 +105,7 @@ export function FleetDashboardPage() {
     { value: "",        label: "All",     color: "#8B95A7" },
     { value: "online",  label: "Online",  color: "#10B981" },
     { value: "offline", label: "Offline", color: "#5C6373" },
-    { value: "stale",   label: "Stale",   color: "#F59E0B" },
+    { value: "degraded", label: "Degraded", color: "#F59E0B" },
   ] as const;
 
   return (
