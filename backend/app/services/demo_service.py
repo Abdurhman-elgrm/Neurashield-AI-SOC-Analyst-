@@ -17,6 +17,7 @@ import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, hash_password
 from app.models.agent import Agent, AgentOsType, AgentStatus, ContainmentState
 from app.models.alert import Alert, AlertSeverity, AlertStatus
@@ -91,7 +92,11 @@ async def demo_login(db: AsyncSession) -> TokenPair:
     ))
     await db.commit()
 
-    return TokenPair(access_token=access_token, refresh_token=refresh_token)
+    return TokenPair(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 # ─── Tenant / user helpers ────────────────────────────────────────────────────
