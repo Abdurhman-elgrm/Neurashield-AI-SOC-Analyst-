@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Bell, FolderSearch, Activity, Crosshair, Shield,
-  Sparkles, Monitor, Settings, LogOut, BookOpen, FileBarChart, Download,
-  Upload, Network, BarChart3, Server, UserSearch, ScrollText, EyeOff,
-  Globe, Swords, Building2, Wifi, FileCheck, PanelLeftOpen, PanelLeftClose,
+  Sparkles, Monitor, LogOut, BookOpen, FileBarChart, Download,
+  Network, BarChart3, Server, UserSearch, ScrollText, EyeOff,
+  Globe, Swords, Building2, Wifi, FileCheck, Upload,
   User, Users, Key, Zap, Gauge, BellRing,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
@@ -39,172 +40,48 @@ function useOnlineAgentCount() {
   return data ?? 0;
 }
 
+// ─── Dimensions ───────────────────────────────────────────────────────────────
+
+export const SIDEBAR_OPEN_W   = 230;
+export const SIDEBAR_CLOSED_W = 56;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface NavItemDef {
   to: string;
   icon: React.ElementType;
   label: string;
-  badge?: string | number | null;
+  badge?: number | string | null;
   badgeColor?: "red" | "green" | "blue";
-  sectionLabel?: string;   // render a section divider above this item
-  tabParam?: string;       // settings items: active when ?tab=<tabParam>
+  tabParam?: string;
 }
 
-interface CategoryDef {
-  id: string;
-  icon: React.ElementType;
+interface SectionDef {
   label: string;
-  direct?: string;
-  items?: NavItemDef[];
+  items: NavItemDef[];
 }
 
-// ─── Route to category mapping ───────────────────────────────────────────────
+// ─── Settings tab → active check ─────────────────────────────────────────────
 
-const ROUTE_CATS: [string, string][] = [
-  ["/dashboard", "overview"],
-  ["/alerts", "detect"],
-  ["/investigations", "detect"],
-  ["/events", "analyze"],
-  ["/hunt", "analyze"],
-  ["/rules/suppression", "intel"],
-  ["/rules", "analyze"],
-  ["/graph", "analyze"],
-  ["/copilot", "respond"],
-  ["/playbooks", "respond"],
-  ["/compliance-reports", "report"],
-  ["/reports", "report"],
-  ["/soc-metrics", "report"],
-  ["/mitre", "report"],
-  ["/threat-intel", "intel"],
-  ["/ueba", "intel"],
-  ["/assets", "intel"],
-  ["/agents", "platform"],
-  ["/installer", "platform"],
-  ["/fleet", "platform"],
-  ["/import", "platform"],
-  ["/audit-log", "platform"],
-  ["/mssp", "platform"],
-  ["/settings", "settings"],
-];
-
-function pathToCategory(pathname: string): string {
-  for (const [route, cat] of ROUTE_CATS) {
-    if (
-      pathname === route ||
-      pathname.startsWith(route + "/") ||
-      pathname.startsWith(route + "?")
-    ) {
-      return cat;
-    }
-  }
-  return "overview";
+function useSettingsTab() {
+  const location = useLocation();
+  return new URLSearchParams(location.search).get("tab") || "profile";
 }
 
-// ─── Dimensions ───────────────────────────────────────────────────────────────
+// ─── Single nav item ──────────────────────────────────────────────────────────
 
-export const RAIL_W           = 56;
-export const PANEL_W          = 180;
-export const SIDEBAR_OPEN_W   = RAIL_W + PANEL_W;
-export const SIDEBAR_CLOSED_W = RAIL_W;
-
-// ─── Rail category button ────────────────────────────────────────────────────
-
-function RailItem({
-  id, icon: Icon, label, isActive, hasDot, onClick,
-}: {
-  id: string;
-  icon: React.ElementType;
-  label: string;
-  isActive: boolean;
-  hasDot?: boolean;
-  onClick: (id: string) => void;
-}) {
+function NavItem({
+  to, icon: Icon, label, badge, badgeColor = "red", collapsed, tabParam,
+}: NavItemDef & { collapsed: boolean }) {
+  const location    = useLocation();
+  const navigate    = useNavigate();
+  const settingsTab = useSettingsTab();
   const [hov, setHov] = useState(false);
 
-  return (
-    <button
-      onClick={() => onClick(id)}
-      title={label}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 3,
-        width: "100%",
-        padding: "10px 0 9px",
-        background: isActive ? "rgba(59,130,246,0.09)" : hov ? "rgba(255,255,255,0.025)" : "transparent",
-        border: "none",
-        borderRight: `2px solid ${isActive ? "#3B82F6" : "transparent"}`,
-        cursor: "pointer",
-        position: "relative",
-        transition: "background 100ms, border-color 100ms",
-        flexShrink: 0,
-      }}
-    >
-      <Icon
-        size={15}
-        style={{
-          color: isActive ? "#60A5FA" : hov ? "#9CA3AF" : "#4B5563",
-          transition: "color 100ms",
-        }}
-      />
-      <span style={{
-        fontSize: 7.5,
-        fontWeight: 700,
-        letterSpacing: "0.5px",
-        textTransform: "uppercase" as const,
-        color: isActive ? "#60A5FA" : hov ? "#6B7280" : "#374151",
-        fontFamily: "'JetBrains Mono', monospace",
-        lineHeight: 1,
-        transition: "color 100ms",
-      }}>
-        {label}
-      </span>
-      {hasDot && (
-        <span style={{
-          position: "absolute", top: 7, right: 9,
-          width: 5, height: 5, borderRadius: "50%",
-          background: "#EF4444",
-          boxShadow: "0 0 4px rgba(239,68,68,0.6)",
-        }} />
-      )}
-    </button>
-  );
-}
-
-// ─── Panel section divider ────────────────────────────────────────────────────
-
-function PanelSection({ label }: { label: string }) {
-  return (
-    <div style={{
-      padding: "10px 14px 3px",
-      fontSize: 8,
-      fontWeight: 700,
-      letterSpacing: "1.5px",
-      textTransform: "uppercase" as const,
-      color: "#2D3748",
-      fontFamily: "'JetBrains Mono', monospace",
-    }}>
-      {label}
-    </div>
-  );
-}
-
-// ─── Panel nav item ───────────────────────────────────────────────────────────
-
-function PanelItem({
-  to, icon: Icon, label, badge, badgeColor = "blue", isActiveOverride,
-}: NavItemDef & { isActiveOverride?: boolean }) {
-  const navigate = useNavigate();
-
   const badgeBg =
-    badgeColor === "red"   ? "rgba(239,68,68,0.15)"  :
-    badgeColor === "green" ? "rgba(16,185,129,0.15)" :
-                             "rgba(59,130,246,0.15)";
+    badgeColor === "red"   ? "rgba(239,68,68,0.18)"  :
+    badgeColor === "green" ? "rgba(16,185,129,0.18)" :
+                             "rgba(59,130,246,0.18)";
   const badgeFg =
     badgeColor === "red"   ? "#FCA5A5" :
     badgeColor === "green" ? "#6EE7B7" :
@@ -212,46 +89,68 @@ function PanelItem({
 
   const displayBadge =
     typeof badge === "number"
-      ? badge > 999 ? "999+" : badge > 0 ? badge : null
-      : badge;
+      ? badge > 999 ? "999+" : badge > 0 ? String(badge) : null
+      : badge ?? null;
 
-  const rowStyle = (isActive: boolean) => ({
-    display: "flex" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    padding: "6px 12px 6px 14px",
-    margin: "1px 6px 1px 0",
-    fontSize: 12.5,
-    fontWeight: isActive ? 500 : 400,
-    color: isActive ? "#E2E8F0" : "#6B7280",
-    background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
-    borderLeft: `2px solid ${isActive ? "#3B82F6" : "transparent"}`,
-    transition: "all 100ms",
-    borderRadius: "0 4px 4px 0",
-  });
+  // For settings items: active by ?tab= param; otherwise by pathname
+  const isActive = tabParam !== undefined
+    ? location.pathname === "/settings" && settingsTab === tabParam
+    : location.pathname === to || location.pathname.startsWith(to + "/");
 
-  const rowContent = (isActive: boolean) => (
-    <>
-      <Icon size={13} style={{ opacity: isActive ? 0.85 : 0.38, color: isActive ? "#60A5FA" : "inherit", flexShrink: 0 }} />
-      <span style={{ flex: 1 }}>{label}</span>
-      {displayBadge != null && (
-        <span style={{
-          padding: "1px 5px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-          fontFamily: "'JetBrains Mono', monospace", background: badgeBg, color: badgeFg,
-        }}>
-          {displayBadge}
-        </span>
-      )}
-    </>
-  );
-
-  if (isActiveOverride !== undefined) {
+  if (tabParam !== undefined) {
+    // Render as button (same URL, different query param)
     return (
       <button
         onClick={() => navigate(to)}
-        style={{ ...rowStyle(isActiveOverride), border: "none", cursor: "pointer", width: "calc(100% - 6px)", textAlign: "left" as const }}
+        title={collapsed ? label : undefined}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          width: "100%",
+          padding: collapsed ? "8px 0" : "7px 12px",
+          justifyContent: collapsed ? "center" : "flex-start",
+          fontSize: 13,
+          fontWeight: isActive ? 500 : 400,
+          color: isActive ? "#E2E8F0" : hov ? "#C1C9D6" : "#6B7280",
+          background: isActive ? "rgba(59,130,246,0.10)" : hov ? "rgba(255,255,255,0.03)" : "transparent",
+          borderLeft: collapsed ? "none" : `2px solid ${isActive ? "#3B82F6" : "transparent"}`,
+          borderRight: collapsed ? `2px solid ${isActive ? "#3B82F6" : "transparent"}` : "none",
+          border: "none",
+          transition: "all 100ms",
+          cursor: "pointer",
+          textAlign: "left" as const,
+          flexShrink: 0,
+        }}
       >
-        {rowContent(isActiveOverride)}
+        <Icon
+          size={15}
+          style={{
+            color: isActive ? "#60A5FA" : hov ? "#9CA3AF" : "#4B5563",
+            transition: "color 100ms",
+            flexShrink: 0,
+          }}
+        />
+        {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+        {!collapsed && displayBadge && (
+          <span style={{
+            padding: "1px 6px", borderRadius: 9999,
+            fontSize: 9, fontWeight: 700,
+            fontFamily: "'JetBrains Mono', monospace",
+            background: badgeBg, color: badgeFg,
+          }}>
+            {displayBadge}
+          </span>
+        )}
+        {collapsed && displayBadge && (
+          <span style={{
+            position: "absolute" as const, top: 5, right: 5,
+            width: 5, height: 5, borderRadius: "50%",
+            background: badgeColor === "red" ? "#EF4444" : badgeColor === "green" ? "#10B981" : "#3B82F6",
+          }} />
+        )}
       </button>
     );
   }
@@ -259,10 +158,75 @@ function PanelItem({
   return (
     <NavLink
       to={to}
-      style={({ isActive }) => ({ ...rowStyle(isActive), textDecoration: "none" })}
+      title={collapsed ? label : undefined}
+      end={to === "/settings" || to === "/dashboard"}
+      style={() => ({
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: collapsed ? "8px 0" : "7px 12px",
+        justifyContent: collapsed ? "center" : "flex-start",
+        fontSize: 13,
+        fontWeight: isActive ? 500 : 400,
+        color: isActive ? "#E2E8F0" : hov ? "#C1C9D6" : "#6B7280",
+        background: isActive ? "rgba(59,130,246,0.10)" : hov ? "rgba(255,255,255,0.03)" : "transparent",
+        borderLeft: collapsed ? "none" : `2px solid ${isActive ? "#3B82F6" : "transparent"}`,
+        borderRight: collapsed ? `2px solid ${isActive ? "#3B82F6" : "transparent"}` : "none",
+        transition: "all 100ms",
+        textDecoration: "none",
+        position: "relative" as const,
+      })}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
     >
-      {({ isActive }) => rowContent(isActive)}
+      <Icon
+        size={15}
+        style={{
+          color: isActive ? "#60A5FA" : hov ? "#9CA3AF" : "#4B5563",
+          transition: "color 100ms",
+          flexShrink: 0,
+        }}
+      />
+      {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
+      {!collapsed && displayBadge && (
+        <span style={{
+          padding: "1px 6px", borderRadius: 9999,
+          fontSize: 9, fontWeight: 700,
+          fontFamily: "'JetBrains Mono', monospace",
+          background: badgeBg, color: badgeFg,
+        }}>
+          {displayBadge}
+        </span>
+      )}
+      {collapsed && displayBadge && (
+        <span style={{
+          position: "absolute", top: 5, right: 5,
+          width: 5, height: 5, borderRadius: "50%",
+          background: badgeColor === "red" ? "#EF4444" : badgeColor === "green" ? "#10B981" : "#3B82F6",
+        }} />
+      )}
     </NavLink>
+  );
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
+  if (collapsed) {
+    return <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "6px 10px" }} />;
+  }
+  return (
+    <div style={{
+      padding: "10px 14px 3px",
+      fontSize: 9,
+      fontWeight: 700,
+      letterSpacing: "1.2px",
+      textTransform: "uppercase" as const,
+      color: "#374151",
+      fontFamily: "'JetBrains Mono', monospace",
+    }}>
+      {label}
+    </div>
   );
 }
 
@@ -275,7 +239,6 @@ export function Sidebar() {
   const memberRole = useTenantStore((s) => s.memberRole);
   const hasRole    = useTenantStore((s) => s.hasRole);
   const navigate   = useNavigate();
-  const location   = useLocation();
 
   const collapsed     = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
@@ -288,41 +251,38 @@ export function Sidebar() {
   const tenantName = tenant?.name ?? "NEURASHIELD";
   const userRole   = memberRole ?? user?.roles?.[0] ?? "analyst";
 
-  const currentCategory = pathToCategory(location.pathname);
-  const [activeCategory, setActiveCategory] = useState(currentCategory);
-  const settingsTab = new URLSearchParams(location.search).get("tab") || "profile";
-
-  useEffect(() => {
-    setActiveCategory(currentCategory);
-  }, [currentCategory]);
-
-  const CATEGORIES: CategoryDef[] = [
-    { id: "overview", icon: LayoutDashboard, label: "Overview", direct: "/dashboard" },
+  const SECTIONS: SectionDef[] = [
     {
-      id: "detect", icon: Bell, label: "Detect",
+      label: "",
       items: [
-        { to: "/alerts",         icon: Bell,        label: "Alerts",         badge: alertCount || null, badgeColor: "red" },
+        { to: "/dashboard", icon: LayoutDashboard, label: "Overview" },
+      ],
+    },
+    {
+      label: "Detect",
+      items: [
+        { to: "/alerts",         icon: Bell,        label: "Alerts",         badge: alertCount || null, badgeColor: "red" as const   },
         ...(hasRole("analyst") ? [{ to: "/investigations", icon: FolderSearch, label: "Investigations" }] : []),
       ],
     },
     {
-      id: "analyze", icon: Crosshair, label: "Analyze",
+      label: "Analyze",
       items: [
-        { to: "/events", icon: Activity, label: "Events" },
+        { to: "/events", icon: Activity,  label: "Events"          },
         ...(hasRole("analyst") ? [{ to: "/hunt",  icon: Crosshair, label: "Threat Hunt"    }] : []),
-        { to: "/rules",          icon: Shield,    label: "Detection Rules" },
+        { to: "/rules",  icon: Shield,    label: "Detection Rules" },
         ...(hasRole("analyst") ? [{ to: "/graph", icon: Network,   label: "Attack Graph"   }] : []),
       ],
     },
     {
-      id: "respond", icon: Sparkles, label: "Respond",
+      label: "Respond",
       items: [
-        ...(hasRole("analyst") ? [{ to: "/copilot",   icon: Sparkles, label: "AI Copilot", badge: "BETA" as const, badgeColor: "blue" as const }] : []),
-        ...(hasRole("analyst") ? [{ to: "/playbooks", icon: BookOpen, label: "Playbooks"                                                         }] : []),
+        ...(hasRole("analyst") ? [{ to: "/copilot",   icon: Sparkles,  label: "AI Copilot", badge: "BETA" as const, badgeColor: "blue" as const }] : []),
+        ...(hasRole("analyst") ? [{ to: "/playbooks", icon: BookOpen,  label: "Playbooks"                                                         }] : []),
       ],
     },
     {
-      id: "report", icon: FileBarChart, label: "Report",
+      label: "Report",
       items: [
         ...(hasRole("analyst") ? [{ to: "/reports",            icon: FileBarChart, label: "Reports"      }] : []),
         ...(hasRole("analyst") ? [{ to: "/compliance-reports", icon: FileCheck,    label: "Compliance"   }] : []),
@@ -331,7 +291,7 @@ export function Sidebar() {
       ],
     },
     {
-      id: "intel", icon: Globe, label: "Intel",
+      label: "Intelligence",
       items: [
         ...(hasRole("analyst") ? [{ to: "/threat-intel",      icon: Globe,      label: "Threat Intel" }] : []),
         ...(hasRole("analyst") ? [{ to: "/ueba",              icon: UserSearch, label: "UEBA"         }] : []),
@@ -340,9 +300,9 @@ export function Sidebar() {
       ],
     },
     {
-      id: "platform", icon: Monitor, label: "Platform",
+      label: "Platform",
       items: [
-        { to: "/agents",    icon: Monitor,   label: "Agents",       badge: onlineAgentCount || null, badgeColor: "green" },
+        { to: "/agents",    icon: Monitor,   label: "Agents",       badge: onlineAgentCount || null, badgeColor: "green" as const },
         { to: "/installer", icon: Download,  label: "Device Enroll"                                                      },
         ...(hasRole("admin") ? [{ to: "/fleet",     icon: Wifi,       label: "Fleet"       }] : []),
         ...(hasRole("admin") ? [{ to: "/import",    icon: Upload,     label: "Log Import"  }] : []),
@@ -351,195 +311,174 @@ export function Sidebar() {
       ],
     },
     {
-      id: "settings", icon: Settings, label: "Settings",
+      label: "Settings",
       items: [
-        { to: "/settings", icon: User,      label: "Profile",             tabParam: "profile",             sectionLabel: "ACCOUNT"        },
-        { to: "/settings", icon: Bell,      label: "Notifications",       tabParam: "notifications"                                        },
-        { to: "/settings", icon: Monitor,   label: "Display",             tabParam: "display"                                              },
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Building2, label: "Organization",       tabParam: "org",                   sectionLabel: "ADMINISTRATION" }] : []),
-        { to: "/settings", icon: Users,     label: "Members",             tabParam: "members"                                              },
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Key,       label: "API Keys",           tabParam: "api-keys"                                             }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: BellRing,  label: "Alert Routing",      tabParam: "notification-rules",    sectionLabel: "OPERATIONS"     }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: BarChart3, label: "Severity Thresholds",tabParam: "severity-thresholds"                                  }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Zap,       label: "Automation",         tabParam: "automation"                                           }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Network,   label: "Integrations",       tabParam: "ticketing",             sectionLabel: "PLATFORM"       }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Gauge,     label: "Quota & Usage",      tabParam: "quota"                                                }] : []),
+        { to: "/settings", icon: User,      label: "Profile",              tabParam: "profile"             },
+        { to: "/settings", icon: Bell,      label: "Notifications",        tabParam: "notifications"       },
+        { to: "/settings", icon: Monitor,   label: "Display",              tabParam: "display"             },
+        ...(hasRole("admin") ? [{ to: "/settings", icon: Building2, label: "Organization",   tabParam: "org"                   }] : []),
+        { to: "/settings", icon: Users,     label: "Members",              tabParam: "members"             },
+        ...(hasRole("admin") ? [{ to: "/settings", icon: Key,       label: "API Keys",       tabParam: "api-keys"              }] : []),
+        ...(hasRole("admin") ? [{ to: "/settings", icon: BellRing,  label: "Alert Routing",  tabParam: "notification-rules"    }] : []),
+        ...(hasRole("admin") ? [{ to: "/settings", icon: BarChart3, label: "Severity",       tabParam: "severity-thresholds"   }] : []),
+        ...(hasRole("admin") ? [{ to: "/settings", icon: Zap,       label: "Automation",     tabParam: "automation"            }] : []),
+        ...(hasRole("admin") ? [{ to: "/settings", icon: Network,   label: "Integrations",   tabParam: "ticketing"             }] : []),
+        ...(hasRole("admin") ? [{ to: "/settings", icon: Gauge,     label: "Quota & Usage",  tabParam: "quota"                 }] : []),
       ],
     },
-  ];
-
-  const activeDef = CATEGORIES.find((c) => c.id === activeCategory);
-
-  const handleRailClick = (id: string) => {
-    const cat = CATEGORIES.find((c) => c.id === id)!;
-    if (cat.direct) {
-      navigate(cat.direct);
-      setActiveCategory(id);
-      return;
-    }
-    if (cat.items && cat.items.length > 0) {
-      if (collapsed) {
-        toggleSidebar();
-        setActiveCategory(id);
-      } else if (id === activeCategory) {
-        toggleSidebar();
-      } else {
-        setActiveCategory(id);
-      }
-    }
-  };
+  ].filter((s) => s.items.length > 0);
 
   const handleLogout = () => { clearAuth(); navigate("/login"); };
 
-  return (
-    <aside style={{
-      width: collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W,
-      minWidth: collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W,
-      background: "#050505",
-      display: "flex",
-      height: "100vh",
-      position: "fixed",
-      top: 0, left: 0,
-      zIndex: 40,
-      transition: "width 200ms cubic-bezier(0.4,0,0.2,1), min-width 200ms cubic-bezier(0.4,0,0.2,1)",
-      overflow: "hidden",
-      borderRight: "1px solid rgba(255,255,255,0.055)",
-    }}>
+  const sidebarW = collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W;
 
-      {/* ── Icon Rail ──────────────────────────────────────────────────── */}
+  return (
+    <aside
+      style={{
+        width: sidebarW,
+        minWidth: sidebarW,
+        background: "#050505",
+        borderRight: "1px solid rgba(255,255,255,0.055)",
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        position: "fixed",
+        top: 0,
+        left: 0,
+        zIndex: 40,
+        transition: "width 200ms cubic-bezier(0.4,0,0.2,1), min-width 200ms cubic-bezier(0.4,0,0.2,1)",
+        overflow: "hidden",
+      }}
+    >
+      {/* Logo row */}
       <div style={{
-        width: RAIL_W, minWidth: RAIL_W,
-        display: "flex", flexDirection: "column", height: "100%",
-        borderRight: collapsed ? "none" : "1px solid rgba(255,255,255,0.04)",
+        height: 48,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: collapsed ? "center" : "space-between",
+        padding: collapsed ? "0" : "0 10px 0 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
         flexShrink: 0,
       }}>
-        {/* Logo */}
-        <div style={{
-          height: 48, display: "flex", alignItems: "center", justifyContent: "center",
-          borderBottom: "1px solid rgba(255,255,255,0.04)", flexShrink: 0,
-        }}>
-          <NavLink to="/dashboard" style={{ textDecoration: "none", display: "flex" }}>
-            <LogoCompact compact />
-          </NavLink>
-        </div>
-
-        {/* Category buttons */}
-        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0" }}>
-          {CATEGORIES.map((cat) => (
-            <RailItem
-              key={cat.id}
-              id={cat.id}
-              icon={cat.icon}
-              label={cat.label}
-              isActive={activeCategory === cat.id}
-              hasDot={cat.id === "detect" && alertCount > 0}
-              onClick={handleRailClick}
-            />
-          ))}
-        </nav>
-
-        {/* Rail footer: live dot + toggle + logout */}
-        <div style={{
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-          padding: "10px 0",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 7,
-          flexShrink: 0,
-        }}>
-          <span className="dot-live" title="Live" />
+        <NavLink to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
+          <LogoCompact compact={collapsed} />
+        </NavLink>
+        {!collapsed && (
           <button
             onClick={toggleSidebar}
-            title={collapsed ? "Expand navigation" : "Collapse navigation"}
+            title="Collapse sidebar"
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: 26, height: 26, borderRadius: 5,
-              background: "transparent", border: "1px solid rgba(255,255,255,0.06)",
-              color: "#374151", cursor: "pointer", transition: "all 120ms",
+              width: 24, height: 24, borderRadius: 4,
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.07)",
+              color: "#374151", cursor: "pointer", transition: "all 120ms", flexShrink: 0,
             }}
-            onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#D1D5DB"; }}
+            onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#9CA3AF"; }}
             onMouseOut={(e)  => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
           >
-            {collapsed ? <PanelLeftOpen size={12} /> : <PanelLeftClose size={12} />}
+            <ChevronLeft size={12} />
           </button>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 26, height: 26, borderRadius: 5,
-              background: "transparent", border: "1px solid rgba(255,255,255,0.06)",
-              color: "#374151", cursor: "pointer", transition: "all 120ms",
-            }}
-            onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; }}
-            onMouseOut={(e)  => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
-          >
-            <LogOut size={12} />
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* ── Secondary Panel ────────────────────────────────────────────── */}
+      {/* Navigation */}
+      <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0" }}>
+        {SECTIONS.map((section, si) => (
+          <div key={si}>
+            {section.label && <SectionLabel label={section.label} collapsed={collapsed} />}
+            {section.items.map((item) => (
+              <NavItem
+                key={item.to + (item.tabParam ?? "")}
+                {...item}
+                collapsed={collapsed}
+              />
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      {/* Footer */}
       <div style={{
-        width: PANEL_W, minWidth: PANEL_W,
-        display: "flex", flexDirection: "column", height: "100%",
-        background: "#060606",
-        opacity: collapsed ? 0 : 1,
-        pointerEvents: collapsed ? "none" : "auto",
-        transition: "opacity 150ms",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        padding: collapsed ? "10px 0" : "10px 12px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: collapsed ? "center" : "space-between",
+        gap: 8,
         flexShrink: 0,
       }}>
-        {/* Panel header */}
-        <div style={{
-          height: 48, display: "flex", alignItems: "center",
-          padding: "0 14px", gap: 8,
-          borderBottom: "1px solid rgba(255,255,255,0.04)", flexShrink: 0,
-        }}>
-          {activeDef && (
-            <>
-              <activeDef.icon size={13} style={{ color: "#374151", flexShrink: 0 }} />
-              <span style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: "1.5px",
-                textTransform: "uppercase", color: "#374151",
-                fontFamily: "'JetBrains Mono', monospace",
+        {collapsed ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <span className="dot-live" title="Live" />
+            <button
+              onClick={toggleSidebar}
+              title="Expand sidebar"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 24, height: 24, borderRadius: 4,
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "#374151", cursor: "pointer", transition: "all 120ms",
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#9CA3AF"; }}
+              onMouseOut={(e)  => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
+            >
+              <ChevronRight size={12} />
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 24, height: 24, borderRadius: 4,
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "#374151", cursor: "pointer", transition: "all 120ms",
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; }}
+              onMouseOut={(e)  => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
+            >
+              <LogOut size={12} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontSize: 11.5, fontWeight: 600, color: "#D1D5DB",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                marginBottom: 1,
               }}>
-                {activeDef.label}
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Panel items */}
-        <nav style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "10px 0" }}>
-          {activeDef?.items?.map((item, i) => {
-            const isActiveOverride = item.tabParam !== undefined
-              ? settingsTab === item.tabParam
-              : undefined;
-            return (
-              <div key={item.to + (item.tabParam ?? "") + i}>
-                {item.sectionLabel && <PanelSection label={item.sectionLabel} />}
-                <PanelItem {...item} isActiveOverride={isActiveOverride} />
+                {tenantName}
               </div>
-            );
-          })}
-        </nav>
-
-        {/* Tenant + role */}
-        <div style={{
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-          padding: "12px 14px", flexShrink: 0,
-        }}>
-          <div style={{
-            fontSize: 11.5, fontWeight: 600, color: "#D1D5DB", marginBottom: 3,
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {tenantName}
-          </div>
-          <div style={{
-            fontSize: 8.5, textTransform: "uppercase", letterSpacing: "1px",
-            color: "#374151", fontFamily: "'JetBrains Mono', monospace",
-          }}>
-            {String(userRole).toUpperCase()}
-          </div>
-        </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span className="dot-live" title="Live" />
+                <span style={{
+                  fontSize: 8.5, textTransform: "uppercase", letterSpacing: "0.8px",
+                  color: "#374151", fontFamily: "'JetBrains Mono', monospace",
+                }}>
+                  {String(userRole).toUpperCase()}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 28, height: 28, borderRadius: 5,
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "#374151", cursor: "pointer", transition: "all 120ms", flexShrink: 0,
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(248,113,113,0.3)"; }}
+              onMouseOut={(e)  => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.07)"; }}
+            >
+              <LogOut size={13} />
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );

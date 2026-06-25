@@ -15,7 +15,7 @@ export function AppShell() {
   useTenantCacheReset();
 
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
-  const sidebarW  = collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W;
+  const sidebarW  = collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W;  // 56 or 230
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#000000", overflow: "hidden" }}>
