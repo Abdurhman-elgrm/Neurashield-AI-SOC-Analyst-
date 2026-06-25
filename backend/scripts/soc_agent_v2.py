@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 NEURASHIELD SOC Agent v2.0
-Reads credentials from C:\ProgramData\SOCAnalyst\credentials.json
+Reads credentials from C:\\ProgramData\\SOCAnalyst\\credentials.json
 Uses V2 backend auth: X-Agent-ID + X-Agent-Token + X-Tenant-ID
 """
 
@@ -25,7 +25,7 @@ except ImportError:
     os.system(f'"{sys.executable}" -m pip install requests --quiet')
     import requests
 
-# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Config --------------------------------------------------------------------
 
 _AGENT_DIR       = r"C:\ProgramData\SOCAnalyst"
 _CREDS_FILE      = os.path.join(_AGENT_DIR, "credentials.json")
@@ -58,7 +58,7 @@ TENANT_ID        = _creds["tenant_id"]
 _HOSTNAME        = _creds.get("hostname") or platform.node()
 _OS_TYPE         = "windows" if platform.system() == "Windows" else platform.system().lower()
 
-# â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Logging -------------------------------------------------------------------
 
 
 def _open_log():
@@ -131,7 +131,7 @@ def _pywin_time_to_utc_iso(pywin_time) -> str:
     except Exception:
         return _utc_iso()
 
-# â”€â”€ Auth headers (Bug 1 fixed: includes X-Tenant-ID) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Auth headers (Bug 1 fixed: includes X-Tenant-ID) -------------------------
 
 
 def _agent_headers():
@@ -142,7 +142,7 @@ def _agent_headers():
         "Content-Type":  "application/json",
     }
 
-# â”€â”€ HTTP helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- HTTP helpers --------------------------------------------------------------
 
 _AGENT_REVOKED = False
 
@@ -154,18 +154,18 @@ def _post(path: str, payload: dict, timeout: int = 10, silent: bool = False) -> 
     for attempt in range(3):
         try:
             r = requests.post(
-                f”{API_ENDPOINT}{path}”,
+                f"{API_ENDPOINT}{path}",
                 json=payload,
                 headers=_agent_headers(),
                 timeout=timeout,
             )
             if r.status_code == 401:
                 _AGENT_REVOKED = True
-                print(f”[{_now()}] Agent credentials rejected (401) — re-enroll this device”)
+                print(f"[{_now()}] Agent credentials rejected (401) — re-enroll this device")
                 return False
             if r.status_code == 410:
                 _AGENT_REVOKED = True
-                print(f”[{_now()}] Agent removed from dashboard (410)”)
+                print(f"[{_now()}] Agent removed from dashboard (410)")
                 return False
             r.raise_for_status()
             return True
@@ -173,10 +173,10 @@ def _post(path: str, payload: dict, timeout: int = 10, silent: bool = False) -> 
             if attempt < 2:
                 time.sleep(2 ** attempt)
             elif not silent:
-                print(f”[{_now()}] POST {path} failed: {exc}”)
+                print(f"[{_now()}] POST {path} failed: {exc}")
     return False
 
-# â”€â”€ Heartbeat (correct HeartbeatRequest schema) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Heartbeat (correct HeartbeatRequest schema) -------------------------------
 
 HEARTBEAT_INTERVAL     = 20   # seconds — normal cadence
 _HB_BACKOFF_DEGRADED   = 60   # seconds — after 1–2 consecutive failures
@@ -184,24 +184,24 @@ _HB_BACKOFF_EXTENDED   = 120  # seconds — after 3+ consecutive failures
 
 
 def _heartbeat(silent: bool = False) -> bool:
-    “””POST /api/v1/agents/heartbeat — HeartbeatRequest schema.
+    """POST /api/v1/agents/heartbeat — HeartbeatRequest schema.
 
     Pass silent=True to suppress the POST-failed log line when the caller
     already knows connectivity is degraded and handles messaging itself.
-    “””
+    """
     try:
         ip = socket.gethostbyname(socket.gethostname())
     except Exception:
         ip = None
 
     payload = {
-        “agent_version”: “2.0.0”,
-        “ip_address”:    ip,
-        “os_metrics”:    {},
+        "agent_version": "2.0.0",
+        "ip_address":    ip,
+        "os_metrics":    {},
     }
-    return _post(“/api/v1/agents/heartbeat”, payload, timeout=5, silent=silent)
+    return _post("/api/v1/agents/heartbeat", payload, timeout=5, silent=silent)
 
-# â”€â”€ Event format conversion (Bug 2 fixed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Event format conversion (Bug 2 fixed) -------------------------------------
 
 _CATEGORY_MAP = {
     "network_monitor":  "network",
@@ -303,7 +303,7 @@ def _to_v2_format(v1_events: list) -> list:
         result.append(payload)
     return result
 
-# â”€â”€ Queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Queue ---------------------------------------------------------------------
 
 _Q_BATCH_SIZE  = 20
 _Q_MAX_RETRIES = 5
@@ -421,7 +421,7 @@ class _QueueDrainer:
         # Convert to V2 RawEventPayload format
         v2_events = _to_v2_format(v1_clean)
 
-        # POST as plain JSON â€” backend expects IngestBatchRequest
+        # POST as plain JSON -- backend expects IngestBatchRequest
         payload = {"events": v2_events}
 
         err = ""
@@ -463,7 +463,7 @@ def _init_queue():
         _queue   = _EventQueue(_Q_DB_PATH)
         _drainer = _QueueDrainer(_queue)
 
-# â”€â”€ Monitoring constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Monitoring constants ------------------------------------------------------
 
 _SUSPICIOUS_PORTS = {
     4444, 1337, 31337, 6666, 6667, 6668, 6669,
@@ -550,7 +550,7 @@ _EVTID_FIELDS = {
     7045: [("Service Name", 0), ("Image Path", 1), ("Service Type", 2)],
 }
 
-# â”€â”€ Checkpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Checkpoint ----------------------------------------------------------------
 
 _win_last_record:    dict = {}
 _win_modern_last_ts: dict = {}
@@ -580,7 +580,7 @@ def _save_checkpoint():
     except Exception:
         pass
 
-# â”€â”€ Smart event filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Smart event filter --------------------------------------------------------
 
 
 def should_send_event(event_id, inserts):
@@ -620,7 +620,7 @@ def should_send_event(event_id, inserts):
         return True
     return False
 
-# â”€â”€ Event message formatter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Event message formatter ---------------------------------------------------
 
 
 def _fmt_event_message(ev, channel):
@@ -646,14 +646,14 @@ def _fmt_event_message(ev, channel):
         return " ".join(str(s) for s in inserts)
     return ""
 
-# â”€â”€ Windows log reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Windows log reader --------------------------------------------------------
 
 
 def _read_windows_logs() -> list:
     try:
         import win32evtlog
     except ImportError:
-        print(f"[{_now()}] pywin32 not installed â€” run: pip install pywin32")
+        print(f"[{_now()}] pywin32 not installed -- run: pip install pywin32")
         return []
 
     logs = []
@@ -796,7 +796,7 @@ def _read_win_modern_channels() -> list:
             continue
     return logs
 
-# â”€â”€ Linux log reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Linux log reader ----------------------------------------------------------
 
 
 class _FileTailer:
@@ -886,7 +886,7 @@ def _read_linux_logs() -> list:
                 })
     return logs
 
-# â”€â”€ Network monitor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Network monitor -----------------------------------------------------------
 
 
 def _collect_network_connections() -> list:
@@ -930,7 +930,7 @@ def _collect_network_connections() -> list:
         print(f"[{_now()}] [NET] {exc}")
     return logs
 
-# â”€â”€ Process monitor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Process monitor -----------------------------------------------------------
 
 
 def _collect_suspicious_processes() -> list:
@@ -970,7 +970,7 @@ def _collect_suspicious_processes() -> list:
         print(f"[{_now()}] [PROC] {exc}")
     return logs
 
-# â”€â”€ FIM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- FIM -----------------------------------------------------------------------
 
 
 def _sha256_file(path: str) -> str:
@@ -1018,7 +1018,7 @@ def _collect_logs() -> list:
         return _read_windows_logs() + _read_win_modern_channels()
     return _read_linux_logs()
 
-# â”€â”€ Main loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Main loop -----------------------------------------------------------------
 
 LOG_INTERVAL  = 10
 NET_INTERVAL  = 300
@@ -1115,7 +1115,7 @@ if __name__ == "__main__":
     try:
         _lock.bind(("127.0.0.1", 47333))
     except OSError:
-        print("Already running â€” exiting.")
+        print("Already running -- exiting.")
         sys.exit(0)
 
     while True:

@@ -282,84 +282,114 @@ Write-OK "Dependencies OK (requests + pywin32)"
 $pythonwExe = $pythonExe -replace 'python\.exe$', 'pythonw.exe'
 if (-not (Test-Path $pythonwExe)) { $pythonwExe = $pythonExe }
 
-# ── Step 7: Create scheduled task ────────────────────────────────────────────
+# ── Step 7: Create scheduled task (requires admin) or fall back ───────────────
 Write-Step "Installing scheduled task..."
 
 $LOG_FILE = Join-Path $INSTALL_DIR "agent_v2.log"
 
-# Remove existing task if present
-$existingTask = Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
-if ($existingTask) {
-    Stop-ScheduledTask  -TaskName $TASK_NAME -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+$taskInstalled = $false
+
+if ($isAdmin) {
+    # Remove existing task if present
+    $existingTask = Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+    if ($existingTask) {
+        Stop-ScheduledTask  -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
+    }
+
+    $action  = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $logonTrigger    = New-ScheduledTaskTrigger -AtLogOn
+    $watchdogTrigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 30) `
+        -Once -At ([datetime]::Today)
+
+    $settings = New-ScheduledTaskSettingsSet `
+        -ExecutionTimeLimit       (New-TimeSpan -Hours 0) `
+        -RestartCount             10 `
+        -RestartInterval          (New-TimeSpan -Minutes 1) `
+        -StartWhenAvailable       `
+        -RunOnlyIfNetworkAvailable:$false `
+        -MultipleInstances        Queue
+
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+    try {
+        Register-ScheduledTask `
+            -TaskName  $TASK_NAME `
+            -Action    $action `
+            -Trigger   @($trigger, $logonTrigger, $watchdogTrigger) `
+            -Settings  $settings `
+            -Principal $principal `
+            -Force -ErrorAction Stop | Out-Null
+        $taskInstalled = $true
+        Write-OK "Scheduled task '$TASK_NAME' installed (runs as SYSTEM at startup)"
+    } catch {
+        Write-Host "[bootstrap] WARN  Scheduled task registration failed: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[bootstrap] WARN  Not running as Administrator -- scheduled task skipped." -ForegroundColor Yellow
+    Write-Host "            Re-run as admin to install persistent service." -ForegroundColor Yellow
+    Write-Host "            Re-run: Start-Process PowerShell -Verb RunAs" -ForegroundColor DarkGray
 }
-
-# Run Python directly - no cmd.exe wrapper needed.
-# The agent opens its own log file as the very first operation, so all
-# startup errors (including import failures) are captured there.
-$action  = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
-$trigger = New-ScheduledTaskTrigger -AtStartup
-
-# Also add an AtLogon trigger so it starts when any user logs in
-$logonTrigger = New-ScheduledTaskTrigger -AtLogOn
-
-# Watchdog trigger: fires every 30 minutes.
-# Handles the case where the PC wakes from Sleep — AtStartup and AtLogon do NOT
-# fire on sleep-wake, so without this trigger the agent stays dead until next
-# full reboot or login. -StartWhenAvailable means if the PC was asleep when the
-# trigger fired, it runs immediately on wake. -MultipleInstances Queue ensures
-# two copies never run simultaneously.
-$watchdogTrigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 30) `
-    -Once -At ([datetime]::Today)
-
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit       (New-TimeSpan -Hours 0) `
-    -RestartCount             10 `
-    -RestartInterval          (New-TimeSpan -Minutes 1) `
-    -StartWhenAvailable       `
-    -RunOnlyIfNetworkAvailable:$false `
-    -MultipleInstances        Queue
-
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-
-Register-ScheduledTask `
-    -TaskName  $TASK_NAME `
-    -Action    $action `
-    -Trigger   @($trigger, $logonTrigger, $watchdogTrigger) `
-    -Settings  $settings `
-    -Principal $principal `
-    -Force | Out-Null
-
-Write-OK "Scheduled task '$TASK_NAME' installed (runs as SYSTEM at startup)"
 
 # ── Step 8: Start agent and verify it is running ─────────────────────────────
 Write-Step "Starting agent..."
 
-Start-ScheduledTask -TaskName $TASK_NAME
+# Snapshot log modification time before starting -- we verify against this
+$logBefore = if (Test-Path $LOG_FILE) { (Get-Item $LOG_FILE).LastWriteTime } else { [datetime]::MinValue }
 
-# Wait up to 20 seconds for Python to create its log file - that is the
-# definitive proof the agent process actually started and is running.
-$deadline = (Get-Date).AddSeconds(20)
-while (-not (Test-Path $LOG_FILE) -and (Get-Date) -lt $deadline) {
-    Start-Sleep -Seconds 2
+if ($taskInstalled) {
+    Start-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
+} else {
+    # Fallback: run agent directly as current user (no admin required)
+    Write-Host "[bootstrap] INFO  Starting agent as current user (no SYSTEM task)..." -ForegroundColor Cyan
+    Start-Process -FilePath $pythonwExe -ArgumentList "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
 }
 
-$state = (Get-ScheduledTask -TaskName $TASK_NAME).State
+# Wait up to 25 seconds for the log to show NEW activity (not just existence)
+$deadline = (Get-Date).AddSeconds(25)
+$agentStarted = $false
+while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Seconds 2
+    if (Test-Path $LOG_FILE) {
+        $logAfter = (Get-Item $LOG_FILE).LastWriteTime
+        if ($logAfter -gt $logBefore) { $agentStarted = $true; break }
+    }
+}
 
-if (Test-Path $LOG_FILE) {
-    Write-OK "Agent is running (log file created)"
+if ($agentStarted) {
+    Write-OK "Agent is running (log activity confirmed)"
     Get-Content $LOG_FILE -Tail 3 | ForEach-Object { Write-Host "  > $_" -ForegroundColor DarkGray }
 } else {
-    Write-Host "[bootstrap] WARN  Agent log not created after 20s (task state: $state)" -ForegroundColor Yellow
-    Write-Host "            The agent will start automatically on next login/reboot." -ForegroundColor Yellow
-    Write-Host "            To diagnose: Get-Content $LOG_FILE" -ForegroundColor DarkGray
+    # Check for startup errors
+    $stderrFile = Join-Path $INSTALL_DIR "agent_stderr.txt"
+    Write-Host "[bootstrap] WARN  Agent log did not update in 25s -- checking for errors..." -ForegroundColor Yellow
+    if (Test-Path $stderrFile) {
+        $errLines = Get-Content $stderrFile -ErrorAction SilentlyContinue
+        if ($errLines) {
+            Write-Host "[bootstrap] ERR   Agent startup error:" -ForegroundColor Red
+            $errLines | Select-Object -First 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        }
+    }
+    if ($taskInstalled) {
+        $state = (Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue).State
+        Write-Host "[bootstrap] INFO  Task state: $state" -ForegroundColor DarkGray
+    }
+    Write-Host "[bootstrap]       The agent will retry on next login/reboot." -ForegroundColor Yellow
+    Write-Host "            To diagnose: Get-Content '$LOG_FILE'" -ForegroundColor DarkGray
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  Agent enrolled successfully." -ForegroundColor Green
-Write-Host "  The agent will appear in your SOC Platform dashboard." -ForegroundColor Green
 Write-Host "  Credentials stored at: $CREDS_FILE" -ForegroundColor DarkGray
 Write-Host "  Agent script at:       $AGENT_FILE" -ForegroundColor DarkGray
-Write-Host "  Scheduled task:        $TASK_NAME (SYSTEM, runs at startup)" -ForegroundColor DarkGray
+if ($taskInstalled) {
+    Write-Host "  Scheduled task:        $TASK_NAME (SYSTEM, runs at startup)" -ForegroundColor DarkGray
+} else {
+    Write-Host "  NOTE: Run as Administrator to install as a persistent SYSTEM service." -ForegroundColor Yellow
+}
 Write-Host ""
