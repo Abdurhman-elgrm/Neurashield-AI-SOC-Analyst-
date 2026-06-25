@@ -126,3 +126,61 @@ async def heartbeat(
     await IngestionService.record_heartbeat(db, agent, payload)
     await db.commit()
     return APIResponse.ok(EmptyResponse())
+
+
+@router.get("/pipeline-status")
+async def pipeline_status(
+    agent: AuthenticatedAgent,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    redis: Annotated["object", Depends(get_redis)],
+) -> APIResponse:
+    """Diagnostic endpoint: returns pipeline health for this tenant (agent auth)."""
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import select, func as sqlfunc
+    from app.models.event import Event
+    from app.pipeline import stream_names
+
+    now = datetime.now(tz=timezone.utc)
+    cutoff_24h = now - timedelta(hours=24)
+    cutoff_1h  = now - timedelta(hours=1)
+
+    r24 = await db.execute(
+        select(sqlfunc.count()).where(
+            Event.tenant_id == agent.tenant_id,
+            Event.ingested_at >= cutoff_24h,
+        )
+    )
+    r1 = await db.execute(
+        select(sqlfunc.count()).where(
+            Event.tenant_id == agent.tenant_id,
+            Event.ingested_at >= cutoff_1h,
+        )
+    )
+    latest_row = await db.execute(
+        select(Event.ingested_at).where(Event.tenant_id == agent.tenant_id)
+        .order_by(Event.ingested_at.desc()).limit(1)
+    )
+    latest_ingested = latest_row.scalar_one_or_none()
+
+    from redis.asyncio import Redis as _Redis
+    redis_typed: _Redis[str] = redis  # type: ignore[assignment]
+    pipeline_client = TenantRedisClient(redis_typed, str(agent.tenant_id), stream_names.SUBSYSTEM)
+
+    try:
+        stream_key = pipeline_client._key(stream_names.RAW_EVENTS)
+        stream_len = await redis_typed.xlen(stream_key)
+        pending = await pipeline_client.xpending_count(stream_names.RAW_EVENTS, stream_names.GROUP_NORMALIZE)
+    except Exception:
+        stream_len = -1
+        pending = -1
+
+    return APIResponse.ok({
+        "tenant_id":          str(agent.tenant_id),
+        "agent_id":           str(agent.id),
+        "events_last_24h":    r24.scalar() or 0,
+        "events_last_1h":     r1.scalar() or 0,
+        "latest_ingested_at": latest_ingested.isoformat() if latest_ingested else None,
+        "redis_stream_len":   stream_len,
+        "pending_normalize":  pending,
+        "checked_at":         now.isoformat(),
+    })
