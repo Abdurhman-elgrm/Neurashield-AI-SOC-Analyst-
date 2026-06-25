@@ -147,7 +147,9 @@ async def _get_or_create_user(db: AsyncSession, tenant: Tenant) -> User:
 # ─── Wipe ─────────────────────────────────────────────────────────────────────
 
 async def _wipe_tenant_data(db: AsyncSession, tenant_id: str) -> None:
-    # playbook_steps has no tenant_id — it cascades from playbooks deletion
+    from uuid import UUID as _UUID
+    tid_obj = _UUID(tenant_id)
+    # playbook_steps has no tenant_id — cascade-deleted via playbooks FK
     for table in [
         "playbook_runs", "playbooks",
         "suppression_rules", "audit_logs",
@@ -155,8 +157,8 @@ async def _wipe_tenant_data(db: AsyncSession, tenant_id: str) -> None:
         "detection_rules", "heartbeats", "agents",
     ]:
         await db.execute(
-            text(f"DELETE FROM {table} WHERE tenant_id = :tid::uuid"),
-            {"tid": tenant_id},
+            text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
+            {"tid": tid_obj},
         )
     await db.flush()
 

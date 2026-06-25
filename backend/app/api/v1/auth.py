@@ -413,13 +413,8 @@ async def demo_login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[TokenPair]:
-    import traceback as _tb
-    from fastapi.responses import JSONResponse as _JR
     from app.services.demo_service import demo_login as _demo_login
-    try:
-        token_pair = await _demo_login(db)
-    except Exception as _exc:
-        return _JR(status_code=500, content={"debug_error": f"{type(_exc).__name__}: {_exc}", "traceback": _tb.format_exc()[-2000:]})
+    token_pair = await _demo_login(db)
     _set_refresh_cookie(response, token_pair.refresh_token)
     return APIResponse.ok(token_pair)
 
