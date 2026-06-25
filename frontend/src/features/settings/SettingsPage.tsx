@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import {
   User, Building2, Key, Users, Bell, Bot,
   Plus, Copy, Check, Trash2, CheckCircle,
@@ -1940,32 +1939,91 @@ const ALL_TABS = [
 type TabId = typeof ALL_TABS[number]['id']
 
 
+const TAB_GROUPS: Array<{ label: string; ids: TabId[] }> = [
+  { label: 'Account',        ids: ['profile', 'notifications', 'display'] },
+  { label: 'Administration', ids: ['org', 'members', 'api-keys'] },
+  { label: 'Operations',     ids: ['notification-rules', 'severity-thresholds', 'automation'] },
+  { label: 'Platform',       ids: ['ticketing', 'quota'] },
+]
+
 export function SettingsPage() {
   const hasRole = useTenantStore(s => s.hasRole)
   const TABS = ALL_TABS.filter(t => hasRole(t.minRole))
-  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState<TabId>('profile')
 
-  const tabFromUrl = searchParams.get('tab') as TabId | null
-  const activeTab: TabId = (tabFromUrl && TABS.find(t => t.id === tabFromUrl))
-    ? tabFromUrl
-    : 'profile'
+  const renderNavItem = (tab: (typeof ALL_TABS)[number]) => {
+    const Icon = tab.icon
+    const active = activeTab === tab.id
+    return (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          width: '100%', padding: '7px 14px',
+          fontSize: 12, cursor: 'pointer',
+          background: active ? 'rgba(59,130,246,0.08)' : 'transparent',
+          borderLeft: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+          border: 'none',
+          color: active ? '#93C5FD' : '#8B95A7',
+          fontWeight: active ? 600 : 400,
+          transition: 'all 120ms', textAlign: 'left',
+        }}
+      >
+        <Icon size={13} style={{ opacity: active ? 1 : 0.45, flexShrink: 0 }} />
+        {tab.label}
+      </button>
+    )
+  }
+
+  const groupedTabs = TAB_GROUPS.map(g => ({
+    label: g.label,
+    tabs: TABS.filter(t => g.ids.includes(t.id)),
+  })).filter(g => g.tabs.length > 0)
+
+  const groupedIds = new Set(TAB_GROUPS.flatMap(g => g.ids))
+  const ungrouped  = TABS.filter(t => !groupedIds.has(t.id))
 
   return (
     <div
       className="page-in"
-      style={{ height: 'calc(100vh - 50px - 40px)', overflowY: 'auto', padding: '0 32px 32px' }}
+      style={{ display: 'flex', gap: 0, height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }}
     >
-      {activeTab === 'profile'             && <ProfileTab              />}
-      {activeTab === 'org'                 && <OrgTab                  />}
-      {activeTab === 'api-keys'            && <ApiKeysTab              />}
-      {activeTab === 'members'             && <MembersTab              />}
-      {activeTab === 'notifications'       && <NotificationsTab        />}
-      {activeTab === 'notification-rules'  && <NotificationRulesSection />}
-      {activeTab === 'severity-thresholds' && <SeverityThresholdsSection />}
-      {activeTab === 'ticketing'           && <TicketingConfigSection  />}
-      {activeTab === 'quota'               && <QuotaDashboardSection   />}
-      {activeTab === 'automation'          && <AutomationTab           />}
-      {activeTab === 'display'             && <DisplaySection          />}
+      {/* Left nav */}
+      <div style={{
+        width: 200, flexShrink: 0,
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        paddingTop: 4, overflowY: 'auto',
+      }}>
+        {ungrouped.map(renderNavItem)}
+        {groupedTabs.map(group => (
+          <div key={group.label} style={{ marginBottom: 4 }}>
+            <div style={{
+              padding: '10px 14px 4px',
+              fontSize: 9, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '1.5px', color: '#3A4150',
+            }}>
+              {group.label}
+            </div>
+            {group.tabs.map(renderNavItem)}
+          </div>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 32px 32px' }}>
+        {activeTab === 'profile'             && <ProfileTab              />}
+        {activeTab === 'org'                 && <OrgTab                  />}
+        {activeTab === 'api-keys'            && <ApiKeysTab              />}
+        {activeTab === 'members'             && <MembersTab              />}
+        {activeTab === 'notifications'       && <NotificationsTab        />}
+        {activeTab === 'notification-rules'  && <NotificationRulesSection />}
+        {activeTab === 'severity-thresholds' && <SeverityThresholdsSection />}
+        {activeTab === 'ticketing'           && <TicketingConfigSection  />}
+        {activeTab === 'quota'               && <QuotaDashboardSection   />}
+        {activeTab === 'automation'          && <AutomationTab           />}
+        {activeTab === 'display'             && <DisplaySection          />}
+      </div>
     </div>
   )
 }

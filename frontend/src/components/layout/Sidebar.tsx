@@ -2,10 +2,9 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Bell, FolderSearch, Activity, Crosshair, Shield,
-  Sparkles, Monitor, LogOut, BookOpen, FileBarChart, Download,
+  Sparkles, Monitor, Settings, LogOut, BookOpen, FileBarChart, Download,
   Network, BarChart3, Server, UserSearch, ScrollText, EyeOff,
   Globe, Swords, Building2, Wifi, FileCheck, Upload,
-  User, Users, Key, Zap, Gauge, BellRing,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -313,17 +312,7 @@ export function Sidebar() {
     {
       label: "Settings",
       items: [
-        { to: "/settings", icon: User,      label: "Profile",              tabParam: "profile"             },
-        { to: "/settings", icon: Bell,      label: "Notifications",        tabParam: "notifications"       },
-        { to: "/settings", icon: Monitor,   label: "Display",              tabParam: "display"             },
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Building2, label: "Organization",   tabParam: "org"                   }] : []),
-        { to: "/settings", icon: Users,     label: "Members",              tabParam: "members"             },
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Key,       label: "API Keys",       tabParam: "api-keys"              }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: BellRing,  label: "Alert Routing",  tabParam: "notification-rules"    }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: BarChart3, label: "Severity",       tabParam: "severity-thresholds"   }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Zap,       label: "Automation",     tabParam: "automation"            }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Network,   label: "Integrations",   tabParam: "ticketing"             }] : []),
-        ...(hasRole("admin") ? [{ to: "/settings", icon: Gauge,     label: "Quota & Usage",  tabParam: "quota"                 }] : []),
+        { to: "/settings", icon: Settings, label: "Settings" },
       ],
     },
   ].filter((s) => s.items.length > 0);
