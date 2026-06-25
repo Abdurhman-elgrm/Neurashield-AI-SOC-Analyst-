@@ -35,6 +35,69 @@ export interface SLABreachPoint {
   crit_breach_pct: number;
 }
 
+// GET /metrics/sla-by-severity
+export interface SLABySeverityRow {
+  severity: "critical" | "high" | "medium" | "low";
+  target_minutes: number;   // SLA target response time
+  avg_minutes: number;      // actual avg response time
+  compliance_pct: number;   // % resolved within target
+  total_alerts: number;
+  breached: number;
+}
+
+// GET /metrics/sla-breaches?timeRange=…&page=…
+export interface SLABreachAlert {
+  alert_id: string;
+  title: string;
+  severity: string;
+  created_at: string;
+  resolved_at: string | null;
+  assigned_to: string | null;
+  elapsed_minutes: number;
+  target_minutes: number;
+  breach_type: "response" | "resolution";
+}
+
+export interface SLABreachListResponse {
+  items: SLABreachAlert[];
+  total: number;
+  page: number;
+}
+
+// GET /metrics/response-time-distribution
+export interface ResponseTimeBin {
+  label: string;     // e.g. "<15m"
+  max_minutes: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+// GET /metrics/analyst-sla
+export interface AnalystSLARow {
+  user_id: string;
+  name: string;
+  handled: number;
+  within_sla: number;
+  compliance_pct: number;
+  avg_response_minutes: number;
+  avg_resolve_minutes: number;
+  open_breaches: number;
+}
+
+// GET /metrics/sla-summary
+export interface SLASummary {
+  compliance_pct: number;
+  compliance_delta: number;   // vs prior period
+  total_breaches: number;
+  breach_delta: number;
+  avg_response_minutes: number;
+  avg_resolve_minutes: number;
+  within_sla: number;
+  total: number;
+}
+
 // GET /metrics/verdict-distribution
 export interface VerdictDistribution {
   true_positive: number;
@@ -90,6 +153,21 @@ export const socMetricsApi = {
 
   getSLABreachRate: (timeRange = "30d") =>
     apiClient.get<SLABreachPoint[]>(`/metrics/sla-breach-rate?timeRange=${timeRange}`).then((r) => r.data),
+
+  getSLASummary: (timeRange = "30d") =>
+    apiClient.get<SLASummary>(`/metrics/sla-summary?timeRange=${timeRange}`).then((r) => r.data),
+
+  getSLABySeverity: (timeRange = "30d") =>
+    apiClient.get<SLABySeverityRow[]>(`/metrics/sla-by-severity?timeRange=${timeRange}`).then((r) => r.data),
+
+  getSLABreaches: (timeRange = "30d", page = 1) =>
+    apiClient.get<SLABreachListResponse>(`/metrics/sla-breaches?timeRange=${timeRange}&page=${page}`).then((r) => r.data),
+
+  getResponseTimeDistribution: (timeRange = "30d") =>
+    apiClient.get<ResponseTimeBin[]>(`/metrics/response-time-distribution?timeRange=${timeRange}`).then((r) => r.data),
+
+  getAnalystSLA: (timeRange = "30d") =>
+    apiClient.get<AnalystSLARow[]>(`/metrics/analyst-sla?timeRange=${timeRange}`).then((r) => r.data),
 
   getVerdictDistribution: (timeRange = "30d") =>
     apiClient.get<VerdictDistribution>(`/metrics/verdict-distribution?timeRange=${timeRange}`).then((r) => r.data),

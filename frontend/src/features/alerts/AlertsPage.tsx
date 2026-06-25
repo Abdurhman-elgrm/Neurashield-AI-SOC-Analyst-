@@ -366,9 +366,66 @@ function filtersToParams(filterState: FilterState, pagination: PaginationState, 
 function getAlertRowClassName(alert: Alert): string {
   switch (alert.severity) {
     case "critical": return "border-l-2 border-l-severity-critical bg-severity-critical/[0.03]";
-    case "high":     return "border-l-2 border-l-severity-high";
+    case "high":     return "border-l-2 border-l-severity-high bg-severity-high/[0.02]";
+    case "medium":   return "border-l border-l-severity-medium/50";
+    case "low":      return "border-l border-l-blue-500/25";
     default:         return "";
   }
+}
+
+// ─── Severity distribution strip ─────────────────────────────────────────────
+
+function SeverityStrip({ alerts }: { alerts: Alert[] }) {
+  const SEV = ["critical","high","medium","low","info"] as const
+  const SEV_COLORS: Record<string, string> = {
+    critical: "#EF4444", high: "#F97316", medium: "#F59E0B", low: "#3B82F6", info: "#6B7280",
+  }
+  const SEV_LABELS: Record<string, string> = {
+    critical: "CRIT", high: "HIGH", medium: "MED", low: "LOW", info: "INFO",
+  }
+  const counts = SEV.reduce((acc, s) => {
+    acc[s] = alerts.filter(a => a.severity === s).length
+    return acc
+  }, {} as Record<string, number>)
+  const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  if (total === 0) return null
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      paddingTop: 6, paddingBottom: 2,
+    }}>
+      <span style={{ fontSize: 9, color: "#374151", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", flexShrink: 0 }}>
+        Severity mix
+      </span>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {SEV.filter(s => counts[s] > 0).map(s => (
+          <span key={s} style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "2px 7px", borderRadius: 4,
+            fontSize: 9, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace",
+            background: `${SEV_COLORS[s]}15`,
+            border: `1px solid ${SEV_COLORS[s]}30`,
+            color: SEV_COLORS[s],
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: SEV_COLORS[s], flexShrink: 0 }} />
+            {counts[s]} {SEV_LABELS[s]}
+          </span>
+        ))}
+      </div>
+      <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.04)", borderRadius: 2, overflow: "hidden", display: "flex" }}>
+        {SEV.filter(s => counts[s] > 0).map(s => (
+          <div key={s} style={{
+            height: "100%",
+            width: `${(counts[s] / total) * 100}%`,
+            background: SEV_COLORS[s],
+            opacity: 0.7,
+            transition: "width 300ms",
+          }} />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ─── AlertsPage ───────────────────────────────────────────────────────────────
@@ -540,33 +597,36 @@ export function AlertsPage() {
     <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 50px - 40px)" }}>
 
       {/* Page header */}
-      <div className="flex items-center justify-between flex-shrink-0 pb-3 border-b border-border">
-        <div>
-          <h1 className="text-lg font-extrabold text-text-primary font-display">Alert Triage</h1>
-          <p className="text-xs text-text-muted mt-0.5">
-            {data?.total != null ? (
-              <><span className="text-text-primary font-medium">{data.total.toLocaleString()}</span> alerts total</>
-            ) : (
-              "Security alert triage workspace"
-            )}
-          </p>
+      <div className="flex-shrink-0 pb-3 border-b border-border">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-extrabold text-text-primary font-display">Alert Triage</h1>
+            <p className="text-xs text-text-muted mt-0.5">
+              {data?.total != null ? (
+                <><span className="text-text-primary font-medium">{data.total.toLocaleString()}</span> alerts &mdash; showing page results below</>
+              ) : (
+                "Security alert triage workspace"
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <NewAlertsIndicator
+              count={newAlertCount}
+              since={newAlertsSince.current}
+              onDismiss={() => { setNewAlertCount(0); newAlertsSince.current = null; }}
+            />
+            <KeyboardHintPill />
+            <button
+              className="btn btn-ghost btn-sm flex items-center gap-1 text-xs"
+              aria-label="Refresh alerts"
+              onClick={() => refetch()}
+            >
+              <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <NewAlertsIndicator
-            count={newAlertCount}
-            since={newAlertsSince.current}
-            onDismiss={() => { setNewAlertCount(0); newAlertsSince.current = null; }}
-          />
-          <KeyboardHintPill />
-          <button
-            className="btn btn-ghost btn-sm flex items-center gap-1 text-xs"
-            aria-label="Refresh alerts"
-            onClick={() => refetch()}
-          >
-            <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
-            Refresh
-          </button>
-        </div>
+        <SeverityStrip alerts={alerts} />
       </div>
 
       {/* Status KPI band */}

@@ -313,6 +313,52 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   )
 }
 
+function RawEventViewer({ data }: { data: unknown }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!data || typeof data !== 'object') return <span style={{ fontSize: 11, color: '#4A5366' }}>—</span>
+  const entries = Object.entries(data as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  const shown = expanded ? entries : entries.slice(0, 22)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {shown.map(([key, val]) => {
+        const isObj  = typeof val === 'object'
+        const isNum  = typeof val === 'number'
+        const isBool = typeof val === 'boolean'
+        const raw    = isObj ? JSON.stringify(val) : String(val)
+        const display = raw.length > 240 ? raw.slice(0, 240) + '…' : raw
+        return (
+          <div key={key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{
+              fontSize: 9, fontWeight: 600, color: '#374151',
+              fontFamily: "'JetBrains Mono', monospace",
+              minWidth: 110, maxWidth: 140, flexShrink: 0, paddingTop: 2,
+              wordBreak: 'break-all',
+            }}>
+              {key}
+            </span>
+            <span style={{
+              fontSize: 10, wordBreak: 'break-all', flex: 1,
+              fontFamily: "'JetBrains Mono', monospace",
+              color: isNum ? '#7DD3FC' : isBool ? (val ? '#86EFAC' : '#FCA5A5') : isObj ? '#C4B5FD' : '#B8C0CC',
+              lineHeight: 1.5,
+            }}>
+              {display}
+            </span>
+          </div>
+        )
+      })}
+      {entries.length > 22 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{ fontSize: 10, color: '#4B5563', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', marginTop: 4, padding: 0 }}
+        >
+          {expanded ? '▲ Show less' : `▼ +${entries.length - 22} more fields`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Fields Sidebar (Splunk-style) ────────────────────────────────────────────
 
 function FieldsSidebar({
@@ -892,15 +938,9 @@ function EventDrawer({ event, onClose }: { event: EventResponse; onClose: () => 
             </Section>
           )}
 
-          {/* Raw JSON */}
+          {/* Raw Event */}
           <Section title="Raw Event">
-            <pre style={{
-              margin: 0, fontSize: 9, color: '#3A4A5C', overflowX: 'auto',
-              fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.6,
-              maxHeight: 200,
-            }}>
-              {JSON.stringify(event.raw, null, 2)}
-            </pre>
+            <RawEventViewer data={event.raw} />
           </Section>
         </div>
 

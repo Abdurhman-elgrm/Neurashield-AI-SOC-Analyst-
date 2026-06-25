@@ -333,7 +333,7 @@ function SchemaRef() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export function ImportPage() {
+export function ImportPage({ embedded = false }: { embedded?: boolean }) {
   const tenantId = useTenantStore(s => s.activeTenant?.id)
   const [state, setState] = useState<UploadState>({ kind: 'idle' })
 
@@ -367,7 +367,7 @@ export function ImportPage() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
-      height: 'calc(100vh - 50px - 40px)', overflow: 'hidden',
+      ...(embedded ? { flex: 1, overflow: 'auto' } : { height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }),
     }}>
 
       {/* Page header */}

@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query"
 import { formatDistanceToNowStrict } from "date-fns"
 import {
   Plus, RefreshCw, GitMerge, User, X, AlertTriangle,
-  Clock, Flame, ShieldAlert, Users, Search,
+  Clock, Flame, ShieldAlert, Users, Search, Network,
+  Tag, CheckCircle2, Timer,
 } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { listInvestigations } from "./api/investigationsApi"
 import type { InvestigationListItem } from "./api/investigationsApi"
 import { CreateInvestigationModal } from "./components/CreateInvestigationModal"
+import { GraphPage } from "../graph/GraphPage"
 
 // ─── SLA thresholds (hours per severity band) ─────────────────────────────────
 
@@ -163,30 +165,50 @@ function SummaryBand({ items }: { items: InvestigationListItem[] }) {
   const unassigned     = items.filter(i => !i.assigned_to && !["resolved","closed","false_positive"].includes(i.status)).length
 
   const stats = [
-    { label: "Active",        value: activeCount,   color: "#F59E0B", icon: Activity2 },
-    { label: "SLA Breached",  value: breachedCount, color: "#EF4444", icon: AlertTriangle },
-    { label: "Critical",      value: criticalCount, color: "#EF4444", icon: ShieldAlert  },
-    { label: "Unassigned",    value: unassigned,    color: "#F97316", icon: Users        },
+    { label: "Active",       value: activeCount,   color: "#F59E0B", icon: Activity2    },
+    { label: "SLA Breached", value: breachedCount, color: "#EF4444", icon: AlertTriangle },
+    { label: "Critical",     value: criticalCount, color: "#EF4444", icon: ShieldAlert   },
+    { label: "Unassigned",   value: unassigned,    color: "#F97316", icon: Users         },
   ]
   return (
     <div style={{
-      display: "flex", gap: 8,
-      padding: "8px 0",
+      display: "flex", gap: 10,
+      padding: "10px 0",
       flexShrink: 0,
-      borderBottom: "1px solid rgba(255,255,255,0.04)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
     }}>
       {stats.map(({ label, value, color, icon: Icon }) => (
         <div key={label} style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "5px 12px", borderRadius: 6,
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "8px 14px", borderRadius: 8,
           background: value > 0 ? `${color}0d` : "rgba(255,255,255,0.02)",
-          border: `1px solid ${value > 0 ? `${color}20` : "rgba(255,255,255,0.05)"}`,
+          border: `1px solid ${value > 0 ? `${color}25` : "rgba(255,255,255,0.06)"}`,
+          minWidth: 120, flexShrink: 0,
         }}>
-          <Icon size={11} style={{ color: value > 0 ? color : "#3A4150" }} />
-          <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: value > 0 ? color : "#3A4150" }}>
-            {value}
-          </span>
-          <span style={{ fontSize: 10, color: "#5C6373" }}>{label}</span>
+          <div style={{
+            width: 30, height: 30, borderRadius: 7,
+            background: value > 0 ? `${color}18` : "rgba(255,255,255,0.04)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <Icon size={13} style={{ color: value > 0 ? color : "#374151" }} />
+          </div>
+          <div>
+            <div style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 20, fontWeight: 800,
+              color: value > 0 ? color : "#374151",
+              lineHeight: 1,
+            }}>
+              {value}
+            </div>
+            <div style={{
+              fontSize: 9, color: "#4B5563", marginTop: 3,
+              fontWeight: 700, textTransform: "uppercase" as const,
+              letterSpacing: "0.8px",
+            }}>
+              {label}
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -202,8 +224,9 @@ function Activity2({ size }: { size: number }) {
 function InvRow({ inv, onClick }: { inv: InvestigationListItem; onClick: () => void }) {
   const [hover, setHover] = useState(false)
   const sla = getSLAStatus(inv)
+  const sev = scoreToSev(inv.threat_score)
   const displayTitle = inv.title || inv.executive_summary || "Untitled investigation"
-  const isCritical = inv.threat_score >= 80
+  const borderColor = sla.breached ? "#EF4444" : sev.color
 
   return (
     <tr
@@ -211,11 +234,11 @@ function InvRow({ inv, onClick }: { inv: InvestigationListItem; onClick: () => v
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        borderLeft: `3px solid ${sla.breached ? "#EF4444" : isCritical ? "#EF4444" : "transparent"}`,
+        borderLeft: `3px solid ${hover ? borderColor : `${borderColor}55`}`,
         borderBottom: "1px solid rgba(255,255,255,0.04)",
-        cursor: "pointer", transition: "background 120ms",
+        cursor: "pointer", transition: "all 120ms",
         background: hover
-          ? "rgba(255,255,255,0.025)"
+          ? `${borderColor}08`
           : sla.breached
           ? "rgba(239,68,68,0.02)"
           : "transparent",
@@ -223,15 +246,20 @@ function InvRow({ inv, onClick }: { inv: InvestigationListItem; onClick: () => v
     >
       {/* Score + sev */}
       <td style={{ padding: "10px 12px", whiteSpace: "nowrap" as const }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 13, fontWeight: 800,
-            color: scoreToSev(inv.threat_score).color,
-          }}>
-            {inv.threat_score}
-          </span>
-          <SevBadge score={inv.threat_score} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 16, fontWeight: 800,
+              color: sev.color,
+            }}>
+              {inv.threat_score}
+            </span>
+            <SevBadge score={inv.threat_score} />
+          </div>
+          <div style={{ width: 56, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${inv.threat_score}%`, background: sev.color, borderRadius: 2, opacity: 0.8 }} />
+          </div>
         </div>
       </td>
 
@@ -422,6 +450,7 @@ function timeRangeToIso(range: string | undefined): string | undefined {
 
 export function InvestigationsPage() {
   const navigate = useNavigate()
+  const [pageTab, setPageTab] = useState<'list' | 'graph'>('list')
   const [showModal,     setShowModal]     = useState(false)
   const [statusFilter,  setStatusFilter]  = useState<string | undefined>(undefined)
   const [quickFilter,   setQuickFilter]   = useState<QuickFilter>("all")
@@ -478,8 +507,63 @@ export function InvestigationsPage() {
   const total: number = (data as any)?.total ?? 0
   const hasFilters = !!(titleSearch || minScore !== "" || fromTs || quickFilter !== "all")
 
+  const PAGE_TABS = [
+    { id: 'list',  label: 'Investigations', icon: GitMerge },
+    { id: 'graph', label: 'Attack Graph',   icon: Network  },
+  ]
+
+  if (pageTab === 'graph') {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 50px - 40px)", overflow: "hidden" }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          {PAGE_TABS.map(({ id, label, icon: Icon }) => {
+            const active = pageTab === id
+            return (
+              <button key={id} onClick={() => setPageTab(id as 'list' | 'graph')} style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '14px 4px', marginRight: 24,
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                color: active ? '#E2E8F0' : '#4B5563',
+                background: 'none', border: 'none',
+                borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+                marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+              }}>
+                <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <GraphPage />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 50px - 40px)", overflow: "hidden" }}>
+
+      {/* Page tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        {PAGE_TABS.map(({ id, label, icon: Icon }) => {
+          const active = pageTab === id
+          return (
+            <button key={id} onClick={() => setPageTab(id as 'list' | 'graph')} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '14px 4px', marginRight: 24,
+              fontSize: 13, fontWeight: active ? 600 : 400,
+              color: active ? '#E2E8F0' : '#4B5563',
+              background: 'none', border: 'none',
+              borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+              marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+            }}>
+              <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+              {label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Page header */}
       <div style={{
@@ -487,6 +571,7 @@ export function InvestigationsPage() {
         borderBottom: "1px solid rgba(255,255,255,0.06)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexShrink: 0,
+        paddingTop: 14,
       }}>
         <div>
           <h1 style={{ fontSize: 17, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", color: "#F5F7FA", margin: 0 }}>
@@ -648,13 +733,41 @@ export function InvestigationsPage() {
         <table className="data-table">
           <thead style={{ position: "sticky", top: 0, background: "#050505", zIndex: 10 }}>
             <tr>
-              <th style={{ width: 110 }}>SEVERITY</th>
-              <th>TITLE</th>
-              <th style={{ width: 80  }}>SOURCE</th>
-              <th style={{ width: 130 }}>STATUS</th>
-              <th style={{ width: 100 }}>SLA TIMER</th>
-              <th style={{ width: 120 }}>ASSIGNED</th>
-              <th style={{ width: 90  }}>AGE</th>
+              <th style={{ width: 120 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <ShieldAlert size={10} /> SEVERITY
+                </span>
+              </th>
+              <th>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <GitMerge size={10} /> TITLE
+                </span>
+              </th>
+              <th style={{ width: 80 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <Tag size={10} /> SOURCE
+                </span>
+              </th>
+              <th style={{ width: 130 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <CheckCircle2 size={10} /> STATUS
+                </span>
+              </th>
+              <th style={{ width: 100 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <Timer size={10} /> SLA TIMER
+                </span>
+              </th>
+              <th style={{ width: 120 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <User size={10} /> ASSIGNED
+                </span>
+              </th>
+              <th style={{ width: 90 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <Clock size={10} /> AGE
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>

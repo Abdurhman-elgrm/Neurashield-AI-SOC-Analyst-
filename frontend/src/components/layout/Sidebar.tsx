@@ -3,8 +3,8 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Bell, FolderSearch, Activity, Crosshair, Shield,
   Sparkles, Monitor, Settings, LogOut, BookOpen, FileBarChart, Download,
-  Network, BarChart3, Server, UserSearch, ScrollText, EyeOff,
-  Globe, Swords, Building2, Wifi, FileCheck, Upload,
+  BarChart3, Server, UserSearch,
+  Globe, Swords, Building2,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -270,7 +270,6 @@ export function Sidebar() {
         { to: "/events", icon: Activity,  label: "Events"          },
         ...(hasRole("analyst") ? [{ to: "/hunt",  icon: Crosshair, label: "Threat Hunt"    }] : []),
         { to: "/rules",  icon: Shield,    label: "Detection Rules" },
-        ...(hasRole("analyst") ? [{ to: "/graph", icon: Network,   label: "Attack Graph"   }] : []),
       ],
     },
     {
@@ -283,30 +282,25 @@ export function Sidebar() {
     {
       label: "Report",
       items: [
-        ...(hasRole("analyst") ? [{ to: "/reports",            icon: FileBarChart, label: "Reports"      }] : []),
-        ...(hasRole("analyst") ? [{ to: "/compliance-reports", icon: FileCheck,    label: "Compliance"   }] : []),
-        ...(hasRole("analyst") ? [{ to: "/soc-metrics",        icon: BarChart3,    label: "SOC Metrics"  }] : []),
-        ...(hasRole("analyst") ? [{ to: "/mitre",              icon: Swords,       label: "MITRE ATT&CK" }] : []),
+        ...(hasRole("analyst") ? [{ to: "/reports",     icon: FileBarChart, label: "Reports"      }] : []),
+        ...(hasRole("analyst") ? [{ to: "/soc-metrics", icon: BarChart3,    label: "SOC Metrics"  }] : []),
+        ...(hasRole("analyst") ? [{ to: "/mitre",       icon: Swords,       label: "MITRE ATT&CK" }] : []),
       ],
     },
     {
       label: "Intelligence",
       items: [
-        ...(hasRole("analyst") ? [{ to: "/threat-intel",      icon: Globe,      label: "Threat Intel" }] : []),
-        ...(hasRole("analyst") ? [{ to: "/ueba",              icon: UserSearch, label: "UEBA"         }] : []),
-        ...(hasRole("analyst") ? [{ to: "/assets",            icon: Server,     label: "Assets"       }] : []),
-        ...(hasRole("analyst") ? [{ to: "/rules/suppression", icon: EyeOff,     label: "Suppressions" }] : []),
+        ...(hasRole("analyst") ? [{ to: "/threat-intel", icon: Globe,      label: "Threat Intel" }] : []),
+        ...(hasRole("analyst") ? [{ to: "/ueba",        icon: UserSearch, label: "UEBA"         }] : []),
+        ...(hasRole("analyst") ? [{ to: "/assets",      icon: Server,     label: "Assets"       }] : []),
       ],
     },
     {
       label: "Platform",
       items: [
-        { to: "/agents",    icon: Monitor,   label: "Agents",       badge: onlineAgentCount || null, badgeColor: "green" as const },
-        { to: "/installer", icon: Download,  label: "Device Enroll"                                                      },
-        ...(hasRole("admin") ? [{ to: "/fleet",     icon: Wifi,       label: "Fleet"       }] : []),
-        ...(hasRole("admin") ? [{ to: "/import",    icon: Upload,     label: "Log Import"  }] : []),
-        ...(hasRole("admin") ? [{ to: "/audit-log", icon: ScrollText, label: "Audit Log"   }] : []),
-        ...(hasRole("admin") ? [{ to: "/mssp",      icon: Building2,  label: "MSSP Portal" }] : []),
+        { to: "/agents",    icon: Monitor,  label: "Agents",       badge: onlineAgentCount || null, badgeColor: "green" as const },
+        { to: "/installer", icon: Download, label: "Device Enroll"                                                      },
+        ...(hasRole("admin") ? [{ to: "/mssp", icon: Building2, label: "MSSP Portal" }] : []),
       ],
     },
     {

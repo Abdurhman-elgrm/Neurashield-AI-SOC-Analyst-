@@ -8,7 +8,6 @@ import { IngestionRateChart } from "./widgets/IngestionRateChart";
 import { DetectionHealthWidget } from "./widgets/DetectionHealthWidget";
 import { MitreHeatmap } from "./widgets/MitreHeatmap";
 import { CorrelationWidget } from "./widgets/CorrelationWidget";
-import { AIInvestigationWidget } from "./widgets/AIInvestigationWidget";
 import { GeoThreatMap } from "./widgets/GeoThreatMap";
 import { TopEntitiesWidget } from "./widgets/TopEntitiesWidget";
 import { AlertVolumeHeatmap } from "./widgets/AlertVolumeHeatmap";
@@ -218,8 +217,8 @@ export function DashboardPage() {
 
       {/* ── Operations ── */}
       <div style={{ marginBottom: 20 }}>
-        <SectionHeader title="Operations" subtitle="Real-time alert stream and data ingestion" accent="#F97316" />
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.2fr) minmax(0,1fr) 290px", gap: 12 }}>
+        <SectionHeader title="Operations" subtitle="Real-time alert stream, ingestion pipeline, and detection engine health" accent="#F97316" />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,1fr)", gap: 12 }}>
           <WidgetErrorBoundary title="Live Alerts Feed">
             <LiveAlertsFeed timeRange={timeRange} maxHeight={360} />
           </WidgetErrorBoundary>
@@ -243,14 +242,6 @@ export function DashboardPage() {
             <CorrelationWidget timeRange={timeRange} />
           </WidgetErrorBoundary>
         </div>
-      </div>
-
-      {/* ── AI Operations ── */}
-      <div style={{ marginBottom: 20 }}>
-        <SectionHeader title="AI Operations" subtitle="AI-powered investigation queue and recommendations" accent="#06B6D4" />
-        <WidgetErrorBoundary title="AI Investigations">
-          <AIInvestigationWidget timeRange={timeRange} />
-        </WidgetErrorBoundary>
       </div>
 
       {/* ── Geospatial Intelligence ── */}

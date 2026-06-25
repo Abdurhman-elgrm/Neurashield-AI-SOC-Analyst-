@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Monitor, Terminal, Activity, Trash2, X, ShieldAlert, ShieldOff, ShieldCheck } from 'lucide-react'
+import { Plus, Search, Monitor, Terminal, Activity, Trash2, X, ShieldAlert, ShieldOff, ShieldCheck, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
 import { formatDateTime } from '@/lib/timezone'
 import { useAgents, useDeleteAgent, useQuarantineAgent, useIsolateAgent, useReleaseAgent } from './hooks/useAgents'
 import type { Agent } from '@/api/agents'
+import { FleetDashboardPage } from '../fleet/FleetDashboardPage'
 
 // ─── Containment badge ────────────────────────────────────────────────────────
 
@@ -535,24 +536,31 @@ function DeleteConfirmModal({ onConfirm, onCancel, loading }: {
 
 export function AgentsPage() {
   const navigate = useNavigate()
+  const [pageTab, setPageTab] = useState<'agents' | 'fleet'>('agents')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  const { data, isLoading } = useAgents({
-    status: statusFilter || undefined,
-    search: search || undefined,
-  })
+  const { data, isLoading } = useAgents()
 
   const deleteAgent = useDeleteAgent()
 
-  const agents = data?.items ?? []
-  const total        = data?.total ?? 0
-  const onlineCount  = agents.filter(a => a.status === 'online').length
-  const degradedCount = agents.filter(a => a.status === 'degraded').length
-  const offlineCount = agents.filter(a => a.status === 'offline').length
-  const containedCount = agents.filter(a => a.containment_state && a.containment_state !== 'none').length
+  const allAgents = data?.items ?? []
+  const total         = data?.total ?? 0
+  const onlineCount   = allAgents.filter(a => a.status === 'online').length
+  const degradedCount = allAgents.filter(a => a.status === 'degraded').length
+  const offlineCount  = allAgents.filter(a => a.status === 'offline').length
+  const containedCount = allAgents.filter(a => a.containment_state && a.containment_state !== 'none').length
+
+  const agents = useMemo(() => allAgents.filter(a => {
+    if (statusFilter && a.status !== statusFilter) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!a.hostname.toLowerCase().includes(q) && !(a.ip_address ?? '').toLowerCase().includes(q)) return false
+    }
+    return true
+  }), [allAgents, statusFilter, search])
 
   const STATUS_CHIPS: Array<{ value: string; label: string; count: number; color: string }> = [
     { value: '',         label: 'All',      count: total,         color: '#8B95A7' },
@@ -561,8 +569,63 @@ export function AgentsPage() {
     { value: 'offline',  label: 'Offline',  count: offlineCount,  color: '#4B5563' },
   ]
 
+  const PAGE_TABS = [
+    { id: 'agents', label: 'Agents', icon: Monitor },
+    { id: 'fleet',  label: 'Fleet',  icon: Wifi    },
+  ]
+
+  if (pageTab === 'fleet') {
+    return (
+      <div className="page-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          {PAGE_TABS.map(({ id, label, icon: Icon }) => {
+            const active = pageTab === id
+            return (
+              <button key={id} onClick={() => setPageTab(id as 'agents' | 'fleet')} style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '14px 4px', marginRight: 24,
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                color: active ? '#E2E8F0' : '#4B5563',
+                background: 'none', border: 'none',
+                borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+                marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+              }}>
+                <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <FleetDashboardPage />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 50px - 40px)', overflow: 'hidden' }}>
+
+      {/* Page tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        {PAGE_TABS.map(({ id, label, icon: Icon }) => {
+          const active = pageTab === id
+          return (
+            <button key={id} onClick={() => setPageTab(id as 'agents' | 'fleet')} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '14px 4px', marginRight: 24,
+              fontSize: 13, fontWeight: active ? 600 : 400,
+              color: active ? '#E2E8F0' : '#4B5563',
+              background: 'none', border: 'none',
+              borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+              marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+            }}>
+              <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+              {label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Page header */}
       <div style={{

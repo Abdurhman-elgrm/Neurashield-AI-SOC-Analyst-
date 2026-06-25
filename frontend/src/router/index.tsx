@@ -170,7 +170,7 @@ const ReportsPage = lazyPage(() =>
   import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage }))
 );
 const ImportPage = lazyPage(() =>
-  import("@/features/import/ImportPage").then((m) => ({ default: m.ImportPage }))
+  import("@/features/import/ImportPage").then((m) => ({ default: m.ImportPage as React.ComponentType<unknown> }))
 );
 const SocMetricsPage = lazyPage(() =>
   import("@/features/soc-metrics/SocMetricsPage").then((m) => ({ default: m.SocMetricsPage }))

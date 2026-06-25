@@ -3,7 +3,6 @@ import { apiClient } from "@/api/client";
 import { cn } from "@/lib/utils";
 import type { DashboardTimeRange } from "../types/dashboard";
 
-// GET /dashboard/alert-heatmap — returns hour×day matrix for last 7 days
 interface HeatmapCell {
   day: number;  // 0=Sun … 6=Sat
   hour: number; // 0–23
@@ -12,27 +11,36 @@ interface HeatmapCell {
 
 const DAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) =>
-  i === 0 ? "12am" : i < 12 ? `${i}am` : i === 12 ? "12pm" : `${i - 12}pm`
+  i === 0 ? "12a" : i < 12 ? `${i}a` : i === 12 ? "12p" : `${i - 12}p`
 );
 
-// Generate sample data when backend not available
 function sampleHeatmap(): HeatmapCell[] {
   const cells: HeatmapCell[] = [];
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
       const isBusinessHours = h >= 8 && h <= 18 && d >= 1 && d <= 5;
-      cells.push({ day: d, hour: h, count: isBusinessHours ? Math.floor(Math.random() * 20 + 5) : Math.floor(Math.random() * 5) });
+      const isSpike = (d === 2 || d === 3) && h >= 10 && h <= 13;
+      cells.push({
+        day: d,
+        hour: h,
+        count: isSpike
+          ? Math.floor(Math.random() * 35 + 20)
+          : isBusinessHours
+            ? Math.floor(Math.random() * 18 + 4)
+            : Math.floor(Math.random() * 4),
+      });
     }
   }
   return cells;
 }
 
-function cellColor(count: number, max: number): string {
+function cellColorClass(count: number, max: number): string {
   if (count === 0) return "bg-bg-elevated";
   const intensity = count / max;
-  if (intensity < 0.25) return "bg-accent/20";
-  if (intensity < 0.5)  return "bg-accent/40";
-  if (intensity < 0.75) return "bg-accent/60";
+  if (intensity < 0.2)  return "bg-accent/15";
+  if (intensity < 0.4)  return "bg-accent/30";
+  if (intensity < 0.6)  return "bg-accent/50";
+  if (intensity < 0.8)  return "bg-accent/70";
   return "bg-accent/90";
 }
 
@@ -44,7 +52,6 @@ export function AlertVolumeHeatmap({ timeRange }: Props) {
   void timeRange;
 
   const { data, isLoading } = useQuery({
-    // TODO: wire to /dashboard/alert-heatmap?timeRange={timeRange}
     queryKey: ["dashboard", "heatmap", timeRange],
     queryFn: () =>
       apiClient.get<HeatmapCell[]>(`/dashboard/alert-heatmap?timeRange=${timeRange}`)
@@ -56,52 +63,82 @@ export function AlertVolumeHeatmap({ timeRange }: Props) {
 
   const cells = data ?? [];
   const max = Math.max(1, ...cells.map((c) => c.count));
+  const total = cells.reduce((s, c) => s + c.count, 0);
 
-  // Build day×hour lookup
+  const peak = cells.reduce<HeatmapCell | null>(
+    (best, c) => (!best || c.count > best.count ? c : best), null
+  );
+
   const lookup = new Map<string, number>(cells.map((c) => [`${c.day}-${c.hour}`, c.count]));
 
   return (
     <div className="bg-bg-card border border-border rounded-xl p-4">
-      <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Alert Volume Heatmap (7d)</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">Alert Volume Heatmap</h3>
+        <div className="flex items-center gap-3">
+          {peak && (
+            <span className="text-2xs text-text-muted">
+              Peak:{" "}
+              <span className="text-text-secondary font-mono">
+                {DAY_LABELS[peak.day]} {HOUR_LABELS[peak.hour]}
+              </span>
+              <span className="ml-1 text-accent font-bold">{peak.count}</span>
+            </span>
+          )}
+          <span className="text-2xs text-text-disabled">{total.toLocaleString()} total</span>
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="skel h-40 rounded-lg" />
       ) : (
         <div className="overflow-x-auto">
-          <div className="inline-grid gap-px" style={{ gridTemplateColumns: `40px repeat(24, minmax(16px, 1fr))` }}>
-            {/* Header row */}
-            <div className="text-2xs text-text-disabled" />
+          <div
+            className="inline-grid gap-px"
+            style={{ gridTemplateColumns: `28px repeat(24, minmax(14px, 1fr))` }}
+          >
+            {/* Hour labels */}
+            <div />
             {HOUR_LABELS.map((h, i) => (
-              <div key={i} className="text-2xs text-text-disabled text-center">
-                {i % 4 === 0 ? h : ""}
+              <div key={i} className="text-2xs text-text-disabled text-center leading-none pb-1">
+                {i % 6 === 0 ? h : ""}
               </div>
             ))}
 
-            {/* Data rows */}
-            {DAY_LABELS.map((day, dIdx) => (
-              <>
-                <div key={`label-${dIdx}`} className="text-2xs text-text-muted flex items-center">{day}</div>
-                {Array.from({ length: 24 }, (_, hIdx) => {
-                  const count = lookup.get(`${dIdx}-${hIdx}`) ?? 0;
-                  return (
-                    <div
-                      key={`${dIdx}-${hIdx}`}
-                      title={`${day} ${HOUR_LABELS[hIdx]}: ${count} alerts`}
-                      className={cn("w-full rounded-sm", cellColor(count, max))}
-                      style={{ height: 14 }}
-                    />
-                  );
-                })}
-              </>
-            ))}
+            {/* Day rows — use explicit keys, no fragments */}
+            {DAY_LABELS.flatMap((day, dIdx) => [
+              <div key={`lbl-${dIdx}`} className="text-2xs text-text-muted flex items-center pr-1">{day}</div>,
+              ...Array.from({ length: 24 }, (_, hIdx) => {
+                const count = lookup.get(`${dIdx}-${hIdx}`) ?? 0;
+                const isPeak = peak?.day === dIdx && peak?.hour === hIdx;
+                return (
+                  <div
+                    key={`cell-${dIdx}-${hIdx}`}
+                    title={`${day} ${HOUR_LABELS[hIdx]}: ${count} alerts`}
+                    className={cn(
+                      "rounded-sm h-4 w-full transition-opacity hover:opacity-80",
+                      cellColorClass(count, max),
+                      isPeak && "ring-1 ring-accent ring-offset-1 ring-offset-bg-card",
+                    )}
+                  />
+                );
+              }),
+            ])}
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-2xs text-text-disabled">Fewer</span>
-            {[0, 0.25, 0.5, 0.75, 1].map((v, i) => (
-              <div key={i} className={cn("w-3 h-3 rounded-sm", v === 0 ? "bg-bg-elevated" : `bg-accent/${Math.round(v * 90)}`)} />
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <span className="text-2xs text-text-disabled mr-1">Less</span>
+            {[0, 0.2, 0.4, 0.6, 0.8, 1].map((v, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "w-3.5 h-3.5 rounded-sm",
+                  v === 0 ? "bg-bg-elevated" : `bg-accent/${Math.round(v * 90)}`,
+                )}
+              />
             ))}
-            <span className="text-2xs text-text-disabled">More</span>
+            <span className="text-2xs text-text-disabled ml-1">More</span>
           </div>
         </div>
       )}

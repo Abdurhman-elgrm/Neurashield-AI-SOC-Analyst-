@@ -1,4 +1,4 @@
-import { apiPost, apiGet, apiPatch, apiDelete } from './client'
+import { apiPost, apiGet, apiPatch, apiDelete, apiClient } from './client'
 
 export interface Agent {
   id: string
@@ -51,13 +51,15 @@ export interface AgentsListResponse {
 }
 
 export const agentsApi = {
-  list: (params?: {
+  list: async (params?: {
     status?: string
     limit?: number
     page?: number
     search?: string
-  }): Promise<AgentsListResponse> =>
-    apiGet<AgentsListResponse>('/agents', params as Record<string, unknown>),
+  }): Promise<AgentsListResponse> => {
+    const resp = await apiClient.get<AgentsListResponse>('/agents', { params: params as Record<string, unknown> })
+    return resp.data
+  },
 
   get: (id: string): Promise<Agent> =>
     apiGet<Agent>(`/agents/${id}`),

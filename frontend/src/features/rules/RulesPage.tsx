@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Edit2, Trash2, Shield, Download, Sparkles, Search } from 'lucide-react'
+import { Plus, Edit2, Trash2, Shield, Download, Sparkles, Search, EyeOff } from 'lucide-react'
 import { rulesApi } from '@/api/rules'
 import { apiClient } from '@/api/client'
 import { AIRuleGeneratorModal } from './AIRuleGeneratorModal'
+import { SuppressionRulesPage } from './suppression/SuppressionRulesPage'
 import { useTenantStore } from '@/stores/tenantStore'
 import type { DetectionRule, RuleType, RuleSeverity, PatternCondition, ThresholdCondition } from '@/api/rules'
 import { extractApiError } from '@/lib/utils'
@@ -570,8 +571,9 @@ function RuleModal({ editRule, onClose, onSaved }: {
 type FilterEnabled = 'all' | 'enabled' | 'disabled'
 
 export function RulesPage() {
-  const hasRole  = useTenantStore(s => s.hasRole)
+  const hasRole   = useTenantStore(s => s.hasRole)
   const canManage = hasRole('admin')
+  const [pageTab, setPageTab] = useState<'rules' | 'suppression'>('rules')
 
   const [rules,      setRules]      = useState<DetectionRule[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -711,9 +713,66 @@ export function RulesPage() {
   const criticalCount = rules.filter(r => r.severity === 'critical').length
   const patternCount  = rules.filter(r => r.rule_type === 'pattern').length
 
+  if (pageTab === 'suppression') {
+    return (
+      <div style={{ background: '#050505', minHeight: 'calc(100vh - 50px - 40px)', padding: '0 0 40px' }}>
+        {/* Page tab bar */}
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 24px', marginBottom: 0 }}>
+          {[
+            { id: 'rules',       label: 'Detection Rules', icon: Shield },
+            { id: 'suppression', label: 'Suppression Rules', icon: EyeOff },
+          ].map(({ id, label, icon: Icon }) => {
+            const active = pageTab === id
+            return (
+              <button key={id} onClick={() => setPageTab(id as 'rules' | 'suppression')} style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '14px 4px', marginRight: 24,
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                color: active ? '#E2E8F0' : '#4B5563',
+                background: 'none', border: 'none',
+                borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+                marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+              }}>
+                <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ padding: '20px 24px 0' }}>
+          <SuppressionRulesPage />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: '#050505', minHeight: 'calc(100vh - 50px - 40px)', padding: '0 0 40px' }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      {/* Page tab bar */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 24px', marginBottom: 0 }}>
+        {[
+          { id: 'rules',       label: 'Detection Rules',  icon: Shield },
+          { id: 'suppression', label: 'Suppression Rules', icon: EyeOff },
+        ].map(({ id, label, icon: Icon }) => {
+          const active = pageTab === id
+          return (
+            <button key={id} onClick={() => setPageTab(id as 'rules' | 'suppression')} style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '14px 4px', marginRight: 24,
+              fontSize: 13, fontWeight: active ? 600 : 400,
+              color: active ? '#E2E8F0' : '#4B5563',
+              background: 'none', border: 'none',
+              borderBottom: `2px solid ${active ? '#3B82F6' : 'transparent'}`,
+              marginBottom: -1, cursor: 'pointer', transition: 'all 120ms',
+            }}>
+              <Icon size={13} style={{ color: active ? '#60A5FA' : '#374151' }} />
+              {label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Header */}
       <div style={{
