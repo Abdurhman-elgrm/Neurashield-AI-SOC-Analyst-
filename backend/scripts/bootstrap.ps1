@@ -55,6 +55,27 @@ function Write-JsonNoBom {
     [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+# ── Admin check: warn early so user can restart with elevation if needed ─────
+$isAdminEarly = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdminEarly) {
+    Write-Host ""
+    Write-Host "  +---------------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  |  NOTICE: Running without Administrator privileges        |" -ForegroundColor Yellow
+    Write-Host "  |                                                           |" -ForegroundColor Yellow
+    Write-Host "  |  The agent will install and run, but Windows Security    |" -ForegroundColor Yellow
+    Write-Host "  |  event logs (login events, privilege escalation, etc.)   |" -ForegroundColor Yellow
+    Write-Host "  |  will NOT be collected.                                   |" -ForegroundColor Yellow
+    Write-Host "  |                                                           |" -ForegroundColor Yellow
+    Write-Host "  |  For full coverage, re-run as Administrator:             |" -ForegroundColor Yellow
+    Write-Host "  |    Right-click PowerShell > Run as administrator         |" -ForegroundColor Yellow
+    Write-Host "  |    Then re-run this bootstrap script                     |" -ForegroundColor Yellow
+    Write-Host "  +---------------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host ""
+    Start-Sleep -Seconds 3
+}
+
 # ── Step 0: Stop any running V1 agent ────────────────────────────────────────
 $existingV1Task = Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
 if ($existingV1Task) {
