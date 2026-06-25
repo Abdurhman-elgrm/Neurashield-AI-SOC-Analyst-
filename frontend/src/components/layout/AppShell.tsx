@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, SIDEBAR_OPEN_W, SIDEBAR_CLOSED_W } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DemoBanner } from "./DemoBanner";
 import { CommandPalette } from "@/components/command/CommandPalette";
@@ -15,7 +15,7 @@ export function AppShell() {
   useTenantCacheReset();
 
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
-  const sidebarW  = collapsed ? 48 : 220;
+  const sidebarW  = collapsed ? SIDEBAR_CLOSED_W : SIDEBAR_OPEN_W;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#000000", overflow: "hidden" }}>
