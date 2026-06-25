@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     SOC Platform Agent Bootstrap Installer
 .DESCRIPTION
@@ -211,11 +211,11 @@ if ($quickPy) {
         # Script failed syntax check — the server served a broken file.
         # Delete the corrupted download so we don't silently run it.
         Remove-Item $AGENT_FILE -Force -ErrorAction SilentlyContinue
-        Write-Fail "Downloaded agent script has Python syntax errors.`n  This is a server-side issue — please contact support.`n  Details: $syntaxCheck"
+        Write-Fail "Downloaded agent script has Python syntax errors.`n  This is a server-side issue -- please contact support.`n  Details: $syntaxCheck"
     }
     Write-OK "Agent script syntax OK"
 } else {
-    Write-Host "[bootstrap] INFO  Python not on PATH yet — syntax check deferred to post-install step" -ForegroundColor DarkGray
+    Write-Host "[bootstrap] INFO  Python not on PATH yet -- syntax check deferred to post-install step" -ForegroundColor DarkGray
 }
 
 # ── Step 6: Find / provision Python ──────────────────────────────────────────
