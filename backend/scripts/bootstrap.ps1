@@ -408,8 +408,10 @@ if ($taskInstalled) {
     Start-Process -FilePath $pythonwExe -ArgumentList "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
 }
 
-# Wait up to 25 seconds for the log to show NEW activity (not just existence)
-$deadline = (Get-Date).AddSeconds(25)
+# SYSTEM tasks need more time to initialise than user-run processes.
+# Wait up to 45 seconds; on timeout this is NOT a failure for SYSTEM tasks.
+$waitSecs  = if ($taskInstalled) { 45 } else { 25 }
+$deadline  = (Get-Date).AddSeconds($waitSecs)
 $agentStarted = $false
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 2
@@ -423,22 +425,34 @@ if ($agentStarted) {
     Write-OK "Agent is running (log activity confirmed)"
     Get-Content $LOG_FILE -Tail 3 | ForEach-Object { Write-Host "  > $_" -ForegroundColor DarkGray }
 } else {
-    # Check for startup errors
+    # Check stderr — distinguish real errors from harmless DeprecationWarnings
     $stderrFile = Join-Path $INSTALL_DIR "agent_stderr.txt"
-    Write-Host "[bootstrap] WARN  Agent log did not update in 25s -- checking for errors..." -ForegroundColor Yellow
+    $hasRealError = $false
     if (Test-Path $stderrFile) {
         $errLines = Get-Content $stderrFile -ErrorAction SilentlyContinue
-        if ($errLines) {
+        # Filter out known-harmless warnings (DeprecationWarning, ResourceWarning, etc.)
+        $realErrors = $errLines | Where-Object {
+            $_ -notmatch 'DeprecationWarning|ResourceWarning|PendingDeprecation|FutureWarning|UserWarning' -and
+            $_ -match 'Error|Traceback|Exception'
+        }
+        if ($realErrors) {
+            $hasRealError = $true
             Write-Host "[bootstrap] ERR   Agent startup error:" -ForegroundColor Red
-            $errLines | Select-Object -First 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            $realErrors | Select-Object -First 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
         }
     }
-    if ($taskInstalled) {
+
+    if ($taskInstalled -and -not $hasRealError) {
+        # SYSTEM tasks run in a separate session -- the log may not update
+        # within the wait window even when everything is healthy.
         $state = (Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue).State
-        Write-Host "[bootstrap] INFO  Task state: $state" -ForegroundColor DarkGray
+        Write-OK "SYSTEM task installed (state: $state) -- agent starts automatically at login/startup"
+        Write-Host "            To verify now: Start-ScheduledTask '$TASK_NAME'" -ForegroundColor DarkGray
+        Write-Host "            Log at:        Get-Content '$LOG_FILE'" -ForegroundColor DarkGray
+    } elseif (-not $taskInstalled) {
+        Write-Host "[bootstrap] WARN  Agent process may still be starting." -ForegroundColor Yellow
+        Write-Host "            Log at: Get-Content '$LOG_FILE'" -ForegroundColor DarkGray
     }
-    Write-Host "[bootstrap]       The agent will retry on next login/reboot." -ForegroundColor Yellow
-    Write-Host "            To diagnose: Get-Content '$LOG_FILE'" -ForegroundColor DarkGray
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────

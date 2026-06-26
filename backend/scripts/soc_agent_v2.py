@@ -109,7 +109,7 @@ def _now():
 
 
 def _utc_iso():
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _pywin_time_to_utc_iso(pywin_time) -> str:
@@ -127,7 +127,7 @@ def _pywin_time_to_utc_iso(pywin_time) -> str:
     import datetime as _dt
     try:
         epoch = _tm.mktime(pywin_time.timetuple())
-        return _dt.datetime.utcfromtimestamp(epoch).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return _dt.datetime.fromtimestamp(epoch, tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception:
         return _utc_iso()
 
@@ -666,7 +666,7 @@ def _read_windows_logs() -> list:
             _is_first = (last == 0)
             _cutoff = None
             if _is_first:
-                _cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=2)
+                _cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
 
             all_new = []
             done    = False
@@ -738,7 +738,7 @@ def _read_win_modern_channels() -> list:
             if last_ts:
                 xpath = "*[System[TimeCreated[@SystemTime>'" + last_ts + "']]]"
             else:
-                cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=2)
+                cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
                           ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 xpath = "*[System[TimeCreated[@SystemTime>'" + cutoff + "']]]"
             try:
@@ -856,8 +856,8 @@ def _parse_log_timestamp(line: str):
             mon = _MONTH_ABR.get(parts[0].lower()[:3])
             if mon:
                 day = int(parts[1]); h, mi, s = [int(x) for x in parts[2].split(':')]
-                now = datetime.datetime.utcnow()
-                dt  = datetime.datetime(now.year, mon, day, h, mi, s)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                dt  = datetime.datetime(now.year, mon, day, h, mi, s, tzinfo=datetime.timezone.utc)
                 if dt > now + datetime.timedelta(days=1):
                     dt = dt.replace(year=now.year - 1)
                 return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
