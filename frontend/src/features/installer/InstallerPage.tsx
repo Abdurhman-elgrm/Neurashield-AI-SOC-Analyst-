@@ -218,9 +218,11 @@ function EmptyState({
 
 function TokenRow({
   token,
+  isSuperseded,
   onClick,
 }: {
   token: InstallerToken;
+  isSuperseded: boolean;
   onClick: () => void;
 }) {
   return (
@@ -231,7 +233,10 @@ function TokenRow({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
       onClick={onClick}
-      className="table-row-hover border-b border-border last:border-0"
+      className={cn(
+        "table-row-hover border-b border-border last:border-0",
+        isSuperseded && "opacity-45",
+      )}
     >
       {/* Token preview */}
       <td className="px-4 py-3">
@@ -243,9 +248,17 @@ function TokenRow({
 
       {/* Machine */}
       <td className="px-4 py-3">
-        <span className="text-xs font-medium text-text-primary">
-          {token.machine_name}
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs font-medium text-text-primary">
+            {token.machine_name}
+          </span>
+          {isSuperseded && (
+            <span className="inline-flex items-center gap-1 text-2xs text-text-muted">
+              <RotateCcw className="w-2.5 h-2.5" />
+              Superseded by re-enrollment
+            </span>
+          )}
+        </div>
       </td>
 
       {/* Org */}
@@ -378,6 +391,32 @@ export function InstallerPage() {
 
   const tokens = data?.data ?? [];
   const pagination = data?.pagination;
+
+  // For each enrolled device, only the most-recently-enrolled token is
+  // "current". Older tokens for the same device are visually superseded so
+  // admins can tell at a glance that the device was re-enrolled — without
+  // losing the audit history.
+  const supersededIds = new Set<string>(
+    (() => {
+      const byDevice = new Map<string, InstallerToken[]>();
+      for (const t of tokens) {
+        if (!t.device_id || t.status !== "active") continue;
+        const list = byDevice.get(t.device_id) ?? [];
+        list.push(t);
+        byDevice.set(t.device_id, list);
+      }
+      const ids: string[] = [];
+      byDevice.forEach((list) => {
+        if (list.length < 2) return;
+        // Keep the newest (largest created_at); mark the rest superseded
+        const sorted = [...list].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        sorted.slice(1).forEach((t) => ids.push(t.id));
+      });
+      return ids;
+    })()
+  );
 
   function handleFilterChange(f: InstallerTokenStatus | "all") {
     setStatusFilter(f);
@@ -539,6 +578,7 @@ export function InstallerPage() {
                     <TokenRow
                       key={token.id}
                       token={token}
+                      isSuperseded={supersededIds.has(token.id)}
                       onClick={() => setSelectedToken(token)}
                     />
                   ))}
