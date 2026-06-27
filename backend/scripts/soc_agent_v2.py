@@ -182,6 +182,11 @@ HEARTBEAT_INTERVAL     = 20   # seconds — normal cadence
 _HB_BACKOFF_DEGRADED   = 60   # seconds — after 1–2 consecutive failures
 _HB_BACKOFF_EXTENDED   = 120  # seconds — after 3+ consecutive failures
 
+# Module-level so state survives main() restarts (crash → outer-loop restart
+# resets hb_failures to 0 if they live inside main, causing duplicate messages)
+_hb_failures = 0
+_hb_interval = HEARTBEAT_INTERVAL
+
 
 def _heartbeat(silent: bool = False) -> bool:
     """POST /api/v1/agents/heartbeat — HeartbeatRequest schema.
@@ -1049,10 +1054,7 @@ def main():
 
     last_heartbeat = last_log = last_net = last_proc = last_fim = 0.0
 
-    # Adaptive heartbeat state: backs off during connectivity loss to reduce
-    # log noise and retry pressure, then recovers immediately on reconnect.
-    _hb_failures = 0
-    _hb_interval = HEARTBEAT_INTERVAL
+    global _hb_failures, _hb_interval
 
     print(f"[{_now()}] Monitoring started.\n")
 
@@ -1121,8 +1123,7 @@ def _repair_scheduled_task_if_needed() -> None:
         return
     try:
         python_exe = sys.executable
-        is_user_local = ('\\AppData\\' in python_exe or
-                         ('\\Users\\' in python_exe and '\\AppData\\' in python_exe.split('\\Users\\', 1)[-1] if '\\Users\\' in python_exe else False))
+        is_user_local = ('\\AppData\\' in python_exe or '\\Users\\' in python_exe)
         if not is_user_local:
             return
 
@@ -1180,8 +1181,11 @@ if __name__ == "__main__":
 
     _repair_scheduled_task_if_needed()
 
+    _restart_count = 0
     while True:
         try:
+            if _restart_count > 0:
+                print(f"[{_now()}] [AGENT] Restarting (attempt {_restart_count})...")
             main()
             time.sleep(10)
         except KeyboardInterrupt:
@@ -1189,6 +1193,7 @@ if __name__ == "__main__":
             break
         except Exception as exc:
             import traceback
-            print(f"[{_now()}] FATAL: {exc}")
+            _restart_count += 1
+            print(f"[{_now()}] FATAL (restart #{_restart_count}): {exc}")
             traceback.print_exc()
             time.sleep(15)
