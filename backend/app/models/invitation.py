@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
 
@@ -18,9 +18,7 @@ class Invitation(Base, TimestampMixin):
 
     __tablename__ = "invitations"
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id", ondelete="CASCADE"),
@@ -48,7 +46,7 @@ class Invitation(Base, TimestampMixin):
     )
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    tenant: Mapped["Tenant"] = relationship(  # type: ignore[name-defined]
+    tenant: Mapped[Tenant] = relationship(  # type: ignore[name-defined]
         "Tenant",
         back_populates="invitations",
         lazy="noload",
@@ -56,13 +54,8 @@ class Invitation(Base, TimestampMixin):
 
     @property
     def is_valid(self) -> bool:
-        from datetime import timezone
-        now = datetime.now(tz=timezone.utc)
-        return (
-            self.accepted_at is None
-            and self.revoked_at is None
-            and self.expires_at > now
-        )
+        now = datetime.now(tz=UTC)
+        return self.accepted_at is None and self.revoked_at is None and self.expires_at > now
 
     def __repr__(self) -> str:
         return f"<Invitation id={self.id} email={self.email} tenant={self.tenant_id}>"

@@ -24,21 +24,21 @@ logger = structlog.get_logger(__name__)
 # AbuseIPDB: reputation scores change daily as reports come in.
 # OTX: pulse data updates every few hours.
 # VirusTotal: real-time scanning, cache only 1 hour.
-_GEOIP_CACHE_TTL  = int(os.getenv("GEOIP_CACHE_TTL_SECS",  str(86_400 * 30)))  # 30 days
-_ABUSE_CACHE_TTL  = int(os.getenv("ABUSE_CACHE_TTL_SECS",  str(86_400)))        # 24 hours
-_OTX_CACHE_TTL    = int(os.getenv("OTX_CACHE_TTL_SECS",    str(21_600)))        # 6 hours
-_VT_CACHE_TTL     = int(os.getenv("VT_CACHE_TTL_SECS",     str(3_600)))         # 1 hour
+_GEOIP_CACHE_TTL = int(os.getenv("GEOIP_CACHE_TTL_SECS", str(86_400 * 30)))  # 30 days
+_ABUSE_CACHE_TTL = int(os.getenv("ABUSE_CACHE_TTL_SECS", str(86_400)))  # 24 hours
+_OTX_CACHE_TTL = int(os.getenv("OTX_CACHE_TTL_SECS", str(21_600)))  # 6 hours
+_VT_CACHE_TTL = int(os.getenv("VT_CACHE_TTL_SECS", str(3_600)))  # 1 hour
 
 # ─── Configurable AbuseIPDB thresholds ────────────────────────────────────────
 _ABUSE_SUSPICIOUS_SCORE = int(os.getenv("ABUSEIPDB_SUSPICIOUS_SCORE", "25"))
-_ABUSE_MALICIOUS_SCORE  = int(os.getenv("ABUSEIPDB_MALICIOUS_SCORE",  "75"))
+_ABUSE_MALICIOUS_SCORE = int(os.getenv("ABUSEIPDB_MALICIOUS_SCORE", "75"))
 
 # ─── Circuit breaker ──────────────────────────────────────────────────────────
 # Opens the circuit after N consecutive failures; resets after _CB_RESET_SECS.
 _CB_MAX_FAILURES = int(os.getenv("THREAT_INTEL_CB_FAILURES", "3"))
-_CB_RESET_SECS   = int(os.getenv("THREAT_INTEL_CB_RESET_SECS", "300"))
+_CB_RESET_SECS = int(os.getenv("THREAT_INTEL_CB_RESET_SECS", "300"))
 
-_cb_failures: dict[str, int]   = {}  # service → failure count
+_cb_failures: dict[str, int] = {}  # service → failure count
 _cb_open_until: dict[str, float] = {}  # service → epoch when circuit resets
 
 
@@ -66,6 +66,7 @@ def _cb_record_failure(service: str) -> None:
 
 # ─── RFC 1918 / loopback / link-local private IP detection ───────────────────
 
+
 def _is_private_ip(ip: str) -> bool:
     """Return True for IPs that don't require external enrichment."""
     try:
@@ -77,7 +78,7 @@ def _is_private_ip(ip: str) -> bool:
 
 @dataclass
 class ThreatIntelResult:
-    abuse_confidence: int = 0          # 0-100 from AbuseIPDB
+    abuse_confidence: int = 0  # 0-100 from AbuseIPDB
     is_threat_ip: bool = False
     threat_intel_flags: list[str] = field(default_factory=list)
     sources_checked: list[str] = field(default_factory=list)
@@ -86,6 +87,7 @@ class ThreatIntelResult:
 @dataclass
 class EnrichmentResult:
     """Combined GeoIP + ThreatIntel enrichment for a single IP."""
+
     # GeoIP
     geo_country: str | None = None
     geo_country_code: str | None = None
@@ -123,7 +125,7 @@ class ThreatIntelService:
     # ── AbuseIPDB ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    async def _check_abuseipdb(ip: str, redis: "Redis[str] | None") -> ThreatIntelResult:
+    async def _check_abuseipdb(ip: str, redis: Redis[str] | None) -> ThreatIntelResult:
         if not settings.ABUSEIPDB_API_KEY:
             return ThreatIntelResult()
         if _cb_is_open("abuseipdb"):
@@ -190,7 +192,7 @@ class ThreatIntelService:
     # ── AlienVault OTX ────────────────────────────────────────────────────────
 
     @staticmethod
-    async def _check_otx(ip: str, redis: "Redis[str] | None") -> list[str]:
+    async def _check_otx(ip: str, redis: Redis[str] | None) -> list[str]:
         if not settings.ALIENVAULT_API_KEY:
             return []
         if _cb_is_open("otx"):
@@ -238,7 +240,7 @@ class ThreatIntelService:
     # ── VirusTotal ────────────────────────────────────────────────────────────
 
     @staticmethod
-    async def _check_virustotal(ip: str, redis: "Redis[str] | None") -> list[str]:
+    async def _check_virustotal(ip: str, redis: Redis[str] | None) -> list[str]:
         if not settings.VIRUSTOTAL_API_KEY:
             return []
         if _cb_is_open("virustotal"):
@@ -266,9 +268,9 @@ class ThreatIntelService:
 
             _cb_record_success("virustotal")
 
-            malicious  = stats.get("malicious", 0)
+            malicious = stats.get("malicious", 0)
             suspicious = stats.get("suspicious", 0)
-            total      = sum(stats.values())
+            total = sum(stats.values())
 
             if malicious > 0:
                 flags.append(f"virustotal_malicious:{malicious}")
@@ -293,7 +295,7 @@ class ThreatIntelService:
     # ── Main enrichment entry point ───────────────────────────────────────────
 
     @staticmethod
-    async def enrich_ip(ip: str | None, redis: "Redis[str] | None" = None) -> EnrichmentResult:
+    async def enrich_ip(ip: str | None, redis: Redis[str] | None = None) -> EnrichmentResult:
         """
         Enriches a single IP with GeoIP + ThreatIntel data.
 
@@ -313,10 +315,10 @@ class ThreatIntelService:
             return EnrichmentResult()
 
         try:
-            geo_task   = GeoIPService.lookup(ip, redis)
+            geo_task = GeoIPService.lookup(ip, redis)
             abuse_task = ThreatIntelService._check_abuseipdb(ip, redis)
-            otx_task   = ThreatIntelService._check_otx(ip, redis)
-            vt_task    = ThreatIntelService._check_virustotal(ip, redis)
+            otx_task = ThreatIntelService._check_otx(ip, redis)
+            vt_task = ThreatIntelService._check_virustotal(ip, redis)
 
             geo, abuse, otx_flags, vt_flags = await asyncio.wait_for(
                 asyncio.gather(geo_task, abuse_task, otx_task, vt_task, return_exceptions=True),
@@ -324,10 +326,12 @@ class ThreatIntelService:
             )
 
             # Gracefully handle individual task failures
-            geo_result:   GeoResult         = geo   if isinstance(geo,   GeoResult)         else GeoResult()
-            abuse_result: ThreatIntelResult  = abuse if isinstance(abuse, ThreatIntelResult) else ThreatIntelResult()
-            otx_result:   list[str]          = otx_flags if isinstance(otx_flags, list) else []
-            vt_result:    list[str]          = vt_flags  if isinstance(vt_flags,  list) else []
+            geo_result: GeoResult = geo if isinstance(geo, GeoResult) else GeoResult()
+            abuse_result: ThreatIntelResult = (
+                abuse if isinstance(abuse, ThreatIntelResult) else ThreatIntelResult()
+            )
+            otx_result: list[str] = otx_flags if isinstance(otx_flags, list) else []
+            vt_result: list[str] = vt_flags if isinstance(vt_flags, list) else []
 
             all_flags = list(set(abuse_result.threat_intel_flags + otx_result + vt_result))
             is_threat = (

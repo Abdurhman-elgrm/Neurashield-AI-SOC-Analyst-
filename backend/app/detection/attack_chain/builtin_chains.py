@@ -4,6 +4,7 @@ Built-in attack chain rules — 12 patterns covering the full MITRE ATT&CK kill 
 Each rule correlates multiple alerts on the same host within a time window.
 When matched, a new critical chain alert is created summarising the attack path.
 """
+
 from __future__ import annotations
 
 from .models import AttackChainRule, ChainStage
@@ -13,44 +14,87 @@ from .models import AttackChainRule, ChainStage
 _CRED_DUMP = ChainStage(
     name="Credential Access",
     keywords=(
-        "mimikatz", "lsass", "credential dump", "sam hive", "ntds",
-        "dcsync", "sekurlsa", "lsadump", "pass-the-hash", "procdump",
-        "wce", "pwdump", "lazagne", "rubeus",
+        "mimikatz",
+        "lsass",
+        "credential dump",
+        "sam hive",
+        "ntds",
+        "dcsync",
+        "sekurlsa",
+        "lsadump",
+        "pass-the-hash",
+        "procdump",
+        "wce",
+        "pwdump",
+        "lazagne",
+        "rubeus",
     ),
 )
 
 _LATERAL = ChainStage(
     name="Lateral Movement",
     keywords=(
-        "lateral movement", "psexec", "wmi remote", "wmi /node",
-        "rdp", "remote interactive", "admin share", "type 3",
-        "pass-the-ticket", "kerberos rc4", "dcom", "winrm",
+        "lateral movement",
+        "psexec",
+        "wmi remote",
+        "wmi /node",
+        "rdp",
+        "remote interactive",
+        "admin share",
+        "type 3",
+        "pass-the-ticket",
+        "kerberos rc4",
+        "dcom",
+        "winrm",
     ),
 )
 
 _RECON = ChainStage(
     name="Discovery / Recon",
     keywords=(
-        "enumeration", "net.exe", "whoami", "systeminfo", "ad recon",
-        "bloodhound", "sharphound", "adfind", "powerview",
-        "system enumeration", "user / group", "port scan",
+        "enumeration",
+        "net.exe",
+        "whoami",
+        "systeminfo",
+        "ad recon",
+        "bloodhound",
+        "sharphound",
+        "adfind",
+        "powerview",
+        "system enumeration",
+        "user / group",
+        "port scan",
     ),
 )
 
 _PERSISTENCE = ChainStage(
     name="Persistence",
     keywords=(
-        "run key", "startup folder", "scheduled task", "service install",
-        "wmi permanent", "com hijack", "autorun", "persistence",
-        "new service", "registry autorun",
+        "run key",
+        "startup folder",
+        "scheduled task",
+        "service install",
+        "wmi permanent",
+        "com hijack",
+        "autorun",
+        "persistence",
+        "new service",
+        "registry autorun",
     ),
 )
 
 _DEFENSE_EVASION = ChainStage(
     name="Defense Evasion",
     keywords=(
-        "log clear", "firewall disabled", "defender disabled", "amsi bypass",
-        "etw", "audit log cleared", "1102", "4719", "applocker bypass",
+        "log clear",
+        "firewall disabled",
+        "defender disabled",
+        "amsi bypass",
+        "etw",
+        "audit log cleared",
+        "1102",
+        "4719",
+        "applocker bypass",
         "script block logging disabled",
     ),
 )
@@ -58,32 +102,53 @@ _DEFENSE_EVASION = ChainStage(
 _EXECUTION = ChainStage(
     name="Execution",
     keywords=(
-        "powershell", "encoded command", "download cradle", "mshta",
-        "regsvr32", "rundll32", "wscript", "cscript", "installutil",
-        "certutil", "bits", ".net compiler",
+        "powershell",
+        "encoded command",
+        "download cradle",
+        "mshta",
+        "regsvr32",
+        "rundll32",
+        "wscript",
+        "cscript",
+        "installutil",
+        "certutil",
+        "bits",
+        ".net compiler",
     ),
 )
 
 _INITIAL_ACCESS = ChainStage(
     name="Initial Access",
     keywords=(
-        "office application spawning", "browser spawning", "macro",
-        "drive-by", "phishing", "mshta - html", "exploited",
+        "office application spawning",
+        "browser spawning",
+        "macro",
+        "drive-by",
+        "phishing",
+        "mshta - html",
+        "exploited",
     ),
 )
 
 _BRUTE_FORCE = ChainStage(
     name="Brute Force",
     keywords=(
-        "brute force", "failed logon threshold", "multiple.*failed",
-        "credential stuffing", "ssh brute", "4625",
+        "brute force",
+        "failed logon threshold",
+        "multiple.*failed",
+        "credential stuffing",
+        "ssh brute",
+        "4625",
     ),
 )
 
 _LOGON_SUCCESS = ChainStage(
     name="Successful Authentication",
     keywords=(
-        "logon success", "4624", "successful login", "authentication success",
+        "logon success",
+        "4624",
+        "successful login",
+        "authentication success",
         "token impersonation",
     ),
 )
@@ -91,33 +156,57 @@ _LOGON_SUCCESS = ChainStage(
 _RANSOMWARE = ChainStage(
     name="Ransomware Indicator",
     keywords=(
-        "shadow copy", "vssadmin", "bcdedit", "wbadmin", "ransomware",
-        "cipher wipe", "backup catalog", "file extension",
+        "shadow copy",
+        "vssadmin",
+        "bcdedit",
+        "wbadmin",
+        "ransomware",
+        "cipher wipe",
+        "backup catalog",
+        "file extension",
     ),
 )
 
 _EXFIL = ChainStage(
     name="Exfiltration",
     keywords=(
-        "exfiltration", "archive tool", "ftp upload", "dns tunnel",
-        "bits transfer", "data compression", "7z", "winrar",
+        "exfiltration",
+        "archive tool",
+        "ftp upload",
+        "dns tunnel",
+        "bits transfer",
+        "data compression",
+        "7z",
+        "winrar",
     ),
 )
 
 _C2 = ChainStage(
     name="Command and Control",
     keywords=(
-        "c2", "cobalt strike", "beacon", "dns tunneling", "tcp socket",
-        "high port", "reverse shell", "netcat", "suspicious.*port",
+        "c2",
+        "cobalt strike",
+        "beacon",
+        "dns tunneling",
+        "tcp socket",
+        "high port",
+        "reverse shell",
+        "netcat",
+        "suspicious.*port",
     ),
 )
 
 _PRIV_ESC = ChainStage(
     name="Privilege Escalation",
     keywords=(
-        "privilege escal", "setcbprivilege", "sedebuggprivilege",
-        "alwaysinstallelevated", "cmstp", "token impersonation",
-        "4672", "special privileges",
+        "privilege escal",
+        "setcbprivilege",
+        "sedebuggprivilege",
+        "alwaysinstallelevated",
+        "cmstp",
+        "token impersonation",
+        "4672",
+        "special privileges",
     ),
 )
 
@@ -129,8 +218,11 @@ _HASH_IOC = ChainStage(
 _PROCESS_INJECT = ChainStage(
     name="Process Injection",
     keywords=(
-        "remote thread", "process inject", "sysmon event 8",
-        "process hollow", "reflective",
+        "remote thread",
+        "process inject",
+        "sysmon event 8",
+        "process hollow",
+        "reflective",
     ),
 )
 
@@ -138,7 +230,6 @@ _PROCESS_INJECT = ChainStage(
 # ─── Built-in chains ──────────────────────────────────────────────────────────
 
 BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
-
     AttackChainRule(
         name="Brute Force → Account Compromise",
         description=(
@@ -152,7 +243,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1110", "T1078"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Credential Dump → Lateral Movement",
         description=(
@@ -166,7 +256,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1003", "T1021"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Discovery → Privilege Escalation",
         description=(
@@ -180,7 +269,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1069", "T1134"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Defense Evasion → Execution",
         description=(
@@ -194,7 +282,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1562", "T1059"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Process Injection → C2 Beacon",
         description=(
@@ -208,7 +295,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1055", "T1071"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Ransomware Multi-Stage Attack",
         description=(
@@ -222,7 +308,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1490", "T1486"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Initial Access → Malicious Execution",
         description=(
@@ -236,7 +321,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1566", "T1059"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Persistence → C2 Communication",
         description=(
@@ -250,7 +334,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1547", "T1071"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Credential Dump → Exfiltration",
         description=(
@@ -264,7 +347,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1003", "T1048"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Known Malware → Lateral Movement",
         description=(
@@ -278,7 +360,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1204", "T1021"),
         min_stages=2,
     ),
-
     AttackChainRule(
         name="Full Kill Chain: Recon → Credential Dump → Lateral Movement",
         description=(
@@ -293,7 +374,6 @@ BUILTIN_CHAINS: tuple[AttackChainRule, ...] = (
         mitre_techniques=("T1069", "T1003", "T1021"),
         min_stages=3,
     ),
-
     AttackChainRule(
         name="Defense Evasion → Credential Dump → Persistence",
         description=(

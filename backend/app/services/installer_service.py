@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -15,7 +14,6 @@ from app.models.installer_token import InstallerToken, InstallerTokenStatus
 from app.schemas.installer import (
     InstallerTokenGenerateRequest,
     InstallerTokenGenerateResponse,
-    InstallerTokenResponse,
 )
 from app.services.audit_service import AuditService
 
@@ -30,7 +28,6 @@ _TOKEN_RANDOM_BYTES = 32
 
 
 class InstallerService:
-
     # ─── Generation ───────────────────────────────────────────────────────────
 
     @staticmethod
@@ -44,7 +41,7 @@ class InstallerService:
         token_hash = hash_password(raw_token)
         # Preview = prefix + first 3 chars of the random part (8 chars total)
         token_preview = raw_token[:8]
-        expires_at = datetime.now(tz=timezone.utc) + timedelta(minutes=_TOKEN_TTL_MINUTES)
+        expires_at = datetime.now(tz=UTC) + timedelta(minutes=_TOKEN_TTL_MINUTES)
 
         token = InstallerToken(
             tenant_id=tenant_id,
@@ -91,7 +88,7 @@ class InstallerService:
             expires_at=expires_at.isoformat(),
         )
 
-        expires_in = int((expires_at - datetime.now(tz=timezone.utc)).total_seconds())
+        expires_in = int((expires_at - datetime.now(tz=UTC)).total_seconds())
         return InstallerTokenGenerateResponse(
             id=token.id,
             raw_token=raw_token,
@@ -118,9 +115,7 @@ class InstallerService:
         Raises NotFoundError or ValidationError on any failure.
         Constant-time: always calls verify_password even on miss to prevent timing attacks.
         """
-        result = await db.execute(
-            select(InstallerToken).where(InstallerToken.id == token_id)
-        )
+        result = await db.execute(select(InstallerToken).where(InstallerToken.id == token_id))
         token = result.scalar_one_or_none()
 
         dummy_hash = "$argon2id$v=19$m=65536,t=2,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -178,7 +173,7 @@ class InstallerService:
                 details={"token_id": str(token.id)},
             )
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         locked_token.status = InstallerTokenStatus.INSTALLING
         locked_token.used_at = now
         await db.flush()
@@ -203,7 +198,7 @@ class InstallerService:
                 details={"status": token.status.value},
             )
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         token.status = InstallerTokenStatus.ACTIVE
         token.installed_at = now
         if device_id:
@@ -266,7 +261,11 @@ class InstallerService:
         if token is None:
             raise NotFoundError(f"Installer token {token_id} not found")
 
-        terminal = {InstallerTokenStatus.EXPIRED, InstallerTokenStatus.REVOKED, InstallerTokenStatus.ACTIVE}
+        terminal = {
+            InstallerTokenStatus.EXPIRED,
+            InstallerTokenStatus.REVOKED,
+            InstallerTokenStatus.ACTIVE,
+        }
         if token.status in terminal:
             raise ConflictError(
                 f"Token cannot be revoked: status is {token.status.value}",
@@ -275,7 +274,7 @@ class InstallerService:
 
         previous_status = token.status.value  # capture BEFORE mutation
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         token.status = InstallerTokenStatus.REVOKED
         token.revoked_at = now
         token.revoked_by_id = revoked_by_id
@@ -316,7 +315,7 @@ class InstallerService:
 
         Returns total count of tokens transitioned.
         """
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         # Tokens can't still be legitimately installing after 10 minutes —
         # the bootstrap.ps1 completes in well under 5 minutes even on slow links.
         installing_cutoff = now - timedelta(minutes=10)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -15,7 +15,11 @@ from app.models.detection_rule import DetectionRule, RuleType
 from app.models.event import Event
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
-from app.schemas.detection import DetectionRuleCreateRequest, DetectionRuleResponse, DetectionRuleUpdateRequest
+from app.schemas.detection import (
+    DetectionRuleCreateRequest,
+    DetectionRuleResponse,
+    DetectionRuleUpdateRequest,
+)
 from app.services.audit_service import AuditService
 from app.services.detection_service import DetectionService
 
@@ -23,7 +27,9 @@ router = APIRouter(prefix="/rules", tags=["detection-rules"])
 
 
 class RuleTestRequest(BaseModel):
-    from_hours: int = Field(default=24, ge=1, le=168, description="Hours of history to test against")
+    from_hours: int = Field(
+        default=24, ge=1, le=168, description="Hours of history to test against"
+    )
     max_events: int = Field(default=1000, ge=1, le=5000, description="Maximum events to scan")
 
 
@@ -50,45 +56,66 @@ class RuleTestResult(BaseModel):
 def _event_to_normalized(event: Event) -> Any:
     """Reconstruct a NormalizedEvent from stored DB event data."""
     from app.normalization.models import (
-        NormalizedEvent, NormalizedProcess, NormalizedNetwork, NormalizedUser, NormalizedFile,
+        NormalizedEvent,
+        NormalizedFile,
+        NormalizedNetwork,
+        NormalizedProcess,
+        NormalizedUser,
     )
-    proc_data  = event.process  or {}
-    net_data   = event.network  or {}
-    user_data  = event.user     or {}
-    file_data  = event.file     or {}
-    raw        = event.raw_payload or {}
 
-    proc = NormalizedProcess(
-        name=proc_data.get("name"),
-        pid=proc_data.get("pid"),
-        ppid=proc_data.get("ppid"),
-        executable=proc_data.get("executable"),
-        command_line=proc_data.get("command_line"),
-        hash_md5=proc_data.get("hash_md5"),
-        hash_sha256=proc_data.get("hash_sha256"),
-    ) if proc_data else None
+    proc_data = event.process or {}
+    net_data = event.network or {}
+    user_data = event.user or {}
+    file_data = event.file or {}
+    raw = event.raw_payload or {}
 
-    net = NormalizedNetwork(
-        src_ip=net_data.get("src_ip"),
-        src_port=net_data.get("src_port"),
-        dst_ip=net_data.get("dst_ip"),
-        dst_port=net_data.get("dst_port"),
-        protocol=net_data.get("protocol"),
-    ) if net_data else None
+    proc = (
+        NormalizedProcess(
+            name=proc_data.get("name"),
+            pid=proc_data.get("pid"),
+            ppid=proc_data.get("ppid"),
+            executable=proc_data.get("executable"),
+            command_line=proc_data.get("command_line"),
+            hash_md5=proc_data.get("hash_md5"),
+            hash_sha256=proc_data.get("hash_sha256"),
+        )
+        if proc_data
+        else None
+    )
 
-    user = NormalizedUser(
-        name=user_data.get("name"),
-        domain=user_data.get("domain"),
-        id=user_data.get("id"),
-        is_privileged=bool(user_data.get("is_privileged", False)),
-    ) if user_data else None
+    net = (
+        NormalizedNetwork(
+            src_ip=net_data.get("src_ip"),
+            src_port=net_data.get("src_port"),
+            dst_ip=net_data.get("dst_ip"),
+            dst_port=net_data.get("dst_port"),
+            protocol=net_data.get("protocol"),
+        )
+        if net_data
+        else None
+    )
 
-    file_ = NormalizedFile(
-        path=file_data.get("path"),
-        name=file_data.get("name"),
-        extension=file_data.get("extension"),
-        action=file_data.get("action"),
-    ) if file_data else None
+    user = (
+        NormalizedUser(
+            name=user_data.get("name"),
+            domain=user_data.get("domain"),
+            id=user_data.get("id"),
+            is_privileged=bool(user_data.get("is_privileged", False)),
+        )
+        if user_data
+        else None
+    )
+
+    file_ = (
+        NormalizedFile(
+            path=file_data.get("path"),
+            name=file_data.get("name"),
+            extension=file_data.get("extension"),
+            action=file_data.get("action"),
+        )
+        if file_data
+        else None
+    )
 
     return NormalizedEvent(
         event_id=str(event.id),
@@ -116,11 +143,16 @@ async def list_rules(
     enabled_only: bool = Query(default=False),
 ) -> PaginatedResponse[DetectionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
-    rules, total = await DetectionService.list_rules(db, m.tenant_id, page=page, limit=limit, enabled_only=enabled_only)
+    rules, total = await DetectionService.list_rules(
+        db, m.tenant_id, page=page, limit=limit, enabled_only=enabled_only
+    )
     return PaginatedResponse[DetectionRuleResponse].offset(
         data=[DetectionRuleResponse.model_validate(r) for r in rules],
-        page=page, limit=limit, total=total,
+        page=page,
+        limit=limit,
+        total=total,
     )
 
 
@@ -131,11 +163,17 @@ async def create_rule(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[DetectionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     rule = await DetectionService.create_rule(db, m.tenant_id, payload, m.user_id)
     await AuditService.log(
-        db, action="rule.created", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="detection_rule", resource_id=rule.id,
+        db,
+        action="rule.created",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="detection_rule",
+        resource_id=rule.id,
     )
     await db.commit()
     return APIResponse.ok(DetectionRuleResponse.model_validate(rule))
@@ -148,6 +186,7 @@ async def get_rule(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[DetectionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     rule = await DetectionService.require_by_id(db, m.tenant_id, rule_id)
     return APIResponse.ok(DetectionRuleResponse.model_validate(rule))
@@ -161,11 +200,17 @@ async def update_rule(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[DetectionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     rule = await DetectionService.update_rule(db, m.tenant_id, rule_id, payload, m.user_id)
     await AuditService.log(
-        db, action="rule.updated", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="detection_rule", resource_id=rule_id,
+        db,
+        action="rule.updated",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="detection_rule",
+        resource_id=rule_id,
     )
     await db.commit()
     return APIResponse.ok(DetectionRuleResponse.model_validate(rule))
@@ -178,11 +223,17 @@ async def delete_rule(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[EmptyResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     await DetectionService.delete_rule(db, m.tenant_id, rule_id)
     await AuditService.log(
-        db, action="rule.deleted", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="detection_rule", resource_id=rule_id,
+        db,
+        action="rule.deleted",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="detection_rule",
+        resource_id=rule_id,
     )
     await db.commit()
     return APIResponse.ok(EmptyResponse())
@@ -203,15 +254,16 @@ async def test_rule_dry_run(
     THRESHOLD rules: simulated in-memory by counting events matching the base
                      conditions in a sliding window — no Redis state is touched.
     """
-    from app.models.tenant_member import TenantMember
     from app.detection.patterns import evaluate_conditions
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 
     rule = await DetectionService.require_by_id(db, m.tenant_id, rule_id)
 
     from datetime import timedelta as _timedelta
-    from_ts = datetime.now(tz=timezone.utc) - _timedelta(hours=body.from_hours)
+
+    from_ts = datetime.now(tz=UTC) - _timedelta(hours=body.from_hours)
     events_result = await db.execute(
         select(Event)
         .where(
@@ -226,19 +278,23 @@ async def test_rule_dry_run(
     matches: list[RuleTestMatch] = []
 
     if rule.rule_type == RuleType.PATTERN:
-        conditions: list[dict[str, Any]] = rule.conditions if isinstance(rule.conditions, list) else []
+        conditions: list[dict[str, Any]] = (
+            rule.conditions if isinstance(rule.conditions, list) else []
+        )
         for ev in events:
             normalized = _event_to_normalized(ev)
             if evaluate_conditions(conditions, normalized):
-                matches.append(RuleTestMatch(
-                    event_id=str(ev.id),
-                    occurred_at=ev.event_timestamp.isoformat() if ev.event_timestamp else "",
-                    category=ev.category.value if ev.category else "",
-                    hostname=ev.host_name,
-                    username=ev.username,
-                    process_name=ev.process_name,
-                    source_ip=ev.source_ip,
-                ))
+                matches.append(
+                    RuleTestMatch(
+                        event_id=str(ev.id),
+                        occurred_at=ev.event_timestamp.isoformat() if ev.event_timestamp else "",
+                        category=ev.category.value if ev.category else "",
+                        hostname=ev.host_name,
+                        username=ev.username,
+                        process_name=ev.process_name,
+                        source_ip=ev.source_ip,
+                    )
+                )
 
     elif rule.rule_type == RuleType.THRESHOLD:
         # Simulate threshold rule in-memory.
@@ -246,7 +302,7 @@ async def test_rule_dry_run(
         # plus threshold_count and window_seconds.
         conds = rule.conditions if isinstance(rule.conditions, dict) else {}
         threshold_count = int(conds.get("threshold", conds.get("count", 5)))
-        window_seconds  = int(conds.get("window_seconds", conds.get("window", 300)))
+        window_seconds = int(conds.get("window_seconds", conds.get("window", 300)))
         # Base conditions are the filter that must match for an event to count
         base_conds: list[dict[str, Any]] = conds.get("conditions", [])
 
@@ -268,22 +324,23 @@ async def test_rule_dry_run(
         for i, (ts_i, ev_i) in enumerate(matching_timestamps):
             window_start = ts_i - _timedelta(seconds=window_seconds)
             count_in_window = sum(
-                1 for ts_j, _ in matching_timestamps[:i + 1]
-                if ts_j >= window_start
+                1 for ts_j, _ in matching_timestamps[: i + 1] if ts_j >= window_start
             )
             if count_in_window >= threshold_count:
                 eid = str(ev_i.id)
                 if eid not in seen_match_ids:
                     seen_match_ids.add(eid)
-                    matches.append(RuleTestMatch(
-                        event_id=eid,
-                        occurred_at=ts_i.isoformat(),
-                        category=ev_i.category.value if ev_i.category else "",
-                        hostname=ev_i.host_name,
-                        username=ev_i.username,
-                        process_name=ev_i.process_name,
-                        source_ip=ev_i.source_ip,
-                    ))
+                    matches.append(
+                        RuleTestMatch(
+                            event_id=eid,
+                            occurred_at=ts_i.isoformat(),
+                            category=ev_i.category.value if ev_i.category else "",
+                            hostname=ev_i.host_name,
+                            username=ev_i.username,
+                            process_name=ev_i.process_name,
+                            source_ip=ev_i.source_ip,
+                        )
+                    )
 
     result = RuleTestResult(
         rule_id=str(rule.id),
@@ -298,6 +355,7 @@ async def test_rule_dry_run(
 
 # ─── /rules/coverage ─────────────────────────────────────────────────────────
 
+
 @router.get("/coverage", response_model=APIResponse[dict])
 async def get_rules_coverage(
     member: Annotated[object, require_permission(Permission.RULES_READ)],
@@ -305,6 +363,7 @@ async def get_rules_coverage(
 ) -> APIResponse[dict]:
     """Return MITRE ATT&CK technique coverage score based on active detection rules."""
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     result = await db.execute(
@@ -329,9 +388,11 @@ async def get_rules_coverage(
     covered_count = len(covered)
     score_pct = min(100, round((covered_count / total) * 100))
 
-    return APIResponse.ok({
-        "score_pct":           score_pct,
-        "covered_techniques":  covered_count,
-        "total_techniques":    total,
-        "trend_delta":         0,
-    })
+    return APIResponse.ok(
+        {
+            "score_pct": score_pct,
+            "covered_techniques": covered_count,
+            "total_techniques": total,
+            "trend_delta": 0,
+        }
+    )

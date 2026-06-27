@@ -3,9 +3,10 @@ User-defined alert suppression rules.
 When a newly generated alert matches ALL non-null fields of a suppression rule,
 the alert is discarded before persisting to the database.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -25,9 +26,18 @@ router = APIRouter(prefix="/suppression-rules", tags=["Suppression Rules"])
 
 _VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 _VALID_CATEGORIES = {
-    "auth", "process", "network", "file", "registry",
-    "wmi", "powershell", "firewall", "service", "scheduled_task",
-    "other", "system",
+    "auth",
+    "process",
+    "network",
+    "file",
+    "registry",
+    "wmi",
+    "powershell",
+    "firewall",
+    "service",
+    "scheduled_task",
+    "other",
+    "system",
 }
 
 
@@ -78,10 +88,14 @@ def _validate_rule(
     expires_at: datetime | None = None,
 ) -> None:
     if category and category not in _VALID_CATEGORIES:
-        raise ValidationError(f"Invalid category. Must be one of: {', '.join(sorted(_VALID_CATEGORIES))}")
+        raise ValidationError(
+            f"Invalid category. Must be one of: {', '.join(sorted(_VALID_CATEGORIES))}"
+        )
     if min_severity and min_severity.lower() not in _VALID_SEVERITIES:
-        raise ValidationError(f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}")
-    if expires_at and expires_at <= datetime.now(tz=timezone.utc):
+        raise ValidationError(
+            f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}"
+        )
+    if expires_at and expires_at <= datetime.now(tz=UTC):
         raise ValidationError("expires_at must be in the future")
 
 
@@ -96,6 +110,7 @@ async def list_rules(
     include_expired: bool = False,
 ) -> APIResponse[list[SuppressionRuleResponse]]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     q = select(SuppressionRule).where(
@@ -103,7 +118,7 @@ async def list_rules(
         SuppressionRule.deleted_at.is_(None),
     )
     if not include_expired:
-        q = q.where(SuppressionRule.expires_at > datetime.now(tz=timezone.utc))
+        q = q.where(SuppressionRule.expires_at > datetime.now(tz=UTC))
 
     result = await db.execute(q.order_by(SuppressionRule.created_at.desc()))
     rules = list(result.scalars().all())
@@ -122,6 +137,7 @@ async def create_rule(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[SuppressionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     _validate_rule(payload.category, payload.min_severity, payload.expires_at)
@@ -129,7 +145,7 @@ async def create_rule(
     # Ensure expires_at is timezone-aware
     expires = payload.expires_at
     if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
+        expires = expires.replace(tzinfo=UTC)
 
     rule = SuppressionRule(
         tenant_id=m.tenant_id,
@@ -163,6 +179,7 @@ async def update_rule(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[SuppressionRuleResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     result = await db.execute(
@@ -195,10 +212,10 @@ async def update_rule(
     if payload.expires_at is not None:
         expires = payload.expires_at
         if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
+            expires = expires.replace(tzinfo=UTC)
         rule.expires_at = expires
 
-    rule.updated_at = datetime.now(tz=timezone.utc)
+    rule.updated_at = datetime.now(tz=UTC)
     await db.flush([rule])
     await db.commit()
     await db.refresh(rule)
@@ -216,6 +233,7 @@ async def delete_rule(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[EmptyResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     result = await db.execute(
@@ -229,7 +247,7 @@ async def delete_rule(
     if rule is None:
         raise NotFoundError("Suppression rule not found")
 
-    rule.deleted_at = datetime.now(tz=timezone.utc)
+    rule.deleted_at = datetime.now(tz=UTC)
     await db.flush([rule])
     await db.commit()
     return APIResponse.ok(EmptyResponse())

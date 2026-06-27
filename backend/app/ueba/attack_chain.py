@@ -11,6 +11,7 @@ Patterns:
 
 All thresholds and time windows are configurable via environment variables.
 """
+
 from __future__ import annotations
 
 import os
@@ -21,17 +22,16 @@ from redis.asyncio import Redis
 from app.core.redis import TenantRedisClient
 
 # ─── Configurable thresholds ──────────────────────────────────────────────────
-_WIN_BRUTE   = int(os.getenv("UEBA_BRUTE_WINDOW_SECS",   "300"))   # 5 min
-_WIN_LATERAL = int(os.getenv("UEBA_LATERAL_WINDOW_SECS", "600"))   # 10 min
-_WIN_XDOMAIN = int(os.getenv("UEBA_XDOMAIN_WINDOW_SECS", "900"))   # 15 min
+_WIN_BRUTE = int(os.getenv("UEBA_BRUTE_WINDOW_SECS", "300"))  # 5 min
+_WIN_LATERAL = int(os.getenv("UEBA_LATERAL_WINDOW_SECS", "600"))  # 10 min
+_WIN_XDOMAIN = int(os.getenv("UEBA_XDOMAIN_WINDOW_SECS", "900"))  # 15 min
 
-_BRUTE_THRESHOLD    = int(os.getenv("UEBA_BRUTE_THRESHOLD",    "5"))
-_LATERAL_THRESHOLD  = int(os.getenv("UEBA_LATERAL_THRESHOLD",  "3"))
+_BRUTE_THRESHOLD = int(os.getenv("UEBA_BRUTE_THRESHOLD", "5"))
+_LATERAL_THRESHOLD = int(os.getenv("UEBA_LATERAL_THRESHOLD", "3"))
 _STUFFING_THRESHOLD = int(os.getenv("UEBA_STUFFING_THRESHOLD", "5"))
 
 
 class AttackChainDetector:
-
     def __init__(self, redis: Redis, tenant_id: str) -> None:
         self._c = TenantRedisClient(redis, tenant_id, "ueba")
 
@@ -98,9 +98,7 @@ class AttackChainDetector:
         distinct = {e.rsplit(":", 1)[0] for e in entries}
         return ["lateral_movement"] if len(distinct) >= _LATERAL_THRESHOLD else []
 
-    async def _credential_stuffing(
-        self, source_ip: str, username: str, now: float
-    ) -> list[str]:
+    async def _credential_stuffing(self, source_ip: str, username: str, now: float) -> list[str]:
         key = f"chain:stuff:{source_ip}:users"
         cutoff = now - _WIN_BRUTE
         await self._c.zremrangebyscore(key, "-inf", cutoff)

@@ -1,9 +1,8 @@
 """Unit tests for the Events Explorer filter engine."""
+
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import and_, not_, or_
-from sqlalchemy.sql.elements import BooleanClauseList, UnaryExpression
 
 from app.events.filters import (
     FilterValidationError,
@@ -13,8 +12,8 @@ from app.events.filters import (
 )
 from app.events.schemas import FilterCondition, FilterGroup
 
-
 # ─── FilterCondition ──────────────────────────────────────────────────────────
+
 
 class TestFilterCondition:
     def test_eq_operator(self):
@@ -43,7 +42,9 @@ class TestFilterCondition:
         assert clause is not None
 
     def test_contains_operator(self):
-        clause = build_condition(FilterCondition(field="process_name", op="contains", value="powershell"))
+        clause = build_condition(
+            FilterCondition(field="process_name", op="contains", value="powershell")
+        )
         assert clause is not None
 
     def test_icontains_operator(self):
@@ -80,15 +81,20 @@ class TestFilterCondition:
         assert clause is not None
 
     def test_process_tree_id_field(self):
-        clause = build_condition(FilterCondition(field="process_tree_id", op="eq", value="tree-xyz"))
+        clause = build_condition(
+            FilterCondition(field="process_tree_id", op="eq", value="tree-xyz")
+        )
         assert clause is not None
 
     def test_event_chain_id_field(self):
-        clause = build_condition(FilterCondition(field="event_chain_id", op="eq", value="chain-001"))
+        clause = build_condition(
+            FilterCondition(field="event_chain_id", op="eq", value="chain-001")
+        )
         assert clause is not None
 
 
 # ─── FilterGroup ──────────────────────────────────────────────────────────────
+
 
 class TestFilterGroup:
     def test_empty_group_returns_none(self):
@@ -172,11 +178,13 @@ class TestFilterGroup:
 
     def test_invalid_logic_raises(self):
         from pydantic import ValidationError as PydanticValidationError
+
         with pytest.raises(PydanticValidationError):
             FilterGroup(logic="XOR", conditions=[])  # type: ignore[arg-type]
 
 
 # ─── build_filter_groups ──────────────────────────────────────────────────────
+
 
 class TestBuildFilterGroups:
     def test_none_returns_empty_list(self):
@@ -199,11 +207,16 @@ class TestBuildFilterGroups:
 
     def test_multiple_groups(self):
         groups = [
-            FilterGroup(logic="AND", conditions=[FilterCondition(field="severity", op="gte", value=2)]),
-            FilterGroup(logic="OR", conditions=[
-                FilterCondition(field="source_ip", op="eq", value="1.2.3.4"),
-                FilterCondition(field="dest_ip", op="eq", value="1.2.3.4"),
-            ]),
+            FilterGroup(
+                logic="AND", conditions=[FilterCondition(field="severity", op="gte", value=2)]
+            ),
+            FilterGroup(
+                logic="OR",
+                conditions=[
+                    FilterCondition(field="source_ip", op="eq", value="1.2.3.4"),
+                    FilterCondition(field="dest_ip", op="eq", value="1.2.3.4"),
+                ],
+            ),
         ]
         result = build_filter_groups(groups)
         assert len(result) == 2
@@ -211,7 +224,9 @@ class TestBuildFilterGroups:
     def test_empty_groups_skipped(self):
         groups = [
             FilterGroup(logic="AND"),  # empty
-            FilterGroup(logic="AND", conditions=[FilterCondition(field="severity", op="gte", value=2)]),
+            FilterGroup(
+                logic="AND", conditions=[FilterCondition(field="severity", op="gte", value=2)]
+            ),
         ]
         result = build_filter_groups(groups)
         assert len(result) == 1

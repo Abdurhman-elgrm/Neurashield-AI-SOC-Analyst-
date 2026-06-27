@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.rbac.roles import Role
 
-
 # ─── Tenant ───────────────────────────────────────────────────────────────────
+
 
 class TenantCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
@@ -64,6 +64,7 @@ class TenantResponse(BaseModel):
 
 # ─── Tenant Member ────────────────────────────────────────────────────────────
 
+
 class MemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +85,7 @@ class MemberRoleUpdateRequest(BaseModel):
 
 
 # ─── Invitation ───────────────────────────────────────────────────────────────
+
 
 class InvitationCreateRequest(BaseModel):
     email: EmailStr

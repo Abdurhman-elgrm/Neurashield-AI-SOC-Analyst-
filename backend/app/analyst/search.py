@@ -21,27 +21,26 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.investigation import Investigation
 from app.analyst.schemas import PivotResult
+from app.models.investigation import Investigation
 
 logger = structlog.get_logger(__name__)
 
 # Entity type → context_json key
 _ENTITY_TYPE_MAP: dict[str, str] = {
-    "user":    "involved_users",
-    "host":    "involved_hosts",
-    "ip":      "involved_ips",
+    "user": "involved_users",
+    "host": "involved_hosts",
+    "ip": "involved_ips",
     "process": "suspicious_processes",
-    "domain":  "suspicious_domains",
-    "hash":    "suspicious_hashes",
+    "domain": "suspicious_domains",
+    "hash": "suspicious_hashes",
 }
 
 
 class PivotEngine:
-
     @staticmethod
     async def pivot(
         db: AsyncSession,
@@ -57,9 +56,7 @@ class PivotEngine:
         context_key = _ENTITY_TYPE_MAP.get(entity_type)
         if context_key is None:
             # Fallback: search the executive_summary for the value
-            return await PivotEngine._text_search(
-                db, tenant_id, entity_type, entity_value, limit
-            )
+            return await PivotEngine._text_search(db, tenant_id, entity_type, entity_value, limit)
 
         # Use PostgreSQL JSONB array containment operator
         # context_json -> 'context_key' @> '["entity_value"]'
@@ -82,9 +79,7 @@ class PivotEngine:
 
         # If no JSONB results (column might be null), fall back to text search
         if not rows:
-            return await PivotEngine._text_search(
-                db, tenant_id, entity_type, entity_value, limit
-            )
+            return await PivotEngine._text_search(db, tenant_id, entity_type, entity_value, limit)
 
         return _build_pivot_result(entity_type, entity_value, rows)
 
@@ -121,17 +116,17 @@ class PivotEngine:
         summary of all investigations mentioning this entity.
         """
         parts = entity_key.split(":", 1)
-        entity_type  = parts[0] if len(parts) == 2 else "host"
+        entity_type = parts[0] if len(parts) == 2 else "host"
         entity_value = parts[1] if len(parts) == 2 else entity_key
 
         pivot = await PivotEngine.pivot(db, tenant_id, entity_type, entity_value)
         return {
-            "entity_key":        entity_key,
-            "entity_type":       entity_type,
-            "entity_value":      entity_value,
+            "entity_key": entity_key,
+            "entity_type": entity_type,
+            "entity_value": entity_value,
             "investigation_count": pivot.total,
-            "investigation_ids":   pivot.investigation_ids,
-            "max_threat_score":  max(
+            "investigation_ids": pivot.investigation_ids,
+            "max_threat_score": max(
                 (r.get("threat_score", 0) for r in pivot.investigation_refs),
                 default=0,
             ),
@@ -144,6 +139,7 @@ class PivotEngine:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _build_pivot_result(
     entity_type: str,
     entity_value: str,
@@ -153,13 +149,13 @@ def _build_pivot_result(
     investigation_ids = [str(r.investigation_group_id) for r in rows]
     refs = [
         {
-            "investigation_id":  str(r.investigation_group_id),
-            "threat_score":      r.threat_score,
-            "confidence":        r.confidence,
-            "status":            r.status,
-            "verdict":           r.verdict,
+            "investigation_id": str(r.investigation_group_id),
+            "threat_score": r.threat_score,
+            "confidence": r.confidence,
+            "status": r.status,
+            "verdict": r.verdict,
             "executive_summary": r.executive_summary[:200] if r.executive_summary else "",
-            "created_at":        r.created_at.isoformat() if r.created_at else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
     ]

@@ -7,9 +7,8 @@ import structlog
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import DBSession, CurrentMember, require_permission
+from app.core.dependencies import DBSession, require_permission
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse
 
@@ -20,6 +19,7 @@ _CONTEXT_WINDOW = 10
 
 
 # ─── Request / Response schemas ──────────────────────────────────────────────
+
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
@@ -43,16 +43,17 @@ class ChatMessageResponse(BaseModel):
 
 # ─── POST /copilot/chat ───────────────────────────────────────────────────────
 
+
 @router.post("/chat", response_model=APIResponse[ChatResponse])
 async def chat(
     payload: ChatRequest,
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: DBSession,
 ) -> APIResponse[ChatResponse]:
-    from app.models.tenant_member import TenantMember
-    from app.models.chat import ChatMessage
     from app.ai.chat import CHAT_MODES, build_soc_context, build_system_prompt
     from app.ai.llm_manager import get_llm_manager
+    from app.models.chat import ChatMessage
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 
@@ -66,6 +67,7 @@ async def chat(
             parsed = UUID(payload.investigation_id)
             # Verify ownership before passing to build_soc_context.
             from app.models.investigation import Investigation
+
             owned = await db.scalar(
                 select(Investigation.id).where(
                     Investigation.id == parsed,
@@ -111,6 +113,7 @@ async def chat(
 
     # Sanitize user message before sending to LLM
     from app.ai.prompt_guard import sanitize_user_message
+
     safe_message = sanitize_user_message(payload.message)
 
     # Call LLM
@@ -159,18 +162,21 @@ async def chat(
         "investigation_count": len(soc_context.get("investigations", [])),
         "has_current_investigation": "current_investigation" in soc_context,
     }
-    return APIResponse.ok(ChatResponse(response=response_text, mode=mode, context_summary=context_summary))
+    return APIResponse.ok(
+        ChatResponse(response=response_text, mode=mode, context_summary=context_summary)
+    )
 
 
 # ─── GET /copilot/history ─────────────────────────────────────────────────────
+
 
 @router.get("/history", response_model=APIResponse[list[ChatMessageResponse]])
 async def get_history(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: DBSession,
 ) -> APIResponse[list[ChatMessageResponse]]:
-    from app.models.tenant_member import TenantMember
     from app.models.chat import ChatMessage
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 
@@ -185,32 +191,37 @@ async def get_history(
     )
     messages = result.scalars().all()
 
-    return APIResponse.ok([
-        ChatMessageResponse(
-            id=str(msg.id),
-            role=msg.role,
-            content=msg.content,
-            created_at=msg.created_at.isoformat(),
-            investigation_id=str(msg.investigation_id) if msg.investigation_id else None,
-        )
-        for msg in messages
-    ])
+    return APIResponse.ok(
+        [
+            ChatMessageResponse(
+                id=str(msg.id),
+                role=msg.role,
+                content=msg.content,
+                created_at=msg.created_at.isoformat(),
+                investigation_id=str(msg.investigation_id) if msg.investigation_id else None,
+            )
+            for msg in messages
+        ]
+    )
 
 
 # ─── DELETE /copilot/history ──────────────────────────────────────────────────
+
 
 @router.delete("/history", response_model=APIResponse[dict])
 async def clear_history(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: DBSession,
 ) -> APIResponse[dict]:
-    from app.models.tenant_member import TenantMember
     from app.models.chat import ChatMessage
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 
     count_result = await db.execute(
-        select(func.count()).select_from(ChatMessage).where(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(
             ChatMessage.tenant_id == m.tenant_id,
             ChatMessage.user_id == m.user_id,
         )

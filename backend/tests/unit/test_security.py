@@ -88,6 +88,7 @@ class TestRBAC:
     def test_owner_has_all_permissions(self) -> None:
         from app.rbac.permissions import Permission
         from app.rbac.roles import Role, get_role_permissions
+
         owner_perms = get_role_permissions(Role.OWNER)
         for perm in Permission:
             assert perm in owner_perms
@@ -95,6 +96,7 @@ class TestRBAC:
     def test_viewer_cannot_manage(self) -> None:
         from app.rbac.permissions import Permission
         from app.rbac.roles import Role, has_permission
+
         assert has_permission(Role.VIEWER, Permission.ALERTS_UPDATE) is False
         assert has_permission(Role.VIEWER, Permission.AGENTS_MANAGE) is False
         assert has_permission(Role.VIEWER, Permission.TENANT_DELETE) is False
@@ -102,16 +104,19 @@ class TestRBAC:
     def test_viewer_can_read(self) -> None:
         from app.rbac.permissions import Permission
         from app.rbac.roles import Role, has_permission
+
         assert has_permission(Role.VIEWER, Permission.ALERTS_READ) is True
         assert has_permission(Role.VIEWER, Permission.EVENTS_READ) is True
 
     def test_analyst_can_acknowledge(self) -> None:
         from app.rbac.permissions import Permission
         from app.rbac.roles import Role, has_permission
+
         assert has_permission(Role.ANALYST, Permission.ALERTS_UPDATE) is True
 
     def test_role_hierarchy(self) -> None:
         from app.rbac.roles import Role, has_minimum_role
+
         assert has_minimum_role(Role.OWNER, Role.ADMIN) is True
         assert has_minimum_role(Role.ADMIN, Role.ANALYST) is True
         assert has_minimum_role(Role.VIEWER, Role.ANALYST) is False

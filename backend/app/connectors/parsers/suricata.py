@@ -18,10 +18,11 @@ event_type mapping:
 
 Suricata alert severity: 1=critical, 2=high, 3=medium, 4=low (inverse of ours)
 """
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.connectors.base import ConnectorParser, ParsedEvent
@@ -35,18 +36,18 @@ def _parse_ts(raw: str) -> datetime:
         s = raw.replace("+0000", "+00:00")
         return datetime.fromisoformat(s)
     except Exception:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
 
 def _event_type_to_category(event_type: str) -> str:
     mapping = {
-        "alert":    "network",
-        "dns":      "dns",
-        "http":     "network",
-        "tls":      "network",
-        "smtp":     "network",
-        "flow":     "network",
-        "ssh":      "auth",
+        "alert": "network",
+        "dns": "dns",
+        "http": "network",
+        "tls": "network",
+        "smtp": "network",
+        "flow": "network",
+        "ssh": "auth",
         "fileinfo": "file",
     }
     return mapping.get(event_type.lower(), "other")
@@ -98,9 +99,9 @@ class SuricataParser(ConnectorParser):
         network: dict[str, Any] | None = None
         if src_ip or dst_ip:
             network = {
-                "src_ip":   src_ip,
+                "src_ip": src_ip,
                 "src_port": eve.get("src_port"),
-                "dst_ip":   dst_ip,
+                "dst_ip": dst_ip,
                 "dst_port": eve.get("dest_port"),
                 "protocol": eve.get("proto"),
             }
@@ -108,9 +109,7 @@ class SuricataParser(ConnectorParser):
         # DNS
         dns_data = eve.get("dns") or {}
         if event_type == "dns" and dns_data:
-            query = dns_data.get("rrname") or (
-                (dns_data.get("query") or [{}])[0].get("rrname")
-            )
+            query = dns_data.get("rrname") or ((dns_data.get("query") or [{}])[0].get("rrname"))
             if query:
                 network = {**(network or {}), "dns_query": query}
 
@@ -125,13 +124,13 @@ class SuricataParser(ConnectorParser):
             network=network,
             raw={
                 "event_type": event_type,
-                "signature":  alert.get("signature"),
-                "action":     alert.get("action"),
-                "category":   alert.get("category"),
-                "flow_id":    eve.get("flow_id"),
-                "app_proto":  eve.get("app_proto"),
-                "http":       eve.get("http"),
-                "tls":        eve.get("tls"),
-                "dns":        dns_data or None,
+                "signature": alert.get("signature"),
+                "action": alert.get("action"),
+                "category": alert.get("category"),
+                "flow_id": eve.get("flow_id"),
+                "app_proto": eve.get("app_proto"),
+                "http": eve.get("http"),
+                "tls": eve.get("tls"),
+                "dns": dns_data or None,
             },
         )

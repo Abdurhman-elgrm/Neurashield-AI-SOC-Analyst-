@@ -18,9 +18,9 @@ log = structlog.get_logger(__name__)
 # ─── Allowed LLM output values ────────────────────────────────────────────────
 
 VALID_SEVERITIES = {"benign", "suspicious", "malicious", "unknown"}
-VALID_ACTIONS    = {"Monitor", "Investigate", "Contain", "Escalate"}
+VALID_ACTIONS = {"Monitor", "Investigate", "Contain", "Escalate"}
 
-_IP_RE = re.compile(r'^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$')
+_IP_RE = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$")
 
 
 def _sanitize_field(value: str | None, max_len: int = 200) -> str | None:
@@ -73,7 +73,7 @@ Required JSON format:
 
 Be precise. If unsure, reflect that in confidence score. Never make up MITRE techniques."""
 
-    async def analyze(self, event: "NormalizedEvent") -> AnalysisResult:
+    async def analyze(self, event: NormalizedEvent) -> AnalysisResult:
         """Analyze a normalized event. Returns default result on any error."""
         try:
             manager = get_llm_manager()
@@ -88,7 +88,7 @@ Be precise. If unsure, reflect that in confidence score. Never make up MITRE tec
             log.warning("ai_analysis_failed", exc_info=True)
             return self._default_result()
 
-    def _build_prompt(self, event: "NormalizedEvent") -> str:
+    def _build_prompt(self, event: NormalizedEvent) -> str:
         """Build structured prompt from NormalizedEvent fields (sanitized, ~800 token limit)."""
         parts: list[str] = []
 
@@ -96,8 +96,7 @@ Be precise. If unsure, reflect that in confidence score. Never make up MITRE tec
         parts.append(
             f"Category: {event.category} | Severity: {event.severity}\n"
             f"Timestamp: {event.timestamp}\n"
-            f"Host: {host}"
-            + (f" ({event.os_type})" if event.os_type else "")
+            f"Host: {host}" + (f" ({event.os_type})" if event.os_type else "")
         )
 
         if event.process:
@@ -129,7 +128,9 @@ Be precise. If unsure, reflect that in confidence score. Never make up MITRE tec
             src = f"{src_ip}:{n.src_port}" if src_ip and n.src_port else (src_ip or "")
             dst = f"{dst_ip}:{n.dst_port}" if dst_ip and n.dst_port else (dst_ip or "")
             if src or dst:
-                net_parts.append(f"Network: {src} -> {dst}" + (f" ({n.protocol})" if n.protocol else ""))
+                net_parts.append(
+                    f"Network: {src} -> {dst}" + (f" ({n.protocol})" if n.protocol else "")
+                )
             if n.direction:
                 net_parts.append(f"  Direction: {n.direction}")
             if net_parts:
@@ -142,9 +143,7 @@ Be precise. If unsure, reflect that in confidence score. Never make up MITRE tec
             if domain:
                 user_str = f"{user_str}@{domain}"
             if user_str:
-                parts.append(
-                    f"User: {user_str}" + (" [PRIVILEGED]" if u.is_privileged else "")
-                )
+                parts.append(f"User: {user_str}" + (" [PRIVILEGED]" if u.is_privileged else ""))
 
         if event.file:
             f = event.file
@@ -204,7 +203,9 @@ Be precise. If unsure, reflect that in confidence score. Never make up MITRE tec
                 action = "Monitor"
 
             # Sanitize text fields before storing
-            summary = _sanitize_field(str(data.get("summary", "")), max_len=500) or "Analysis complete"
+            summary = (
+                _sanitize_field(str(data.get("summary", "")), max_len=500) or "Analysis complete"
+            )
 
             # Validate indicators list — each must be a short string
             indicators: list[str] = []

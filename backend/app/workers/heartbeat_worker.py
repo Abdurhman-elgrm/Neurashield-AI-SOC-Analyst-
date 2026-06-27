@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import update
@@ -17,9 +17,9 @@ logger = structlog.get_logger(__name__)
 #   ONLINE  →  DEGRADED  after 3 min without heartbeat  (brief connectivity loss)
 #   DEGRADED → OFFLINE   after 15 min without heartbeat (device truly disconnected)
 # Agents that skip directly to 15+ min without ever going DEGRADED are also caught.
-DEGRADED_THRESHOLD_SECS = 3 * 60    # 3 min
-OFFLINE_THRESHOLD_SECS  = 15 * 60   # 15 min
-CHECK_INTERVAL_SECS     = 30
+DEGRADED_THRESHOLD_SECS = 3 * 60  # 3 min
+OFFLINE_THRESHOLD_SECS = 15 * 60  # 15 min
+CHECK_INTERVAL_SECS = 30
 
 
 class HeartbeatWorker:
@@ -47,15 +47,15 @@ class HeartbeatWorker:
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=CHECK_INTERVAL_SECS)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         logger.info("heartbeat_worker_stopped")
 
     async def _check_agent_status(self) -> None:
-        now             = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         degraded_cutoff = now - timedelta(seconds=DEGRADED_THRESHOLD_SECS)
-        offline_cutoff  = now - timedelta(seconds=OFFLINE_THRESHOLD_SECS)
+        offline_cutoff = now - timedelta(seconds=OFFLINE_THRESHOLD_SECS)
 
         async with database_manager.session() as db:
             # ── Step 1: ONLINE → DEGRADED (3–15 min gap) ─────────────────────
@@ -91,6 +91,7 @@ class HeartbeatWorker:
         # Email notifications fire outside the DB session (non-blocking)
         if rows:
             from app.services.notification_service import notify_agent_offline_email
+
             for row in rows:
                 AGENTS_OFFLINE_TOTAL.labels(tenant_id=str(row.tenant_id)).inc()
                 logger.info(
@@ -100,13 +101,16 @@ class HeartbeatWorker:
                     tenant_id=str(row.tenant_id),
                 )
                 last_seen = (
-                    row.last_seen_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                    row.last_seen_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
                     if row.last_seen_at
                     else "Unknown"
                 )
-                create_task_safe(notify_agent_offline_email(
-                    agent_id=str(row.id),
-                    hostname=row.hostname or "Unknown",
-                    tenant_id=row.tenant_id,
-                    last_seen=last_seen,
-                ), name=f"notify_agent_offline_{row.id}")
+                create_task_safe(
+                    notify_agent_offline_email(
+                        agent_id=str(row.id),
+                        hostname=row.hostname or "Unknown",
+                        tenant_id=row.tenant_id,
+                        last_seen=last_seen,
+                    ),
+                    name=f"notify_agent_offline_{row.id}",
+                )

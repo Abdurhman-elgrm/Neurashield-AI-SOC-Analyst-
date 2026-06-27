@@ -4,17 +4,16 @@ These endpoints handle Jira / ServiceNow / PagerDuty ticket creation and
 retrieval. When no integration is configured for the tenant, they return
 graceful empty responses rather than 404.
 """
+
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
-from uuid import UUID, uuid4
-from datetime import datetime, timezone
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.core.dependencies import require_permission
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse
@@ -23,6 +22,7 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
+
 
 class TicketFieldsIn(BaseModel):
     summary: str
@@ -69,7 +69,7 @@ async def create_ticket(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_MANAGE)],
 ) -> APIResponse[TicketOut]:
     provider = payload.provider
-    inv_id   = payload.investigation_id
+    inv_id = payload.investigation_id
     ticket_num = len(_TICKET_STORE.get(inv_id, [])) + 1
 
     prefix_map = {"jira": "SOC", "servicenow": "INC", "pagerduty": "PD"}
@@ -81,7 +81,7 @@ async def create_ticket(
         provider=provider,
         ticket_key=ticket_key,
         url=f"https://{provider}.example.com/browse/{ticket_key}",
-        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        created_at=datetime.now(tz=UTC).isoformat(),
     )
 
     _TICKET_STORE.setdefault(inv_id, []).append(ticket)
@@ -89,6 +89,7 @@ async def create_ticket(
 
 
 # ─── Integration config (stub — always returns "not configured") ─────────────
+
 
 class IntegrationConfig(BaseModel):
     provider: str

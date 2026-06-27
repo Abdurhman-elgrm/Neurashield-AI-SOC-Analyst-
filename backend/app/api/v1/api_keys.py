@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
+
 
 class ApiKeyCreate(BaseModel):
     name: str
@@ -45,12 +46,14 @@ class ApiKeyCreateResponse(ApiKeyResponse):
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
+
 @router.get("", response_model=APIResponse[list[ApiKeyResponse]])
 async def list_api_keys(
     member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[list[ApiKeyResponse]]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     result = await db.execute(
@@ -59,59 +62,66 @@ async def list_api_keys(
         .order_by(ApiKey.created_at.desc())
     )
     keys = result.scalars().all()
-    return APIResponse.ok([
-        ApiKeyResponse(
-            id=str(k.id),
-            name=k.name,
-            key_prefix=k.key_prefix,
-            created_at=k.created_at.isoformat(),
-            last_used_at=k.last_used_at.isoformat() if k.last_used_at else None,
-            expires_at=k.expires_at.isoformat() if k.expires_at else None,
-            revoked_at=None,
-        )
-        for k in keys
-    ])
+    return APIResponse.ok(
+        [
+            ApiKeyResponse(
+                id=str(k.id),
+                name=k.name,
+                key_prefix=k.key_prefix,
+                created_at=k.created_at.isoformat(),
+                last_used_at=k.last_used_at.isoformat() if k.last_used_at else None,
+                expires_at=k.expires_at.isoformat() if k.expires_at else None,
+                revoked_at=None,
+            )
+            for k in keys
+        ]
+    )
 
 
-@router.post("", response_model=APIResponse[ApiKeyCreateResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=APIResponse[ApiKeyCreateResponse], status_code=status.HTTP_201_CREATED
+)
 async def create_api_key(
     body: ApiKeyCreate,
     member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[ApiKeyCreateResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
-    raw_key   = f"ns_{secrets.token_urlsafe(32)}"
-    key_hash  = hashlib.sha256(raw_key.encode()).hexdigest()
+    raw_key = f"ns_{secrets.token_urlsafe(32)}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     key_prefix = raw_key[:8]
 
     expires_at = None
     if body.expires_in_days:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+        expires_at = datetime.now(UTC) + timedelta(days=body.expires_in_days)
 
     key = ApiKey(
-        tenant_id  = m.tenant_id,
-        user_id    = m.user_id,
-        name       = body.name,
-        key_hash   = key_hash,
-        key_prefix = key_prefix,
-        expires_at = expires_at,
+        tenant_id=m.tenant_id,
+        user_id=m.user_id,
+        name=body.name,
+        key_hash=key_hash,
+        key_prefix=key_prefix,
+        expires_at=expires_at,
     )
     db.add(key)
     await db.commit()
     await db.refresh(key)
 
-    return APIResponse.ok(ApiKeyCreateResponse(
-        id           = str(key.id),
-        name         = key.name,
-        key_prefix   = key.key_prefix,
-        created_at   = key.created_at.isoformat(),
-        last_used_at = None,
-        expires_at   = key.expires_at.isoformat() if key.expires_at else None,
-        revoked_at   = None,
-        raw_key      = raw_key,
-    ))
+    return APIResponse.ok(
+        ApiKeyCreateResponse(
+            id=str(key.id),
+            name=key.name,
+            key_prefix=key.key_prefix,
+            created_at=key.created_at.isoformat(),
+            last_used_at=None,
+            expires_at=key.expires_at.isoformat() if key.expires_at else None,
+            revoked_at=None,
+            raw_key=raw_key,
+        )
+    )
 
 
 @router.delete("/{key_id}", response_model=APIResponse[dict])
@@ -121,6 +131,7 @@ async def revoke_api_key(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[dict]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     result = await db.execute(
@@ -128,6 +139,6 @@ async def revoke_api_key(
     )
     key = result.scalar_one_or_none()
     if key:
-        key.revoked_at = datetime.now(timezone.utc)
+        key.revoked_at = datetime.now(UTC)
         await db.commit()
     return APIResponse.ok({"revoked": True})

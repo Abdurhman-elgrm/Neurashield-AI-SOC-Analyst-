@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
 
 import structlog
 
 from app.ai.llm_manager import get_llm_manager
+
 from .parser import SigmaParseResult, parse_sigma_yaml
 
 logger = structlog.get_logger(__name__)
@@ -156,6 +156,7 @@ Generate a Sigma rule for the following description. Output ONLY the YAML:\
 
 # ─── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class GeneratorResult:
     yaml_text: str
@@ -170,6 +171,7 @@ class GeneratorResult:
 
 # ─── YAML extraction ───────────────────────────────────────────────────────────
 
+
 def _extract_yaml(raw: str) -> str:
     """
     Strip markdown fences and any preamble text.
@@ -182,12 +184,13 @@ def _extract_yaml(raw: str) -> str:
     # Find first "title:" line — everything from there is the YAML
     match = re.search(r"^title\s*:", raw, re.MULTILINE)
     if match:
-        return raw[match.start():].strip()
+        return raw[match.start() :].strip()
 
     return raw.strip()
 
 
 # ─── Core generator ────────────────────────────────────────────────────────────
+
 
 async def generate_sigma_rule(
     description: str,
@@ -206,9 +209,7 @@ async def generate_sigma_rule(
     """
     if _INJECTION_RE.search(description):
         err = "Description contains disallowed patterns."
-        return GeneratorResult(
-            yaml_text="", parsed=_empty_parse(err), attempts=0, error=err
-        )
+        return GeneratorResult(yaml_text="", parsed=_empty_parse(err), attempts=0, error=err)
 
     description = description.strip()[:1000]  # cap input length
 
@@ -237,8 +238,10 @@ async def generate_sigma_rule(
         except Exception as exc:
             logger.warning("sigma_generator_llm_error", attempt=attempt, error=str(exc))
             return GeneratorResult(
-                yaml_text="", parsed=_empty_parse(str(exc)),
-                attempts=attempts, error=f"LLM error: {exc}",
+                yaml_text="",
+                parsed=_empty_parse(str(exc)),
+                attempts=attempts,
+                error=f"LLM error: {exc}",
             )
 
         yaml_text = _extract_yaml(raw)
@@ -275,7 +278,12 @@ async def generate_sigma_rule(
 
 def _empty_parse(error: str) -> SigmaParseResult:
     return SigmaParseResult(
-        title="", description="", severity="medium",
-        category=None, mitre_techniques=[], mitre_tactics=[],
-        conditions=[], error=error,
+        title="",
+        description="",
+        severity="medium",
+        category=None,
+        mitre_techniques=[],
+        mitre_tactics=[],
+        conditions=[],
+        error=error,
     )

@@ -7,6 +7,7 @@ in main.py to ensure they are available before the first request.
 Metric naming follows the Prometheus best-practices convention:
   <namespace>_<subsystem>_<name>_<unit>
 """
+
 from __future__ import annotations
 
 from prometheus_client import Counter, Gauge, Histogram, Info

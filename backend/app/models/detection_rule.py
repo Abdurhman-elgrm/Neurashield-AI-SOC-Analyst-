@@ -5,9 +5,9 @@ from uuid import uuid4
 
 from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
 
 class RuleType(str, enum.Enum):
@@ -54,22 +54,22 @@ class DetectionRule(Base, TimestampMixin, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     rule_type: Mapped[RuleType] = mapped_column(
-        Enum(RuleType, name="rule_type_enum",
-             values_callable=lambda x: [e.value for e in x]),
-        nullable=False, index=True,
+        Enum(RuleType, name="rule_type_enum", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        index=True,
     )
     severity: Mapped[RuleSeverity] = mapped_column(
-        Enum(RuleSeverity, name="rule_severity_enum",
-             values_callable=lambda x: [e.value for e in x]),
-        nullable=False, index=True,
+        Enum(
+            RuleSeverity, name="rule_severity_enum", values_callable=lambda x: [e.value for e in x]
+        ),
+        nullable=False,
+        index=True,
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     conditions: Mapped[dict] = mapped_column(JSONB, nullable=False)
     mitre_tactics: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     mitre_techniques: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    suppression_window_secs: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=300
-    )
+    suppression_window_secs: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
     created_by_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -81,9 +81,7 @@ class DetectionRule(Base, TimestampMixin, SoftDeleteMixin):
         nullable=True,
     )
 
-    __table_args__ = (
-        Index("idx_rule_tenant_enabled", "tenant_id", "enabled"),
-    )
+    __table_args__ = (Index("idx_rule_tenant_enabled", "tenant_id", "enabled"),)
 
     def __repr__(self) -> str:
         return f"<DetectionRule id={self.id} name={self.name} type={self.rule_type}>"

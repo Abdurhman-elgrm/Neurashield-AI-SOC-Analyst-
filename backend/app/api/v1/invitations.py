@@ -6,11 +6,12 @@ GET    /invitations           — list pending invitations (requires INVITATIONS
 DELETE /invitations/{id}      — revoke invitation (requires INVITATIONS_MANAGE)
 POST   /invitations/accept    — exchange token for membership + auth (public)
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -20,18 +21,17 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.invitation import Invitation
 from app.models.tenant_member import TenantMember
 from app.models.user import User
-from app.core.exceptions import ForbiddenError
 from app.rbac.permissions import Permission
-from app.rbac.roles import Role, ROLE_HIERARCHY
+from app.rbac.roles import ROLE_HIERARCHY, Role
 from app.schemas.common import APIResponse, EmptyResponse
 from app.services.email_service import send_invitation_email
-from app.core.config import settings
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/invitations", tags=["Invitations"])
@@ -40,6 +40,7 @@ INVITE_EXPIRY_HOURS = 48
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
+
 
 class InviteCreateRequest(BaseModel):
     email: EmailStr
@@ -77,6 +78,7 @@ class AcceptInviteResponse(BaseModel):
 
 # ─── Send invitation ──────────────────────────────────────────────────────────
 
+
 @router.post("", response_model=APIResponse[InviteResponse], status_code=201)
 async def send_invitation(
     payload: InviteCreateRequest,
@@ -90,10 +92,12 @@ async def send_invitation(
     try:
         invited_role = Role(payload.role)
     except ValueError:
-        raise ValidationError(f"Invalid role: {payload.role!r}. Must be one of: {[r.value for r in Role]}")
+        raise ValidationError(
+            f"Invalid role: {payload.role!r}. Must be one of: {[r.value for r in Role]}"
+        ) from None
 
     # Prevent privilege escalation — actor can only invite at a strictly lower level
-    actor_level  = ROLE_HIERARCHY.get(Role(m.role), -1)
+    actor_level = ROLE_HIERARCHY.get(Role(m.role), -1)
     invited_level = ROLE_HIERARCHY.get(invited_role, -1)
     if invited_level >= actor_level:
         raise ForbiddenError(
@@ -120,14 +124,14 @@ async def send_invitation(
             Invitation.email == payload.email.lower(),
             Invitation.accepted_at.is_(None),
             Invitation.revoked_at.is_(None),
-            Invitation.expires_at > datetime.now(tz=timezone.utc),
+            Invitation.expires_at > datetime.now(tz=UTC),
         )
     )
     if existing_invite.scalar_one_or_none():
         raise ConflictError("A pending invitation already exists for this email address")
 
     # Generate token
-    raw_token  = secrets.token_urlsafe(32)
+    raw_token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
 
     invitation = Invitation(
@@ -136,13 +140,14 @@ async def send_invitation(
         email=payload.email.lower(),
         role=payload.role,
         token_hash=token_hash,
-        expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=INVITE_EXPIRY_HOURS),
+        expires_at=datetime.now(tz=UTC) + timedelta(hours=INVITE_EXPIRY_HOURS),
     )
     db.add(invitation)
     await db.flush()
 
     # Load tenant name for the email
     from app.models.tenant import Tenant
+
     tenant_result = await db.execute(select(Tenant).where(Tenant.id == m.tenant_id))
     tenant = tenant_result.scalar_one()
 
@@ -166,18 +171,21 @@ async def send_invitation(
         tenant_id=str(m.tenant_id),
     )
 
-    return APIResponse.ok(InviteResponse(
-        id=str(invitation.id),
-        email=invitation.email,
-        role=invitation.role,
-        expires_at=invitation.expires_at.isoformat(),
-        created_at=invitation.created_at.isoformat(),
-        is_valid=invitation.is_valid,
-        invited_by_name=current_user.full_name,
-    ))
+    return APIResponse.ok(
+        InviteResponse(
+            id=str(invitation.id),
+            email=invitation.email,
+            role=invitation.role,
+            expires_at=invitation.expires_at.isoformat(),
+            created_at=invitation.created_at.isoformat(),
+            is_valid=invitation.is_valid,
+            invited_by_name=current_user.full_name,
+        )
+    )
 
 
 # ─── List pending invitations ─────────────────────────────────────────────────
+
 
 @router.get("", response_model=APIResponse[list[InviteResponse]])
 async def list_invitations(
@@ -192,26 +200,29 @@ async def list_invitations(
             Invitation.tenant_id == m.tenant_id,
             Invitation.accepted_at.is_(None),
             Invitation.revoked_at.is_(None),
-            Invitation.expires_at > datetime.now(tz=timezone.utc),
+            Invitation.expires_at > datetime.now(tz=UTC),
         )
         .order_by(Invitation.created_at.desc())
     )
     invitations = result.scalars().all()
 
-    return APIResponse.ok([
-        InviteResponse(
-            id=str(inv.id),
-            email=inv.email,
-            role=inv.role,
-            expires_at=inv.expires_at.isoformat(),
-            created_at=inv.created_at.isoformat(),
-            is_valid=inv.is_valid,
-        )
-        for inv in invitations
-    ])
+    return APIResponse.ok(
+        [
+            InviteResponse(
+                id=str(inv.id),
+                email=inv.email,
+                role=inv.role,
+                expires_at=inv.expires_at.isoformat(),
+                created_at=inv.created_at.isoformat(),
+                is_valid=inv.is_valid,
+            )
+            for inv in invitations
+        ]
+    )
 
 
 # ─── Revoke invitation ────────────────────────────────────────────────────────
+
 
 @router.delete("/{invitation_id}", response_model=APIResponse[EmptyResponse])
 async def revoke_invitation(
@@ -231,12 +242,13 @@ async def revoke_invitation(
     if not invitation:
         raise NotFoundError("Invitation not found")
 
-    invitation.revoked_at = datetime.now(tz=timezone.utc)
+    invitation.revoked_at = datetime.now(tz=UTC)
     await db.commit()
     return APIResponse.ok(EmptyResponse())
 
 
 # ─── Accept invitation (public — no auth required) ────────────────────────────
+
 
 @router.post("/accept", response_model=APIResponse[AcceptInviteResponse])
 async def accept_invitation(
@@ -259,9 +271,7 @@ async def accept_invitation(
 
     # Look up and validate the token
     token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
-    result = await db.execute(
-        select(Invitation).where(Invitation.token_hash == token_hash)
-    )
+    result = await db.execute(select(Invitation).where(Invitation.token_hash == token_hash))
     invitation = result.scalar_one_or_none()
 
     if not invitation or not invitation.is_valid:
@@ -282,13 +292,9 @@ async def accept_invitation(
 
     elif payload.full_name and payload.password:
         # New user flow — create account
-        existing = await db.execute(
-            select(User).where(User.email == invitation.email)
-        )
+        existing = await db.execute(select(User).where(User.email == invitation.email))
         if existing.scalar_one_or_none():
-            raise ConflictError(
-                "An account with this email already exists. Please log in instead."
-            )
+            raise ConflictError("An account with this email already exists. Please log in instead.")
         user = User(
             email=invitation.email,
             full_name=payload.full_name.strip(),
@@ -309,20 +315,18 @@ async def accept_invitation(
         user_id=user.id,
         role=invitation.role,
         invited_by=invitation.invited_by,
-        joined_at=datetime.now(tz=timezone.utc),
+        joined_at=datetime.now(tz=UTC),
     )
     db.add(member)
 
     # Mark invitation accepted
-    invitation.accepted_at = datetime.now(tz=timezone.utc)
+    invitation.accepted_at = datetime.now(tz=UTC)
     await db.flush()
 
     # Issue token pair (same pattern as AuthService._issue_token_pair)
     access_token = create_access_token(subject=str(user.id))
     refresh_token_str, jti = create_refresh_token(subject=str(user.id))
-    expire = datetime.now(tz=timezone.utc) + timedelta(
-        days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expire = datetime.now(tz=UTC) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
     refresh_obj = RefreshToken(
         user_id=user.id,
         jti=jti,
@@ -338,10 +342,12 @@ async def accept_invitation(
         tenant_id=str(invitation.tenant_id),
     )
 
-    return APIResponse.ok(AcceptInviteResponse(
-        access_token=access_token,
-        refresh_token=refresh_token_str,
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        tenant_id=str(invitation.tenant_id),
-        message="Welcome to NEURASHIELD!",
-    ))
+    return APIResponse.ok(
+        AcceptInviteResponse(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            tenant_id=str(invitation.tenant_id),
+            message="Welcome to NEURASHIELD!",
+        )
+    )

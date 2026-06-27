@@ -1,4 +1,5 @@
 """Unit tests for Events Explorer realtime event constructors."""
+
 from __future__ import annotations
 
 from app.realtime.events import (
@@ -9,9 +10,8 @@ from app.realtime.events import (
 )
 from app.realtime.schemas import RealtimeEventType
 
-
 TENANT_ID = "tenant-abc-123"
-ACTOR_ID  = "analyst-001"
+ACTOR_ID = "analyst-001"
 
 
 class TestRealtimeEventCreated:
@@ -180,4 +180,6 @@ class TestRealtimeEventTypes:
     def test_investigation_types_still_present(self):
         # Ensure Phase 3.5 types were not removed
         assert RealtimeEventType.INVESTIGATION_NOTE_ADDED.value == "investigation.note_added"
-        assert RealtimeEventType.INVESTIGATION_STATUS_UPDATED.value == "investigation.status_updated"
+        assert (
+            RealtimeEventType.INVESTIGATION_STATUS_UPDATED.value == "investigation.status_updated"
+        )

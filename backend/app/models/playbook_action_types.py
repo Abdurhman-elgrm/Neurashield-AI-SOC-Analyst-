@@ -1,4 +1,5 @@
 """Enum of valid playbook step action_type values and privileged action gating."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -21,11 +22,13 @@ class PlaybookActionType(str, Enum):
     DISABLE_ACCOUNT = "disable_account"
 
 
-PRIVILEGED_ACTION_TYPES: frozenset[PlaybookActionType] = frozenset({
-    PlaybookActionType.ISOLATE_HOST,
-    PlaybookActionType.KILL_PROCESS,
-    PlaybookActionType.BLOCK_IP,
-    PlaybookActionType.DISABLE_ACCOUNT,
-})
+PRIVILEGED_ACTION_TYPES: frozenset[PlaybookActionType] = frozenset(
+    {
+        PlaybookActionType.ISOLATE_HOST,
+        PlaybookActionType.KILL_PROCESS,
+        PlaybookActionType.BLOCK_IP,
+        PlaybookActionType.DISABLE_ACCOUNT,
+    }
+)
 
 VALID_ACTION_TYPE_VALUES: frozenset[str] = frozenset(a.value for a in PlaybookActionType)

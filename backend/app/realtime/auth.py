@@ -16,7 +16,7 @@ async def authenticate_websocket(
     token: str | None,
     tenant_id_str: str | None,
     db: AsyncSession,
-) -> tuple["User", "TenantMember"]:  # type: ignore[name-defined]
+) -> tuple[User, TenantMember]:  # type: ignore[name-defined]
     """
     Validates a WebSocket upgrade request.
     token and tenant_id are expected as query parameters:
@@ -24,8 +24,6 @@ async def authenticate_websocket(
 
     Raises UnauthorizedError / ForbiddenError on failure.
     """
-    from app.models.user import User
-    from app.models.tenant_member import TenantMember
 
     if not token:
         raise UnauthorizedError("Missing token query parameter")
@@ -35,7 +33,7 @@ async def authenticate_websocket(
     try:
         user_id = UUID(payload.sub)
     except (ValueError, AttributeError):
-        raise UnauthorizedError("Malformed token subject")
+        raise UnauthorizedError("Malformed token subject") from None
 
     user = await UserService.get_by_id(db, user_id)
     if user is None or not user.is_active or user.is_deleted:
@@ -47,7 +45,7 @@ async def authenticate_websocket(
     try:
         tenant_id = UUID(tenant_id_str)
     except ValueError:
-        raise ForbiddenError("Invalid tenant_id format")
+        raise ForbiddenError("Invalid tenant_id format") from None
 
     member = await TenantService.get_active_member(db, tenant_id, user_id)
     if member is None:

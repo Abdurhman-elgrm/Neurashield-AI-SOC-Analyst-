@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +13,13 @@ from app.core.redis import TenantRedisClient, redis_manager
 from app.core.utils import create_task_safe
 from app.detection.attack_chain import check_attack_chains
 from app.detection.engine import DetectionEngine
-from app.normalization.models import NormalizedEvent, NormalizedProcess, NormalizedNetwork, NormalizedFile, NormalizedUser
+from app.normalization.models import (
+    NormalizedEvent,
+    NormalizedFile,
+    NormalizedNetwork,
+    NormalizedProcess,
+    NormalizedUser,
+)
 from app.pipeline import stream_names
 from app.pipeline.consumer import StreamConsumer
 from app.realtime.broadcaster import publish_to_tenant_ws
@@ -81,9 +87,13 @@ class DetectionWorker:
                 for alert in alerts:
                     try:
                         from app.ai.analyzer import get_analyzer
+
                         analyzer = get_analyzer()
                         result = await analyzer.analyze(event)
-                        alert.ai_metadata = {**(alert.ai_metadata or {}), "ai_analysis": result.to_dict()}
+                        alert.ai_metadata = {
+                            **(alert.ai_metadata or {}),
+                            "ai_analysis": result.to_dict(),
+                        }
                         await db.flush()
                         logger.info(
                             "ai_analysis_complete",
@@ -104,35 +114,44 @@ class DetectionWorker:
                 for alert in alerts:
                     if alert.severity in (AlertSeverity.HIGH, AlertSeverity.CRITICAL):
                         # Email to opted-in tenant members
-                        create_task_safe(notify_alert_email(
-                            alert_id=str(alert.id),
-                            tenant_id=tenant_uuid,
-                            alert_title=alert.title or "Security Alert",
-                            severity=alert.severity.value,
-                            source_host=alert.source_host,
-                            ai_metadata=alert.ai_metadata,
-                        ), name=f"notify_alert_{alert.id}")
+                        create_task_safe(
+                            notify_alert_email(
+                                alert_id=str(alert.id),
+                                tenant_id=tenant_uuid,
+                                alert_title=alert.title or "Security Alert",
+                                severity=alert.severity.value,
+                                source_host=alert.source_host,
+                                ai_metadata=alert.ai_metadata,
+                            ),
+                            name=f"notify_alert_{alert.id}",
+                        )
                         # Outbound channels (Slack, Teams, webhook, PagerDuty, email lists)
-                        create_task_safe(dispatch_alert_to_channels(
-                            tenant_id=tenant_uuid,
-                            alert_id=str(alert.id),
-                            title=alert.title or "Security Alert",
-                            severity=alert.severity.value,
-                            source_host=alert.source_host,
-                            mitre_techniques=alert.mitre_techniques,
-                            created_at=alert.created_at,
-                        ), name=f"dispatch_alert_{alert.id}")
+                        create_task_safe(
+                            dispatch_alert_to_channels(
+                                tenant_id=tenant_uuid,
+                                alert_id=str(alert.id),
+                                title=alert.title or "Security Alert",
+                                severity=alert.severity.value,
+                                source_host=alert.source_host,
+                                mitre_techniques=alert.mitre_techniques,
+                                created_at=alert.created_at,
+                            ),
+                            name=f"dispatch_alert_{alert.id}",
+                        )
                         # Auto-generate IR playbook — non-blocking, failure never affects pipeline
-                        create_task_safe(_auto_generate_playbook(
-                            alert_id=alert.id,
-                            tenant_id=tenant_uuid,
-                            alert_title=alert.title or "Security Alert",
-                            severity=alert.severity.value,
-                            source_host=alert.source_host,
-                            mitre_techniques=list(alert.mitre_techniques or []),
-                            mitre_tactics=list(alert.mitre_tactics or []),
-                            evidence=dict(alert.evidence or {}),
-                        ), name=f"auto_playbook_{alert.id}")
+                        create_task_safe(
+                            _auto_generate_playbook(
+                                alert_id=alert.id,
+                                tenant_id=tenant_uuid,
+                                alert_title=alert.title or "Security Alert",
+                                severity=alert.severity.value,
+                                source_host=alert.source_host,
+                                mitre_techniques=list(alert.mitre_techniques or []),
+                                mitre_tactics=list(alert.mitre_tactics or []),
+                                evidence=dict(alert.evidence or {}),
+                            ),
+                            name=f"auto_playbook_{alert.id}",
+                        )
 
                 # Attack chain correlation — non-blocking, runs after commit
                 # Checks if this alert + recent alerts on the same host form a
@@ -151,10 +170,14 @@ class DetectionWorker:
                             "title": alert.title,
                             "source_host": alert.source_host,
                             "status": alert.status.value,
-                            "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                            "created_at": alert.created_at.isoformat()
+                            if alert.created_at
+                            else None,
                         },
                     )
-                    await publish_to_tenant_ws(ws_client, stream_names.ALERTS_PUBSUB_CHANNEL, msg.to_json())
+                    await publish_to_tenant_ws(
+                        ws_client, stream_names.ALERTS_PUBSUB_CHANNEL, msg.to_json()
+                    )
             else:
                 await db.commit()
 
@@ -170,15 +193,14 @@ async def _auto_generate_playbook(
     evidence: dict,
 ) -> None:
     try:
+        from sqlalchemy import select
+
         from app.core.database import database_manager
         from app.models.tenant import Tenant
         from app.services.playbook_service import PlaybookGeneratorService
-        from sqlalchemy import select
 
         async with database_manager.session() as db:
-            tenant_result = await db.execute(
-                select(Tenant.name).where(Tenant.id == tenant_id)
-            )
+            tenant_result = await db.execute(select(Tenant.name).where(Tenant.id == tenant_id))
             company_name = tenant_result.scalar_one_or_none() or "Your Organization"
             playbook = await PlaybookGeneratorService.generate(
                 db=db,
@@ -210,9 +232,9 @@ def _dict_to_normalized_event(payload: dict[str, Any]) -> NormalizedEvent:
         if isinstance(ts_raw, str):
             ts = datetime.fromisoformat(ts_raw)
         else:
-            ts = datetime.now(tz=timezone.utc)
+            ts = datetime.now(tz=UTC)
     except Exception:
-        ts = datetime.now(tz=timezone.utc)
+        ts = datetime.now(tz=UTC)
 
     def _build(cls: type, d: dict[str, Any] | None) -> object | None:
         if not d or not isinstance(d, dict):

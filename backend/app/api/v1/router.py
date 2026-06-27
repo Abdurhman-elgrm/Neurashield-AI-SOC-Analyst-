@@ -1,22 +1,38 @@
 from fastapi import APIRouter
 
-from app.api.v1 import auth, health, members, tenants, users
-from app.api.v1 import agents, alerts, events, rules, installer
-from app.api.v1 import investigations, entities
-from app.api.v1 import api_keys, reports, dashboard
-from app.api.v1 import notification_channels, suppressions
-from app.api.v1 import playbooks
-from app.api.v1 import sigma
-from app.api.v1 import imports
-from app.api.v1 import fleet, ueba, iocs
-from app.api.v1 import integrations
-from app.api.v1 import metrics
+from app.api.v1 import (
+    agents,
+    alerts,
+    api_keys,
+    auth,
+    dashboard,
+    entities,
+    events,
+    fleet,
+    health,
+    imports,
+    installer,
+    integrations,
+    investigations,
+    iocs,
+    members,
+    metrics,
+    notification_channels,
+    playbooks,
+    reports,
+    rules,
+    sigma,
+    suppressions,
+    tenants,
+    ueba,
+    users,
+)
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
 from app.api.v1.mssp_api import router as mssp_router
 from app.api.v1.threat_intel_api import router as threat_intel_router
-from app.ingestion.router import router as ingestion_router
 from app.connectors.router import router as connectors_router
+from app.ingestion.router import router as ingestion_router
 from app.realtime.router import router as ws_router
 
 api_router = APIRouter()
@@ -72,6 +88,7 @@ api_router.include_router(invitations_router)
 
 # ─── Notification preferences ─────────────────────────────────────────────────
 from app.api.v1.notifications import router as notifications_router
+
 api_router.include_router(notifications_router)
 
 # ─── Outbound notification channels (Slack/Teams/webhook/PagerDuty/email) ────

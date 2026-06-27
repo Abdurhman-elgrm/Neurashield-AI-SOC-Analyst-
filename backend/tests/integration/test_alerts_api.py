@@ -1,4 +1,5 @@
 """Integration tests for the alerts API."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -30,6 +31,7 @@ async def setup(client: AsyncClient, db_session: AsyncSession) -> dict[str, Any]
     full_headers = {**headers, "X-Tenant-ID": tenant_id}
 
     from uuid import UUID as _UUID
+
     # Seed an alert directly in DB
     alert = Alert(
         tenant_id=_UUID(tenant_id),
@@ -49,7 +51,6 @@ async def setup(client: AsyncClient, db_session: AsyncSession) -> dict[str, Any]
 
 @pytest.mark.asyncio
 class TestAlertsAPI:
-
     async def test_list_alerts(self, client: AsyncClient, setup: dict):
         resp = await client.get(f"{settings.API_PREFIX}/alerts", headers=setup["headers"])
         assert resp.status_code == 200

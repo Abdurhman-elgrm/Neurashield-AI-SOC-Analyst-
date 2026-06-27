@@ -14,14 +14,14 @@ detection → correlation → investigation pipeline runs normally afterward.
 
 Auth: requires INVESTIGATIONS_MANAGE permission (admin+).
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
-import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
@@ -35,7 +35,6 @@ from app.core.exceptions import ValidationError
 from app.core.redis import TenantRedisClient, get_redis
 from app.ingestion.idempotency import IdempotencyStore
 from app.ingestion.schemas import RawEventPayload
-from app.ingestion.validators import validate_batch
 from app.models.tenant_member import TenantMember
 from app.pipeline import stream_names
 from app.pipeline.publisher import StreamPublisher
@@ -47,23 +46,25 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/imports", tags=["Log Import"])
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB hard limit
-_MAX_EVENTS     = 100_000            # safety ceiling per upload
+_MAX_EVENTS = 100_000  # safety ceiling per upload
 
 SUPPORTED_FORMATS = ("json", "jsonl", "ndjson", "csv")
 
 
 # ─── Response schema ──────────────────────────────────────────────────────────
 
+
 class ImportResult(BaseModel):
-    accepted:  int
+    accepted: int
     duplicate: int
-    rejected:  int
-    total:     int
-    format:    str
-    errors:    list[str]  # up to 10 sample parse errors
+    rejected: int
+    total: int
+    format: str
+    errors: list[str]  # up to 10 sample parse errors
 
 
 # ─── Parsers ─────────────────────────────────────────────────────────────────
+
 
 def _detect_format(filename: str, content_type: str) -> str:
     name = filename.lower()
@@ -79,16 +80,16 @@ def _detect_format(filename: str, content_type: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _coerce_event(raw: dict) -> dict:
     """Ensure mandatory fields exist with sane defaults."""
-    raw.setdefault("event_id",  str(uuid.uuid4()))
-    raw.setdefault("category",  raw.pop("event_type", "other"))
-    raw.setdefault("hostname",  raw.pop("host", raw.pop("computer", "import-host")))
-    raw.setdefault("os_type",   raw.pop("os", "windows"))
-    raw.setdefault("raw",       {})
+    raw.setdefault("event_id", str(uuid.uuid4()))
+    raw.setdefault("category", raw.pop("event_type", "other"))
+    raw.setdefault("hostname", raw.pop("host", raw.pop("computer", "import-host")))
+    raw.setdefault("os_type", raw.pop("os", "windows"))
+    raw.setdefault("raw", {})
 
     # Normalize timestamp key variations
     for key in ("timestamp", "time", "datetime", "@timestamp", "EventTime", "TimeCreated"):
@@ -103,7 +104,7 @@ def _coerce_event(raw: dict) -> dict:
         # unix epoch (seconds or milliseconds)
         if ts > 1e10:
             ts /= 1000.0
-        raw["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        raw["timestamp"] = datetime.fromtimestamp(ts, tz=UTC).isoformat()
     elif isinstance(ts, str):
         try:
             datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -181,6 +182,7 @@ def _parse_csv(data: bytes) -> tuple[list[dict], list[str]]:
 
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
+
 @router.post(
     "/upload",
     response_model=APIResponse[ImportResult],
@@ -189,7 +191,7 @@ def _parse_csv(data: bytes) -> tuple[list[dict], list[str]]:
 async def upload_logs(
     file: Annotated[UploadFile, File(description="Log file — JSON, JSONL, or CSV")],
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_MANAGE)],
-    db:    Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     redis: Annotated[object, Depends(get_redis)],
 ) -> APIResponse[ImportResult]:
     m: TenantMember = member  # type: ignore[assignment]
@@ -204,9 +206,9 @@ async def upload_logs(
         raise ValidationError("Uploaded file is empty.")
 
     # ── Detect format and parse ───────────────────────────────────────────────
-    filename     = file.filename or "upload"
+    filename = file.filename or "upload"
     content_type = file.content_type or ""
-    fmt          = _detect_format(filename, content_type)
+    fmt = _detect_format(filename, content_type)
 
     if fmt == "jsonl":
         raw_events, parse_errors = _parse_jsonl(raw_bytes)
@@ -217,15 +219,12 @@ async def upload_logs(
 
     if not raw_events and parse_errors:
         raise ValidationError(
-            f"Could not parse file as {fmt.upper()}. "
-            f"First error: {parse_errors[0]}"
+            f"Could not parse file as {fmt.upper()}. First error: {parse_errors[0]}"
         )
 
     if len(raw_events) > _MAX_EVENTS:
         raw_events = raw_events[:_MAX_EVENTS]
-        parse_errors.append(
-            f"Truncated to {_MAX_EVENTS:,} events (file contained more)."
-        )
+        parse_errors.append(f"Truncated to {_MAX_EVENTS:,} events (file contained more).")
 
     # ── Convert to RawEventPayload (validate) ─────────────────────────────────
     payloads: list[RawEventPayload] = []
@@ -238,15 +237,14 @@ async def upload_logs(
 
     # ── Publish to pipeline ───────────────────────────────────────────────────
     from redis.asyncio import Redis
-    redis_typed: Redis[str] = redis  # type: ignore[assignment]
-    tenant_client = TenantRedisClient(
-        redis_typed, str(m.tenant_id), stream_names.SUBSYSTEM
-    )
-    idempotency = IdempotencyStore(tenant_client)
-    publisher   = StreamPublisher(tenant_client)
 
-    accepted   = 0
-    rejected   = 0
+    redis_typed: Redis[str] = redis  # type: ignore[assignment]
+    tenant_client = TenantRedisClient(redis_typed, str(m.tenant_id), stream_names.SUBSYSTEM)
+    idempotency = IdempotencyStore(tenant_client)
+    publisher = StreamPublisher(tenant_client)
+
+    accepted = 0
+    rejected = 0
     duplicates = 0
 
     for payload in payloads:
@@ -255,22 +253,22 @@ async def upload_logs(
             continue
         try:
             message = {
-                "agent_id":  None,           # no physical agent — import source
+                "agent_id": None,  # no physical agent — import source
                 "tenant_id": str(m.tenant_id),
-                "hostname":  payload.hostname,
-                "os_type":   payload.os_type,
-                "event_id":  payload.event_id,
+                "hostname": payload.hostname,
+                "os_type": payload.os_type,
+                "event_id": payload.event_id,
                 "timestamp": payload.timestamp.isoformat()
-                             if isinstance(payload.timestamp, datetime)
-                             else str(payload.timestamp),
-                "category":  payload.category,
-                "process":   payload.process,
-                "user":      payload.user,
-                "network":   payload.network,
-                "file":      payload.file,
-                "registry":  payload.registry,
-                "raw":       payload.raw,
-                "source":    "import",
+                if isinstance(payload.timestamp, datetime)
+                else str(payload.timestamp),
+                "category": payload.category,
+                "process": payload.process,
+                "user": payload.user,
+                "network": payload.network,
+                "file": payload.file,
+                "registry": payload.registry,
+                "raw": payload.raw,
+                "source": "import",
                 "import_file": filename,
             }
             stream_id = await publisher.publish_raw_event(message)
@@ -292,11 +290,13 @@ async def upload_logs(
         duplicates=duplicates,
     )
 
-    return APIResponse.ok(ImportResult(
-        accepted=accepted,
-        duplicate=duplicates,
-        rejected=rejected,
-        total=len(payloads),
-        format=fmt.upper(),
-        errors=parse_errors[:10],
-    ))
+    return APIResponse.ok(
+        ImportResult(
+            accepted=accepted,
+            duplicate=duplicates,
+            rejected=rejected,
+            total=len(payloads),
+            format=fmt.upper(),
+            errors=parse_errors[:10],
+        )
+    )

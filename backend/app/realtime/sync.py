@@ -24,7 +24,6 @@ logger = structlog.get_logger(__name__)
 
 
 class SyncEngine:
-
     @staticmethod
     async def on_investigation_created(
         client: TenantRedisClient,
@@ -48,9 +47,7 @@ class SyncEngine:
         investigation_id: str,
         changes: dict[str, Any],
     ) -> None:
-        event = ev.realtime_investigation_updated(
-            tenant_id, actor_id, investigation_id, changes
-        )
+        event = ev.realtime_investigation_updated(tenant_id, actor_id, investigation_id, changes)
         await RealtimeBroadcaster.broadcast_event(client, event)
 
     @staticmethod
@@ -64,8 +61,12 @@ class SyncEngine:
         reasoning: str | None = None,
     ) -> None:
         event = ev.realtime_verdict_changed(
-            tenant_id, actor_id, investigation_id,
-            new_verdict, previous_verdict, reasoning,
+            tenant_id,
+            actor_id,
+            investigation_id,
+            new_verdict,
+            previous_verdict,
+            reasoning,
         )
         await RealtimeBroadcaster.broadcast_event(client, event)
 
@@ -80,8 +81,12 @@ class SyncEngine:
         escalation_reason: str | None = None,
     ) -> None:
         event = ev.realtime_investigation_assigned(
-            tenant_id, actor_id, investigation_id,
-            assigned_to, escalated, escalation_reason,
+            tenant_id,
+            actor_id,
+            investigation_id,
+            assigned_to,
+            escalated,
+            escalation_reason,
         )
         await RealtimeBroadcaster.broadcast_event(client, event)
 
@@ -95,7 +100,9 @@ class SyncEngine:
         reason: str | None = None,
     ) -> None:
         event = ev.realtime_investigation_updated(
-            tenant_id, actor_id, investigation_id,
+            tenant_id,
+            actor_id,
+            investigation_id,
             {"new_status": new_status, "reason": reason},
         )
         await RealtimeBroadcaster.broadcast_event(client, event)
@@ -123,9 +130,7 @@ class SyncEngine:
         investigation_id: str,
         note_id: str,
     ) -> None:
-        event = ev.realtime_note_updated(
-            tenant_id, actor_id, investigation_id, note_id
-        )
+        event = ev.realtime_note_updated(tenant_id, actor_id, investigation_id, note_id)
         await RealtimeBroadcaster.broadcast_event(client, event)
 
     @staticmethod
@@ -152,9 +157,7 @@ class SyncEngine:
         secondary_ids: list[str],
         reason: str | None = None,
     ) -> None:
-        event = ev.realtime_case_merged(
-            tenant_id, actor_id, primary_id, secondary_ids, reason
-        )
+        event = ev.realtime_case_merged(tenant_id, actor_id, primary_id, secondary_ids, reason)
         await RealtimeBroadcaster.broadcast_event(client, event)
 
     @staticmethod

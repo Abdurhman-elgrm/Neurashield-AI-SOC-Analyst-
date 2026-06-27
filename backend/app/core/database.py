@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -58,6 +57,7 @@ class DatabaseManager:
         assert self._engine is not None
         async with self._engine.connect() as conn:
             from sqlalchemy import text
+
             await conn.execute(text("SELECT 1"))
 
     async def close(self) -> None:
@@ -90,6 +90,7 @@ class DatabaseManager:
             assert self._engine is not None
             async with self._engine.connect() as conn:
                 from sqlalchemy import text
+
                 await conn.execute(text("SELECT 1"))
             return True
         except Exception:

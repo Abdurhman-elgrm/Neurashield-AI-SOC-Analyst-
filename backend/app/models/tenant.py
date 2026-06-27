@@ -3,10 +3,10 @@ from __future__ import annotations
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
 
 class Tenant(Base, TimestampMixin, SoftDeleteMixin):
@@ -17,9 +17,7 @@ class Tenant(Base, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = "tenants"
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -31,17 +29,17 @@ class Tenant(Base, TimestampMixin, SoftDeleteMixin):
     alert_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    members: Mapped[list["TenantMember"]] = relationship(  # type: ignore[name-defined]
+    members: Mapped[list[TenantMember]] = relationship(  # type: ignore[name-defined]
         "TenantMember",
         back_populates="tenant",
         lazy="noload",
     )
-    invitations: Mapped[list["Invitation"]] = relationship(  # type: ignore[name-defined]
+    invitations: Mapped[list[Invitation]] = relationship(  # type: ignore[name-defined]
         "Invitation",
         back_populates="tenant",
         lazy="noload",
     )
-    agents: Mapped[list["Agent"]] = relationship(  # type: ignore[name-defined]
+    agents: Mapped[list[Agent]] = relationship(  # type: ignore[name-defined]
         "Agent",
         back_populates="tenant",
         lazy="noload",

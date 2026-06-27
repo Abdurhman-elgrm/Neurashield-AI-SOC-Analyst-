@@ -149,7 +149,7 @@ export function NetworkSankeyTab({ id, isActive }: Props) {
     queryFn: () =>
       apiClient
         .get<{ data: NetworkFlowResponse }>(`/investigations/${id}/network-flows`)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .then((r) => (r.data as any).data ?? r.data)
         .catch(() => ({ flows: [] as NetworkFlow[], start_time: null, end_time: null })),
     enabled: isActive,

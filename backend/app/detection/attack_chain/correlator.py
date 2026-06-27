@@ -10,13 +10,15 @@ When a chain fires:
   - Creates a new Alert with severity=critical and evidence listing all contributing alerts
   - Never raises — failure is logged and silently swallowed so it never blocks the pipeline
 """
+
 from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable, Awaitable
-from uuid import UUID, uuid4
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 import structlog
 from sqlalchemy import select
@@ -25,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.metrics import ALERTS_CREATED_TOTAL
 from app.core.utils import create_task_safe
 from app.models.alert import Alert, AlertSeverity, AlertStatus
+
 from .builtin_chains import BUILTIN_CHAINS
 from .models import AttackChainRule, ChainMatch
 
@@ -38,6 +41,7 @@ _MAX_LOOKBACK_SECS = max(c.window_secs for c in BUILTIN_CHAINS)
 
 
 # ─── Cluster deduplication helpers ───────────────────────────────────────────
+
 
 def _cluster_fingerprint(alert_ids: list[UUID]) -> str:
     """SHA-256 of sorted alert UUIDs — unique key for this exact cluster."""
@@ -56,6 +60,7 @@ async def _create_investigation_with_lock(
     Returns True if the lock was acquired and factory() was called.
     """
     from app.core.redis import get_stream_redis
+
     redis = None
     try:
         redis = await get_stream_redis()
@@ -80,16 +85,17 @@ async def _create_investigation_with_lock(
 
 # ─── Public entry point ───────────────────────────────────────────────────────
 
+
 async def check_attack_chains(
     alert: Alert,
     tenant_id: UUID,
-    redis: "Redis",
+    redis: Redis,
 ) -> None:
     """
     Non-blocking entry point called from DetectionWorker after alert commit.
     Spawns an isolated task so any failure never blocks the detection pipeline.
     """
-    task = create_task_safe(
+    create_task_safe(
         _run_chain_check(alert, tenant_id, redis),
         name=f"chain_check_{alert.id}",
     )
@@ -97,7 +103,8 @@ async def check_attack_chains(
 
 # ─── Core logic ───────────────────────────────────────────────────────────────
 
-async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: "Redis") -> None:
+
+async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: Redis) -> None:
     try:
         if not alert.source_host:
             return
@@ -123,8 +130,10 @@ async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: "Redis") -> Non
 
                 chain_alert_ref: list[Alert] = []
 
-                async def _create_alert() -> None:
-                    ca = _build_chain_alert(match, tenant_id)
+                async def _create_alert(
+                    _m: object = match, _r: list[Alert] = chain_alert_ref
+                ) -> None:
+                    ca = _build_chain_alert(_m, tenant_id)  # type: ignore[arg-type]
                     db.add(ca)
                     await db.flush()
                     await db.commit()
@@ -132,7 +141,7 @@ async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: "Redis") -> Non
                         tenant_id=str(tenant_id),
                         severity=ca.severity.value,
                     ).inc()
-                    chain_alert_ref.append(ca)
+                    _r.append(ca)
 
                 fired = await _create_investigation_with_lock(
                     lock_key,
@@ -164,12 +173,13 @@ async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: "Redis") -> Non
 
 # ─── Alert loading ────────────────────────────────────────────────────────────
 
+
 async def _load_recent_alerts(
     db: AsyncSession,
     tenant_id: UUID,
     host: str,
 ) -> list[Alert]:
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=_MAX_LOOKBACK_SECS)
+    cutoff = datetime.now(tz=UTC) - timedelta(seconds=_MAX_LOOKBACK_SECS)
     result = await db.execute(
         select(Alert)
         .where(
@@ -189,6 +199,7 @@ async def _load_recent_alerts(
 
 # ─── Chain matching ───────────────────────────────────────────────────────────
 
+
 def _try_match_chain(
     chain: AttackChainRule,
     alerts: list[Alert],
@@ -197,7 +208,7 @@ def _try_match_chain(
     Returns a ChainMatch if the alerts satisfy at least chain.min_stages
     required stages within the chain's window, otherwise None.
     """
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     cutoff = now - timedelta(seconds=chain.window_secs)
 
     in_window = [a for a in alerts if a.created_at and a.created_at >= cutoff]
@@ -232,7 +243,7 @@ def _try_match_chain(
     )
 
 
-def _stage_matches_alert(stage: "ChainStage", alert: Alert) -> bool:
+def _stage_matches_alert(stage: ChainStage, alert: Alert) -> bool:
     title_lower = (alert.title or "").lower()
     for kw in stage.keywords:
         # Support simple regex patterns (for 'multiple.*failed' etc.)
@@ -247,15 +258,16 @@ def _stage_matches_alert(stage: "ChainStage", alert: Alert) -> bool:
 
 # ─── Alert creation ───────────────────────────────────────────────────────────
 
+
 def _build_chain_alert(match: ChainMatch, tenant_id: UUID) -> Alert:
     chain = match.rule
     stages_str = " → ".join(match.matched_stage_names)
 
     sev_map = {
         "critical": AlertSeverity.CRITICAL,
-        "high":     AlertSeverity.HIGH,
-        "medium":   AlertSeverity.MEDIUM,
-        "low":      AlertSeverity.LOW,
+        "high": AlertSeverity.HIGH,
+        "medium": AlertSeverity.MEDIUM,
+        "low": AlertSeverity.LOW,
     }
     severity = sev_map.get(chain.final_severity, AlertSeverity.CRITICAL)
 
@@ -272,11 +284,11 @@ def _build_chain_alert(match: ChainMatch, tenant_id: UUID) -> Alert:
         ),
         source_host=match.host,
         evidence={
-            "chain_name":          chain.name,
-            "matched_stages":      match.matched_stage_names,
+            "chain_name": chain.name,
+            "matched_stages": match.matched_stage_names,
             "contributing_alerts": [str(aid) for aid in match.matched_alert_ids],
-            "window_secs":         chain.window_secs,
-            "chain_type":          "attack_chain",
+            "window_secs": chain.window_secs,
+            "chain_type": "attack_chain",
         },
         mitre_tactics=list(chain.mitre_tactics),
         mitre_techniques=list(chain.mitre_techniques),
@@ -284,11 +296,10 @@ def _build_chain_alert(match: ChainMatch, tenant_id: UUID) -> Alert:
     )
 
 
-
 async def _auto_create_investigation(
     db: AsyncSession,
     chain_alert: Alert,
-    match: "ChainMatch",
+    match: ChainMatch,
     tenant_id: UUID,
 ) -> None:
     """
@@ -296,17 +307,20 @@ async def _auto_create_investigation(
     Uses the chain fingerprint as investigation_group_id to prevent duplicates.
     """
     try:
-        from app.models.investigation import Investigation, InvestigationStatus
         from sqlalchemy import select as _select
+
+        from app.models.investigation import Investigation, InvestigationStatus
 
         group_id = f"chain:{tenant_id}:{_cluster_fingerprint(match.matched_alert_ids)}"
 
         # Idempotent: skip if an investigation for this fingerprint already exists
         existing = await db.execute(
-            _select(Investigation.id).where(
+            _select(Investigation.id)
+            .where(
                 Investigation.tenant_id == tenant_id,
                 Investigation.investigation_group_id == group_id,
-            ).limit(1)
+            )
+            .limit(1)
         )
         if existing.scalar_one_or_none() is not None:
             return
@@ -331,10 +345,9 @@ async def _auto_create_investigation(
                 f"Correlated from {len(match.matched_alert_ids)} alert(s)."
             ),
             technical_summary=match.rule.description,
-            triggering_alert_ids=[str(aid) for aid in match.matched_alert_ids] + [str(chain_alert.id)],
-            attack_progression=[
-                {"stage": s, "matched": True} for s in match.matched_stage_names
-            ],
+            triggering_alert_ids=[str(aid) for aid in match.matched_alert_ids]
+            + [str(chain_alert.id)],
+            attack_progression=[{"stage": s, "matched": True} for s in match.matched_stage_names],
             recommended_actions=[
                 "Isolate affected host immediately",
                 "Review LSASS access and credential activity",
@@ -358,6 +371,7 @@ async def _auto_create_investigation(
 
 def _notify_chain_alert(alert: Alert, tenant_id: UUID) -> None:
     """Fire-and-forget WebSocket notification for chain alerts."""
+
     async def _publish() -> None:
         try:
             from app.core.redis import TenantRedisClient, redis_manager
@@ -365,17 +379,17 @@ def _notify_chain_alert(alert: Alert, tenant_id: UUID) -> None:
             from app.realtime.broadcaster import publish_to_tenant_ws
             from app.realtime.events import alert_created_msg
 
-            redis   = redis_manager.get_client()
-            client  = TenantRedisClient(redis, str(tenant_id), "pipeline")
-            msg     = alert_created_msg(
+            redis = redis_manager.get_client()
+            client = TenantRedisClient(redis, str(tenant_id), "pipeline")
+            msg = alert_created_msg(
                 str(tenant_id),
                 {
-                    "alert_id":    str(alert.id),
-                    "severity":    alert.severity.value,
-                    "title":       alert.title,
+                    "alert_id": str(alert.id),
+                    "severity": alert.severity.value,
+                    "title": alert.title,
                     "source_host": alert.source_host,
-                    "status":      alert.status.value,
-                    "created_at":  alert.created_at.isoformat() if alert.created_at else None,
+                    "status": alert.status.value,
+                    "created_at": alert.created_at.isoformat() if alert.created_at else None,
                 },
             )
             await publish_to_tenant_ws(client, stream_names.ALERTS_PUBSUB_CHANNEL, msg.to_json())

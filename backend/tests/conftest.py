@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock
@@ -8,11 +7,10 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-
 from sqlalchemy import JSON, event
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.database import database_manager, get_db
@@ -20,7 +18,6 @@ from app.core.logging import configure_logging
 from app.core.redis import redis_manager
 from app.main import create_application
 from app.models import Base
-
 
 # ─── SQLite JSONB compatibility ───────────────────────────────────────────────
 # Unit tests use SQLite in-memory for speed (no Postgres required locally).
@@ -31,6 +28,7 @@ from app.models import Base
 
 # SQLite does not have a native JSONB type.  Override it with JSON so that
 # Base.metadata.create_all() can build the schema in tests.
+
 
 @event.listens_for(Base.metadata, "before_create")
 def _replace_jsonb(target, connection, **kw):
@@ -78,6 +76,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 # ─── Mock Redis ───────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def mock_redis():
     mock = AsyncMock()
@@ -106,6 +105,7 @@ def mock_redis():
 
 # ─── Test application ─────────────────────────────────────────────────────────
 
+
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession, mock_redis: Any) -> AsyncGenerator[AsyncClient, None]:
     """
@@ -117,6 +117,7 @@ async def client(db_session: AsyncSession, mock_redis: Any) -> AsyncGenerator[As
     app.dependency_overrides[get_db] = lambda: db_session
 
     from app.core.redis import get_redis
+
     app.dependency_overrides[get_redis] = lambda: mock_redis
 
     # Prevent lifespan from re-initializing real connections
@@ -136,6 +137,7 @@ async def client(db_session: AsyncSession, mock_redis: Any) -> AsyncGenerator[As
 
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def registered_user(client: AsyncClient) -> dict[str, Any]:

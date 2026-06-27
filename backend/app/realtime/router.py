@@ -37,16 +37,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.core.redis import TenantRedisClient, redis_manager
-from app.pipeline import stream_names
 from app.realtime import channels as ch
 from app.realtime.auth import authenticate_websocket
 from app.realtime.broadcast import (
-    RealtimeBroadcaster,
     deregister_connection_queue,
-    get_connection_queue,
     register_connection_queue,
 )
-from app.realtime.events import error_msg, realtime_analyst_joined, realtime_analyst_left
 from app.realtime.locks import InvestigationLockService
 from app.realtime.manager import connection_manager
 from app.realtime.presence import PresenceService
@@ -62,12 +58,13 @@ from app.realtime.sync import SyncEngine
 logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["websocket"])
 
-_PING_INTERVAL_SECS  = 25   # server sends ping to client
-_HEARTBEAT_TIMEOUT   = 60   # drop connection if no pong within this window
-_REALTIME_SUBSYSTEM  = ch.REALTIME_SUBSYSTEM
+_PING_INTERVAL_SECS = 25  # server sends ping to client
+_HEARTBEAT_TIMEOUT = 60  # drop connection if no pong within this window
+_REALTIME_SUBSYSTEM = ch.REALTIME_SUBSYSTEM
 
 
 # ─── Phase 2 legacy /ws endpoint ─────────────────────────────────────────────
+
 
 @router.websocket("/ws")
 async def websocket_legacy(
@@ -75,7 +72,7 @@ async def websocket_legacy(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Legacy Phase 2 WebSocket — kept for backward compat."""
-    token         = websocket.query_params.get("token")
+    token = websocket.query_params.get("token")
     tenant_id_str = websocket.query_params.get("tenant_id")
 
     try:
@@ -98,7 +95,7 @@ async def websocket_legacy(
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=_PING_INTERVAL_SECS)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_text(
                     '{"v":1,"type":"ping","tenant_id":"' + tenant_id + '","payload":{},"ts":""}'
                 )
@@ -112,6 +109,7 @@ async def websocket_legacy(
 
 # ─── Phase 3.5 /ws/realtime endpoint ─────────────────────────────────────────
 
+
 @router.websocket("/ws/realtime")
 async def websocket_realtime(
     websocket: WebSocket,
@@ -121,7 +119,7 @@ async def websocket_realtime(
     Full collaborative SOC workspace WebSocket.
     Supports channel subscriptions, presence, typing indicators, and edit locks.
     """
-    token         = websocket.query_params.get("token")
+    token = websocket.query_params.get("token")
     tenant_id_str = websocket.query_params.get("tenant_id")
 
     try:
@@ -136,11 +134,11 @@ async def websocket_realtime(
         await websocket.close(code=4000, reason="Authentication failed")
         return
 
-    tenant_id  = str(member.tenant_id)
+    tenant_id = str(member.tenant_id)
     analyst_id = str(user.id)
-    ws_id      = str(uuid4())
+    ws_id = str(uuid4())
 
-    redis  = redis_manager.get_client()
+    redis = redis_manager.get_client()
     rt_client = TenantRedisClient(redis, tenant_id, _REALTIME_SUBSYSTEM)
 
     # ── Register connection ────────────────────────────────────────────────────
@@ -149,7 +147,9 @@ async def websocket_realtime(
     await subscription_manager.subscribe(ws_id, tenant_id, ch.PRESENCE)
 
     state = await PresenceService.join(
-        rt_client, analyst_id, tenant_id,
+        rt_client,
+        analyst_id,
+        tenant_id,
         display_name=getattr(user, "full_name", "") or getattr(user, "email", ""),
     )
 
@@ -179,7 +179,9 @@ async def websocket_realtime(
     # Broadcast presence join to peers
     try:
         await SyncEngine.on_analyst_joined(
-            rt_client, tenant_id, analyst_id,
+            rt_client,
+            tenant_id,
+            analyst_id,
             display_name=state.display_name,
             workspace=state.workspace,
         )
@@ -193,7 +195,7 @@ async def websocket_realtime(
                 msg = await asyncio.wait_for(send_queue.get(), timeout=_PING_INTERVAL_SECS)
                 await websocket.send_text(msg)
                 send_queue.task_done()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send a ping keepalive
                 ping = RealtimeEvent.create(
                     event_type=RealtimeEventType.PING,
@@ -215,9 +217,7 @@ async def websocket_realtime(
     try:
         while True:
             raw = await websocket.receive_text()
-            await _handle_client_message(
-                raw, ws_id, tenant_id, analyst_id, rt_client, websocket
-            )
+            await _handle_client_message(raw, ws_id, tenant_id, analyst_id, rt_client, websocket)
     except WebSocketDisconnect:
         pass
     except Exception as exc:
@@ -237,7 +237,7 @@ async def _handle_client_message(
 ) -> None:
     try:
         data = json.loads(raw)
-        msg  = ClientMessage(**data)
+        msg = ClientMessage(**data)
     except Exception:
         return  # ignore malformed messages
 
@@ -268,15 +268,14 @@ async def _handle_client_message(
 
     elif mtype == "heartbeat":
         await PresenceService.heartbeat(
-            rt_client, analyst_id,
+            rt_client,
+            analyst_id,
             workspace=msg.workspace,
             investigation_id=msg.investigation_id,
         )
 
     elif mtype == "set_investigation" and msg.investigation_id:
-        await PresenceService.set_active_investigation(
-            rt_client, analyst_id, msg.investigation_id
-        )
+        await PresenceService.set_active_investigation(rt_client, analyst_id, msg.investigation_id)
 
     elif mtype == "typing" and msg.investigation_id:
         try:

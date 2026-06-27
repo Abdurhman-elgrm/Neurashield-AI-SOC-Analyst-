@@ -9,6 +9,7 @@ the is_expired property would block their use.
 The sweep is intentionally cheap: a single UPDATE ... WHERE with a partial index
 (idx_installer_token_pending_expires) is used so it only scans PENDING rows.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,7 +41,7 @@ class InstallerTokenWorker:
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=SWEEP_INTERVAL_SECS)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         logger.info("installer_token_worker_stopped")

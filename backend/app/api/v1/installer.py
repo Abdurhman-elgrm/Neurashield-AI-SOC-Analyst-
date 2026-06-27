@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import os
 from typing import Annotated
 from uuid import UUID
 
 import structlog
-import os
-
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import require_permission
 from app.core.exceptions import RateLimitError
-from app.core.redis import TenantRedisClient, get_redis, get_redis_optional
+from app.core.redis import TenantRedisClient, get_redis_optional
 from app.models.installer_token import InstallerTokenStatus
 from app.rbac.permissions import Permission
-from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
+from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.installer import (
     BootstrapEnrollRequest,
     BootstrapEnrollResponse,
@@ -35,7 +34,7 @@ _SCRIPTS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts")
 )
 _BOOTSTRAP_SCRIPT = os.path.join(_SCRIPTS_DIR, "bootstrap.ps1")
-_REPAIR_SCRIPT    = os.path.join(_SCRIPTS_DIR, "repair.ps1")
+_REPAIR_SCRIPT = os.path.join(_SCRIPTS_DIR, "repair.ps1")
 
 
 @router.get("/repair.ps1", include_in_schema=False)
@@ -46,7 +45,7 @@ async def download_repair_script() -> PlainTextResponse:
         irm <api-url>/api/v1/installer/repair.ps1 | iex
     """
     try:
-        with open(_REPAIR_SCRIPT, "r", encoding="utf-8") as f:
+        with open(_REPAIR_SCRIPT, encoding="utf-8") as f:
             content = f.read()
         return PlainTextResponse(
             content=content,
@@ -61,7 +60,7 @@ async def download_repair_script() -> PlainTextResponse:
 async def download_bootstrap_script() -> PlainTextResponse:
     """Serves the PowerShell bootstrap installer script for download."""
     try:
-        with open(_BOOTSTRAP_SCRIPT, "r", encoding="utf-8") as f:
+        with open(_BOOTSTRAP_SCRIPT, encoding="utf-8") as f:
             content = f.read()
         return PlainTextResponse(
             content=content,
@@ -81,9 +80,10 @@ async def download_agent_script() -> PlainTextResponse:
     (e.g. smart-quote substitution, encoding mojibake) can never reach a client.
     """
     import ast as _ast
+
     path = os.path.join(_SCRIPTS_DIR, "soc_agent_v2.py")
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             content = f.read()
     except FileNotFoundError:
         return PlainTextResponse("# soc_agent_v2.py not found", status_code=404)
@@ -109,6 +109,7 @@ async def download_agent_script() -> PlainTextResponse:
         headers={"Content-Disposition": 'attachment; filename="soc_agent_v2.py"'},
     )
 
+
 # Rate limit: 50 token generations per hour per tenant
 _RATE_LIMIT = 50
 _RATE_WINDOW_SECS = 3600
@@ -120,6 +121,7 @@ _ENROLL_RATE_WINDOW_SECS = 900
 
 def _token_to_response(token: object) -> InstallerTokenResponse:
     from app.models.installer_token import InstallerToken
+
     t: InstallerToken = token  # type: ignore[assignment]
     return InstallerTokenResponse(
         id=t.id,
@@ -142,6 +144,7 @@ def _token_to_response(token: object) -> InstallerTokenResponse:
 
 # ─── Generate token ───────────────────────────────────────────────────────────
 
+
 @router.post(
     "/generate-token",
     response_model=APIResponse[InstallerTokenGenerateResponse],
@@ -154,8 +157,9 @@ async def generate_installer_token(
     db: Annotated[AsyncSession, Depends(get_db)],
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[InstallerTokenGenerateResponse]:
-    from app.models.tenant_member import TenantMember
     from redis.asyncio import Redis
+
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 
@@ -217,6 +221,7 @@ async def generate_installer_token(
 
 # ─── Status check ─────────────────────────────────────────────────────────────
 
+
 @router.get(
     "/token/{token_id}/status",
     response_model=APIResponse[InstallerTokenResponse],
@@ -235,6 +240,7 @@ async def get_installer_token_status(
 
 
 # ─── List tokens ──────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/tokens",
@@ -272,6 +278,7 @@ async def list_installer_tokens(
 
 # ─── Bootstrap enrollment (installer → agent credentials, no JWT) ─────────────
 
+
 @router.post(
     "/bootstrap-enroll",
     response_model=APIResponse[BootstrapEnrollResponse],
@@ -303,8 +310,9 @@ async def bootstrap_enroll(
     admin can generate a new one.
     """
     from redis.asyncio import Redis
-    from app.core.security import verify_password
+
     from app.core.exceptions import NotFoundError, ValidationError
+    from app.core.security import verify_password
     from app.ingestion.schemas import AgentEnrollRequest
     from app.ingestion.service import IngestionService
     from app.services.audit_service import AuditService
@@ -400,9 +408,7 @@ async def bootstrap_enroll(
         await db.commit()
         raise
 
-    await InstallerService.mark_used(
-        db, installing_token, device_id=machine.hostname
-    )
+    await InstallerService.mark_used(db, installing_token, device_id=machine.hostname)
 
     await AuditService.log(
         db,
@@ -448,6 +454,7 @@ def _get_client_ip(request: Request) -> str:
 
 
 # ─── Revoke token ─────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/revoke/{token_id}",

@@ -10,7 +10,6 @@ It delegates to the specialist services and handles cross-cutting concerns:
   - Note / evidence count enrichment for detail views
 """
 
-from datetime import datetime
 from uuid import UUID
 
 import structlog
@@ -23,16 +22,13 @@ from app.analyst.evidence import EvidenceService
 from app.analyst.graph_api import GraphService
 from app.analyst.hunt import EventHuntEngine, HuntEngine
 from app.analyst.notes import NoteService
-from app.analyst.search import PivotEngine
-from app.analyst.timeline_api import TimelineService
-from app.analyst.verdicts import VerdictService
 from app.analyst.schemas import (
     AssignmentCreate,
+    EventHuntQuery,
+    EventHuntResult,
     EvidenceCreate,
     GraphFilter,
     GraphResponse,
-    EventHuntQuery,
-    EventHuntResult,
     HuntQuery,
     HuntResult,
     InvestigationDetail,
@@ -42,20 +38,20 @@ from app.analyst.schemas import (
     NoteCreate,
     NoteUpdate,
     PivotResult,
-    ReopenRequest,
-    SavedHuntCreate,
     StatusUpdate,
     TimelineFilter,
     TimelineResponse,
     VerdictCreate,
 )
+from app.analyst.search import PivotEngine
+from app.analyst.timeline_api import TimelineService
+from app.analyst.verdicts import VerdictService
 from app.models.investigation import Investigation
 
 logger = structlog.get_logger(__name__)
 
 
 class AnalystWorkspaceService:
-
     # ── List / detail ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -65,7 +61,8 @@ class AnalystWorkspaceService:
         params: InvestigationFilterParams,
     ) -> tuple[list[InvestigationListItem], str | None]:
         rows, next_cursor = await CaseService.list_investigations(
-            db, tenant_id,
+            db,
+            tenant_id,
             status=params.status,
             verdict=params.verdict,
             assigned_to=params.assigned_to,
@@ -90,8 +87,10 @@ class AnalystWorkspaceService:
     ) -> InvestigationDetail:
         inv = await CaseService.get_investigation(db, tenant_id, investigation_id)
 
-        note_count     = await NoteService.count_for_investigation(db, tenant_id, investigation_id)
-        evidence_count = await EvidenceService.count_for_investigation(db, tenant_id, investigation_id)
+        note_count = await NoteService.count_for_investigation(db, tenant_id, investigation_id)
+        evidence_count = await EvidenceService.count_for_investigation(
+            db, tenant_id, investigation_id
+        )
 
         await ActivityService.log(
             db,
@@ -136,8 +135,12 @@ class AnalystWorkspaceService:
         payload: StatusUpdate,
     ) -> Investigation:
         inv = await CaseService.change_status(
-            db, tenant_id, investigation_id, analyst_id,
-            payload.status, payload.reason,
+            db,
+            tenant_id,
+            investigation_id,
+            analyst_id,
+            payload.status,
+            payload.reason,
         )
         await ActivityService.log(
             db,
@@ -234,9 +237,7 @@ class AnalystWorkspaceService:
         analyst_id: UUID,
         payload: NoteCreate,
     ) -> object:
-        note = await NoteService.create(
-            db, tenant_id, investigation_id, analyst_id, payload
-        )
+        note = await NoteService.create(db, tenant_id, investigation_id, analyst_id, payload)
         await ActivityService.log(
             db,
             tenant_id=tenant_id,
@@ -257,9 +258,7 @@ class AnalystWorkspaceService:
         investigation_id: str,
         is_admin: bool = False,
     ) -> object:
-        note = await NoteService.update(
-            db, tenant_id, note_id, analyst_id, payload, is_admin
-        )
+        note = await NoteService.update(db, tenant_id, note_id, analyst_id, payload, is_admin)
         await ActivityService.log(
             db,
             tenant_id=tenant_id,
@@ -299,9 +298,7 @@ class AnalystWorkspaceService:
         analyst_id: UUID,
         payload: EvidenceCreate,
     ) -> object:
-        ev = await EvidenceService.attach(
-            db, tenant_id, investigation_id, analyst_id, payload
-        )
+        ev = await EvidenceService.attach(db, tenant_id, investigation_id, analyst_id, payload)
         await ActivityService.log(
             db,
             tenant_id=tenant_id,
@@ -390,8 +387,8 @@ class AnalystWorkspaceService:
             metadata={
                 "filter_count": len(query.filters),
                 "result_count": result.total,
-                "categories":   query.category,
-                "ueba_flags":   query.ueba_flags,
+                "categories": query.category,
+                "ueba_flags": query.ueba_flags,
             },
         )
         return result
@@ -423,6 +420,7 @@ class AnalystWorkspaceService:
 
 
 # ─── Conversion helpers ───────────────────────────────────────────────────────
+
 
 def _to_list_item(inv: Investigation) -> InvestigationListItem:
     return InvestigationListItem(

@@ -19,34 +19,34 @@ from app.models.analyst import InvestigationActivity
 
 logger = structlog.get_logger(__name__)
 
+
 # Canonical action strings used across the workspace
 class AnalystAction:
     OPENED_INVESTIGATION = "investigation.opened"
     CLOSED_INVESTIGATION = "investigation.closed"
-    STATUS_CHANGED       = "investigation.status_changed"
-    VERDICT_SET          = "investigation.verdict_set"
-    NOTE_ADDED           = "investigation.note_added"
-    NOTE_EDITED          = "investigation.note_edited"
-    NOTE_DELETED         = "investigation.note_deleted"
-    NOTE_PINNED          = "investigation.note_pinned"
-    ASSIGNED             = "investigation.assigned"
-    UNASSIGNED           = "investigation.unassigned"
-    ESCALATED            = "investigation.escalated"
-    TRANSFERRED          = "investigation.transferred"
-    EVIDENCE_ATTACHED    = "investigation.evidence_attached"
-    EVIDENCE_DETACHED    = "investigation.evidence_detached"
-    HUNT_RUN             = "investigation.hunt_run"
-    HUNT_EVENT_RUN       = "investigation.hunt_event_run"
-    PIVOT_QUERY          = "investigation.pivot_query"
-    MERGED               = "investigation.merged"
-    SPLIT                = "investigation.split"
-    REOPENED             = "investigation.reopened"
-    TIMELINE_VIEWED      = "investigation.timeline_viewed"
-    GRAPH_VIEWED         = "investigation.graph_viewed"
+    STATUS_CHANGED = "investigation.status_changed"
+    VERDICT_SET = "investigation.verdict_set"
+    NOTE_ADDED = "investigation.note_added"
+    NOTE_EDITED = "investigation.note_edited"
+    NOTE_DELETED = "investigation.note_deleted"
+    NOTE_PINNED = "investigation.note_pinned"
+    ASSIGNED = "investigation.assigned"
+    UNASSIGNED = "investigation.unassigned"
+    ESCALATED = "investigation.escalated"
+    TRANSFERRED = "investigation.transferred"
+    EVIDENCE_ATTACHED = "investigation.evidence_attached"
+    EVIDENCE_DETACHED = "investigation.evidence_detached"
+    HUNT_RUN = "investigation.hunt_run"
+    HUNT_EVENT_RUN = "investigation.hunt_event_run"
+    PIVOT_QUERY = "investigation.pivot_query"
+    MERGED = "investigation.merged"
+    SPLIT = "investigation.split"
+    REOPENED = "investigation.reopened"
+    TIMELINE_VIEWED = "investigation.timeline_viewed"
+    GRAPH_VIEWED = "investigation.graph_viewed"
 
 
 class ActivityService:
-
     @staticmethod
     async def log(
         db: AsyncSession,
@@ -98,7 +98,8 @@ class ActivityService:
         if cursor:
             try:
                 ts_str, id_str = _decode_cursor(cursor)
-                from datetime import datetime, timezone
+                from datetime import datetime
+
                 ts = datetime.fromisoformat(ts_str)
                 conditions.append(
                     and_(
@@ -142,6 +143,7 @@ class ActivityService:
             try:
                 ts_str, id_str = _decode_cursor(cursor)
                 from datetime import datetime
+
                 ts = datetime.fromisoformat(ts_str)
                 conditions.append(
                     and_(
@@ -173,6 +175,7 @@ class ActivityService:
 
 
 # ─── Cursor helpers ───────────────────────────────────────────────────────────
+
 
 def _encode_cursor(ts: str, id_str: str) -> str:
     return base64.urlsafe_b64encode(f"{ts}|{id_str}".encode()).decode()

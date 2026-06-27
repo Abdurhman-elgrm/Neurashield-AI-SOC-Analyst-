@@ -33,7 +33,7 @@ const TACTIC_IDS: Record<string, string> = {
 
 // ─── Backend → Frontend adapter ───────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function _adaptMitre(raw: Record<string, any>): MitreAttack | undefined {
   const techniques: string[] = Array.isArray(raw.mitre_techniques) ? raw.mitre_techniques : [];
   const tactics: string[]    = Array.isArray(raw.mitre_tactics)    ? raw.mitre_tactics    : [];
@@ -47,7 +47,7 @@ function _adaptMitre(raw: Record<string, any>): MitreAttack | undefined {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function _adaptAiVerdict(ai: Record<string, any> | null | undefined) {
   if (!ai) return undefined;
   return {
@@ -58,7 +58,7 @@ function _adaptAiVerdict(ai: Record<string, any> | null | undefined) {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function _adaptRiskContext(evidence: Record<string, any> | undefined | null): AlertRiskContext | undefined {
   const rc = evidence?.risk_context;
   if (!rc) return undefined;
@@ -75,7 +75,7 @@ function _adaptRiskContext(evidence: Record<string, any> | undefined | null): Al
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function adaptAlert(raw: Record<string, any>): Alert {
   const ev = (raw.evidence ?? {}) as Record<string, unknown>;
   const evUser    = (ev.user    ?? {}) as Record<string, string>;
@@ -126,7 +126,7 @@ function adaptAlert(raw: Record<string, any>): Alert {
 // ─── List alerts (paginated, filterable) ──────────────────────────────────────
 
 export async function getAlerts(params: AlertListParams): Promise<AlertListResponse> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await apiClient.get<any>("/alerts", {
     params: {
       limit: params.pageSize ?? 50,
@@ -155,7 +155,7 @@ export async function getAlerts(params: AlertListParams): Promise<AlertListRespo
 // ─── Single alert detail ──────────────────────────────────────────────────────
 
 export async function getAlertDetail(alertId: string): Promise<Alert> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await apiClient.get<APIResponse<any>>(`/alerts/${alertId}`);
   return adaptAlert(data.data!);
 }
@@ -166,7 +166,7 @@ export async function updateAlert(
   alertId: string,
   payload: { status?: string; notes?: string; assigneeId?: string }
 ): Promise<Alert> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await apiClient.patch<APIResponse<any>>(`/alerts/${alertId}`, {
     ...(payload.status !== undefined && { status: payload.status }),
     ...(payload.notes !== undefined && { notes: payload.notes }),
@@ -179,7 +179,7 @@ export async function updateAlert(
 
 export async function getAlertContext(alertId: string): Promise<AlertContext> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data } = await apiClient.get<APIResponse<any>>(`/alerts/${alertId}/context`);
     const d = data.data!;
     return {
@@ -194,9 +194,9 @@ export async function getAlertContext(alertId: string): Promise<AlertContext> {
 
 export async function getAlertTimeline(alertId: string): Promise<AlertTimelineEvent[]> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data } = await apiClient.get<APIResponse<any[]>>(`/alerts/${alertId}/timeline`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return (data.data ?? []).map((ev: any) => ({
       id:        String(ev.id ?? ""),
       alertId:   String(ev.alertId ?? alertId),
@@ -240,7 +240,7 @@ export interface AlertsSummary {
 
 export async function getAlertsSummary(): Promise<AlertsSummary> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data } = await apiClient.get<any>("/alerts/summary");
     const d = data?.data ?? data;
     return {

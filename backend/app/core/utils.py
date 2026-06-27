@@ -1,10 +1,12 @@
 """
 Shared async utilities — safe fire-and-forget task wrapper.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Coroutine, Any
+from collections.abc import Coroutine
+from typing import Any
 
 import structlog
 

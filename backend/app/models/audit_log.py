@@ -3,12 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
-from uuid import UUID as _PYUUID
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, utcnow
 
@@ -26,9 +25,7 @@ class AuditLog(Base):
 
     __tablename__ = "audit_logs"
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     # NULL for platform-level actions (e.g. global user management)
     tenant_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -76,19 +73,23 @@ class AuditLog(Base):
         Compute the canonical SHA-256 for this entry.
         All fields are included; prev_hash links to the previous entry in the chain.
         """
-        canonical = json.dumps({
-            "id": str(self.id),
-            "tenant_id": str(self.tenant_id) if self.tenant_id else None,
-            "actor_id": str(self.actor_id) if self.actor_id else None,
-            "action": self.action,
-            "resource_type": self.resource_type,
-            "resource_id": str(self.resource_id) if self.resource_id else None,
-            "changes": self.changes,
-            "ip_address": self.ip_address,
-            "request_id": self.request_id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "prev_hash": prev_hash,
-        }, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(
+            {
+                "id": str(self.id),
+                "tenant_id": str(self.tenant_id) if self.tenant_id else None,
+                "actor_id": str(self.actor_id) if self.actor_id else None,
+                "action": self.action,
+                "resource_type": self.resource_type,
+                "resource_id": str(self.resource_id) if self.resource_id else None,
+                "changes": self.changes,
+                "ip_address": self.ip_address,
+                "request_id": self.request_id,
+                "created_at": self.created_at.isoformat() if self.created_at else None,
+                "prev_hash": prev_hash,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return hashlib.sha256(canonical.encode()).hexdigest()
 
     def __repr__(self) -> str:

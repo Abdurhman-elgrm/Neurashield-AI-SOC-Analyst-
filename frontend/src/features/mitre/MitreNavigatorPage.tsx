@@ -16,8 +16,12 @@ interface TechniqueCoverage {
 function useCoverageData() {
   return useQuery({
     queryKey: ["rules", "coverage", "techniques"],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     queryFn: () =>
-      apiClient.get<TechniqueCoverage[]>("/rules?group_by=mitre_technique").then((r) => r.data),
+      apiClient.get<any>("/rules?group_by=mitre_technique").then((r) => {
+        const d = r.data;
+        return (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as TechniqueCoverage[];
+      }),
     staleTime: 300_000,
   });
 }

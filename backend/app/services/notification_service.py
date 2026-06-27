@@ -3,9 +3,9 @@ Notification service — dispatches email notifications for security events.
 All functions open their own DB sessions and are safe to run as background tasks.
 Never raises — email failure must never block the pipeline.
 """
+
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 import structlog
@@ -23,18 +23,19 @@ async def notify_alert_email(
 ) -> None:
     """Send HIGH/CRITICAL alert emails to all members who opted in."""
     try:
-        from app.core.database import database_manager
+        from sqlalchemy import select
+
         from app.core.config import get_settings
+        from app.core.database import database_manager
         from app.models.tenant_member import TenantMember
         from app.models.user import User
         from app.services.email_service import send_alert_email
-        from sqlalchemy import select
 
         settings = get_settings()
         alert_url = f"{settings.FRONTEND_URL}/alerts"
 
         ai = (ai_metadata or {}).get("ai_analysis", {})
-        mitre  = ai.get("mitre_technique")
+        mitre = ai.get("mitre_technique")
         action = ai.get("recommended_action")
 
         async with database_manager.session() as db:
@@ -71,12 +72,13 @@ async def notify_agent_offline_email(
 ) -> None:
     """Send agent-offline emails to all members who opted in."""
     try:
-        from app.core.database import database_manager
+        from sqlalchemy import select
+
         from app.core.config import get_settings
+        from app.core.database import database_manager
         from app.models.tenant_member import TenantMember
         from app.models.user import User
         from app.services.email_service import send_agent_offline_email
-        from sqlalchemy import select
 
         settings = get_settings()
         agents_url = f"{settings.FRONTEND_URL}/agents"
@@ -113,12 +115,13 @@ async def notify_investigation_email(
 ) -> None:
     """Send new-investigation emails to all members who opted in."""
     try:
-        from app.core.database import database_manager
+        from sqlalchemy import select
+
         from app.core.config import get_settings
+        from app.core.database import database_manager
         from app.models.tenant_member import TenantMember
         from app.models.user import User
         from app.services.email_service import send_investigation_email
-        from sqlalchemy import select
 
         settings = get_settings()
         inv_url = f"{settings.FRONTEND_URL}/investigations/{investigation_id}"

@@ -128,7 +128,7 @@ export async function updateInvestigationVerdict(
 // ─── Related alerts ───────────────────────────────────────────────────────────
 
 // The backend returns snake_case; adapt to camelCase Alert + archived flag
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function _adaptRelatedAlert(raw: Record<string, any>): Alert & { archived?: boolean } {
   return {
     id:             String(raw.id ?? ''),
@@ -154,12 +154,12 @@ function _adaptRelatedAlert(raw: Record<string, any>): Alert & { archived?: bool
 }
 
 export async function getRelatedAlerts(id: string): Promise<(Alert & { archived?: boolean })[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await apiClient.get<APIResponse<any>>(
     `/investigations/${id}/related-alerts`
   );
   // Backend wraps alerts in { alerts: [...], total: N, ... }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const items: any[] = Array.isArray(data.data) ? data.data : (data.data?.alerts ?? []);
   return items.map(_adaptRelatedAlert);
 }

@@ -57,7 +57,7 @@ export function TopEntitiesWidget({ timeRange }: Props) {
     queryKey: ["dashboard", "top-entities", timeRange],
     queryFn: () =>
       apiClient.get(`/dashboard/top-entities?timeRange=${timeRange}`)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .then((r) => ((r.data as any).data ?? r.data) as TopEntitiesData)
         .catch(() => empty),
     staleTime: 120_000,

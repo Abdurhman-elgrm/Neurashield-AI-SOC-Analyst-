@@ -6,15 +6,14 @@ NO LLM calls. Pure rule/template-based logic.
 """
 
 import datetime
-from typing import Any
 
 from app.investigation.schemas import (
+    MITRE_TACTIC_NAMES,
     AttackTimeline,
     BehaviorAnalysis,
     InvestigationContext,
     InvestigationScore,
     InvestigationSummary,
-    MITRE_TACTIC_NAMES,
 )
 
 # ─── Containment recommendations by behavior ──────────────────────────────────
@@ -125,6 +124,7 @@ _ACTIONS_BY_TACTIC: dict[str, list[str]] = {
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _human_duration(seconds: float) -> str:
     if seconds < 60:
         return f"{int(seconds)} second(s)"
@@ -171,6 +171,7 @@ def _tactic_names(tactics: list[str]) -> str:
 
 # ─── Summary sections ─────────────────────────────────────────────────────────
 
+
 def _build_executive_summary(
     timeline: AttackTimeline,
     behaviors: BehaviorAnalysis,
@@ -178,9 +179,9 @@ def _build_executive_summary(
     score: InvestigationScore,
 ) -> str:
     entity_sum = _entity_summary(context)
-    duration   = _human_duration(timeline.duration_seconds)
-    first      = _format_ts(timeline.first_seen)
-    last       = _format_ts(timeline.last_seen)
+    duration = _human_duration(timeline.duration_seconds)
+    first = _format_ts(timeline.first_seen)
+    last = _format_ts(timeline.last_seen)
 
     # Check for ransomware — always escalate to critical language
     behavior_names = {b.behavior_name for b in behaviors.detected_behaviors}
@@ -233,15 +234,13 @@ def _build_technical_summary(
             f"techniques={','.join(b.mitre_techniques[:3])})"
             for b in behaviors.detected_behaviors
         )
-        lines.append(
-            f"Behaviors detected ({behaviors.behavior_count}): {behavior_detail}."
-        )
+        lines.append(f"Behaviors detected ({behaviors.behavior_count}): {behavior_detail}.")
     if context.suspicious_processes:
-        lines.append(
-            f"Suspicious processes: {', '.join(context.suspicious_processes[:10])}."
-        )
+        lines.append(f"Suspicious processes: {', '.join(context.suspicious_processes[:10])}.")
     if context.suspicious_commands:
-        lines.append(f"Suspicious commands observed: {len(context.suspicious_commands)} unique command(s).")
+        lines.append(
+            f"Suspicious commands observed: {len(context.suspicious_commands)} unique command(s)."
+        )
     if context.suspicious_domains:
         lines.append(f"Suspicious domains: {', '.join(context.suspicious_domains[:5])}.")
     lines.append(
@@ -261,10 +260,10 @@ def _build_attack_progression(
 
     progression: list[str] = []
     entries = timeline.entries
-    total   = len(entries)
+    total = len(entries)
 
     # Phase 1: Initial activity
-    first_entries = entries[:min(3, total)]
+    first_entries = entries[: min(3, total)]
     hosts_in_first = list({e.hostname for e in first_entries if e.hostname})
     progression.append(
         f"[Initial Activity] First event at {_format_ts(entries[0].timestamp)} "
@@ -386,9 +385,7 @@ def _build_containment(behaviors: BehaviorAnalysis, score: InvestigationScore) -
                 recommendations.append(rec)
 
     if not recommendations:
-        recommendations.append(
-            "Monitor affected hosts for further suspicious activity."
-        )
+        recommendations.append("Monitor affected hosts for further suspicious activity.")
     return recommendations
 
 
@@ -418,13 +415,12 @@ def _build_analyst_notes(
         dict.fromkeys(t for b in behaviors.detected_behaviors for t in b.mitre_techniques)
     )
     if all_techniques:
-        notes.append(
-            f"MITRE ATT&CK techniques mapped: {', '.join(all_techniques[:10])}."
-        )
+        notes.append(f"MITRE ATT&CK techniques mapped: {', '.join(all_techniques[:10])}.")
     return notes
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+
 
 def generate_summary(
     investigation_id: str,
@@ -433,9 +429,7 @@ def generate_summary(
     context: InvestigationContext,
     score: InvestigationScore,
 ) -> InvestigationSummary:
-    impacted = list(dict.fromkeys(
-        context.involved_hosts[:10] + context.involved_users[:5]
-    ))
+    impacted = list(dict.fromkeys(context.involved_hosts[:10] + context.involved_users[:5]))
 
     return InvestigationSummary(
         investigation_id=investigation_id,

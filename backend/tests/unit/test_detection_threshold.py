@@ -1,27 +1,27 @@
 """Unit tests for threshold-based detection rules."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 from app.detection.threshold import ThresholdEvaluator
 from app.normalization.models import NormalizedEvent, NormalizedNetwork
 
 
 def _make_event(**kwargs) -> NormalizedEvent:
-    defaults = dict(
-        event_id="test",
-        timestamp=datetime.now(tz=timezone.utc),
-        category="network",
-        severity=1,
-        hostname="WIN-TEST",
-        os_type="windows",
-        agent_id="agent1",
-        tenant_id="tenant1",
-    )
+    defaults = {
+        "event_id": "test",
+        "timestamp": datetime.now(tz=UTC),
+        "category": "network",
+        "severity": 1,
+        "hostname": "WIN-TEST",
+        "os_type": "windows",
+        "agent_id": "agent1",
+        "tenant_id": "tenant1",
+    }
     defaults.update(kwargs)
     return NormalizedEvent(**defaults)
 
@@ -36,7 +36,6 @@ def _make_tenant_client(counter_val: int) -> MagicMock:
 
 @pytest.mark.asyncio
 class TestThresholdEvaluator:
-
     async def test_fires_when_threshold_reached(self):
         client = _make_tenant_client(5)
         evaluator = ThresholdEvaluator(client)

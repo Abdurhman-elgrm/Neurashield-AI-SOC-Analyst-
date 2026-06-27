@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import enum
+from datetime import datetime
 from uuid import uuid4
 
-from datetime import datetime
-
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin, utcnow
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
 
 class AgentOsType(str, enum.Enum):
@@ -26,9 +25,9 @@ class AgentStatus(str, enum.Enum):
 
 class ContainmentState(str, enum.Enum):
     NONE = "none"
-    QUARANTINED = "quarantined"   # blocks heartbeat + ingest
-    ISOLATED = "isolated"          # blocks ingest only
-    MUTED = "muted"                # suppresses alerts, ingest continues
+    QUARANTINED = "quarantined"  # blocks heartbeat + ingest
+    ISOLATED = "isolated"  # blocks ingest only
+    MUTED = "muted"  # suppresses alerts, ingest continues
 
 
 class Agent(Base, TimestampMixin, SoftDeleteMixin):
@@ -49,13 +48,13 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     hostname: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     os_type: Mapped[AgentOsType] = mapped_column(
-        Enum(AgentOsType, name="agent_os_type_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            AgentOsType, name="agent_os_type_enum", values_callable=lambda x: [e.value for e in x]
+        ),
         nullable=False,
     )
     status: Mapped[AgentStatus] = mapped_column(
-        Enum(AgentStatus, name="agent_status_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(AgentStatus, name="agent_status_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=AgentStatus.OFFLINE,
         index=True,
@@ -71,8 +70,11 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
 
     # ─── Containment ─────────────────────────────────────────────────────────
     containment_state: Mapped[ContainmentState] = mapped_column(
-        Enum(ContainmentState, name="agent_containment_state_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            ContainmentState,
+            name="agent_containment_state_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=ContainmentState.NONE,
     )
@@ -83,14 +85,12 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     )
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="agents", lazy="noload")  # type: ignore[name-defined]
-    heartbeats: Mapped[list["Heartbeat"]] = relationship(  # type: ignore[name-defined]
+    tenant: Mapped[Tenant] = relationship("Tenant", back_populates="agents", lazy="noload")  # type: ignore[name-defined]
+    heartbeats: Mapped[list[Heartbeat]] = relationship(  # type: ignore[name-defined]
         "Heartbeat", back_populates="agent", lazy="noload"
     )
 
-    __table_args__ = (
-        Index("idx_agent_tenant_hostname", "tenant_id", "hostname"),
-    )
+    __table_args__ = (Index("idx_agent_tenant_hostname", "tenant_id", "hostname"),)
 
     def __repr__(self) -> str:
         return f"<Agent id={self.id} hostname={self.hostname} status={self.status}>"

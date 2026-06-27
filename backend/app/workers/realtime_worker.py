@@ -84,9 +84,7 @@ class RealtimeWorker:
                 error=str(exc),
             )
 
-    async def _handle_investigation_result(
-        self, msg_id: str, payload: dict[str, Any]
-    ) -> None:
+    async def _handle_investigation_result(self, msg_id: str, payload: dict[str, Any]) -> None:
         assert self._rt_client is not None
         tenant_id = payload.get("tenant_id", self._tenant_id)
         try:

@@ -49,6 +49,7 @@ async def get_entity_events(
           /entities/ip:192.168.1.1/events
     """
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     # URL-decode in case the value contains encoded characters (e.g., backslash in usernames)
@@ -61,7 +62,7 @@ async def get_entity_events(
         )
 
     entity_type = decoded_key[:colon_pos]
-    entity_value = decoded_key[colon_pos + 1:]
+    entity_value = decoded_key[colon_pos + 1 :]
 
     if entity_type not in _VALID_ENTITY_TYPES:
         raise HTTPException(

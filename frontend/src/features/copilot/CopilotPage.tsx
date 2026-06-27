@@ -89,7 +89,7 @@ export function CopilotPage() {
   }
 
   const handleClear = async () => {
-    try { await copilotApi.clearHistory() } catch {}
+    try { await copilotApi.clearHistory() } catch { /* fire-and-forget */ }
     setMessages([WELCOME])
     setInput('')
     setShowWelcome(true)

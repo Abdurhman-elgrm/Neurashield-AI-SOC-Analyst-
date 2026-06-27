@@ -21,15 +21,14 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import GraphEdgeOut, GraphFilter, GraphNodeOut, GraphResponse
 from app.core.exceptions import NotFoundError
 from app.models.investigation import Investigation
-from app.analyst.schemas import GraphFilter, GraphNodeOut, GraphEdgeOut, GraphResponse
 
 logger = structlog.get_logger(__name__)
 
 
 class GraphService:
-
     @staticmethod
     async def get_graph(
         db: AsyncSession,
@@ -100,6 +99,7 @@ class GraphService:
 
 # ─── Filter + transform helpers ───────────────────────────────────────────────
 
+
 def _apply_graph_filters(
     raw_nodes: list[dict[str, Any]],
     raw_edges: list[dict[str, Any]],
@@ -131,8 +131,7 @@ def _apply_graph_filters(
                             queue.append((nb, d + 1))
         filtered_nodes = [n for n in raw_nodes if n["node_id"] in reachable]
         filtered_edges = [
-            e for e in raw_edges
-            if e["source"] in reachable and e["target"] in reachable
+            e for e in raw_edges if e["source"] in reachable and e["target"] in reachable
         ]
     else:
         # BFS from roots up to `depth` hops
@@ -156,8 +155,7 @@ def _apply_graph_filters(
 
         filtered_nodes = [n for n in raw_nodes if n["node_id"] in reachable]
         filtered_edges = [
-            e for e in raw_edges
-            if e["source"] in reachable and e["target"] in reachable
+            e for e in raw_edges if e["source"] in reachable and e["target"] in reachable
         ]
 
     if filters.collapse_ips:
@@ -189,15 +187,17 @@ def _collapse_ip_nodes(
         if rep:
             if rep not in seen_subnets:
                 seen_subnets.add(rep)
-                collapsed_nodes.append({
-                    "node_id": rep,
-                    "node_type": "ip",
-                    "label": rep[3:],
-                    "attributes": {"collapsed": True},
-                    "first_seen": n.get("first_seen", 0.0),
-                    "last_seen": n.get("last_seen", 0.0),
-                    "event_count": n.get("event_count", 0),
-                })
+                collapsed_nodes.append(
+                    {
+                        "node_id": rep,
+                        "node_type": "ip",
+                        "label": rep[3:],
+                        "attributes": {"collapsed": True},
+                        "first_seen": n.get("first_seen", 0.0),
+                        "last_seen": n.get("last_seen", 0.0),
+                        "event_count": n.get("event_count", 0),
+                    }
+                )
         else:
             collapsed_nodes.append(n)
 
@@ -227,7 +227,7 @@ def _find_attack_paths(
         adj.setdefault(e["source"], []).append(e["target"])
 
     user_nodes = [n["node_id"] for n in nodes if n.get("node_type") == "user"]
-    ip_nodes   = {n["node_id"] for n in nodes if n.get("node_type") == "ip"}
+    ip_nodes = {n["node_id"] for n in nodes if n.get("node_type") == "ip"}
 
     paths: list[list[str]] = []
     for start in user_nodes:

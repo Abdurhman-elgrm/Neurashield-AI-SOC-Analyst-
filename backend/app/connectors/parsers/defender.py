@@ -12,34 +12,35 @@ Severity mapping:
 
 Category mapping from Defender category strings to internal categories.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.connectors.base import ConnectorParser, ParsedEvent
 
 _SEV_MAP: dict[str, int] = {
     "informational": 1,
-    "low":           1,
-    "medium":        2,
-    "high":          3,
-    "critical":      4,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
 }
 
 _CAT_MAP: dict[str, str] = {
-    "malware":             "process",
-    "ransomware":          "file",
-    "credential theft":    "auth",
-    "lateral movement":    "auth",
-    "privilege escalation":"auth",
+    "malware": "process",
+    "ransomware": "file",
+    "credential theft": "auth",
+    "lateral movement": "auth",
+    "privilege escalation": "auth",
     "suspicious activity": "other",
-    "execution":           "process",
-    "persistence":         "registry",
-    "defense evasion":     "process",
-    "discovery":           "network",
-    "collection":          "file",
-    "exfiltration":        "network",
+    "execution": "process",
+    "persistence": "registry",
+    "defense evasion": "process",
+    "discovery": "network",
+    "collection": "file",
+    "exfiltration": "network",
     "command and control": "network",
 }
 
@@ -48,7 +49,7 @@ def _parse_ts(raw: str) -> datetime:
     try:
         return datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except Exception:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
 
 class DefenderParser(ConnectorParser):
@@ -58,7 +59,8 @@ class DefenderParser(ConnectorParser):
         try:
             alerts: list[dict[str, Any]] = (
                 payload.get("value") or payload.get("alerts") or [payload]
-                if isinstance(payload, dict) else payload
+                if isinstance(payload, dict)
+                else payload
             )
             return [e for e in (self._parse_one(a) for a in alerts if isinstance(a, dict)) if e]
         except Exception:
@@ -103,8 +105,8 @@ class DefenderParser(ConnectorParser):
                 }
             elif etype in ("ip", "networkconnection") and network is None:
                 network = {
-                    "src_ip":  evidence.get("ipAddress") or evidence.get("localIpAddress"),
-                    "dst_ip":  evidence.get("remoteIpAddress"),
+                    "src_ip": evidence.get("ipAddress") or evidence.get("localIpAddress"),
+                    "dst_ip": evidence.get("remoteIpAddress"),
                     "dst_port": evidence.get("remotePort"),
                 }
 
@@ -120,14 +122,14 @@ class DefenderParser(ConnectorParser):
             user=user,
             network=network,
             raw={
-                "defender_id":   alert.get("id") or alert.get("alertId"),
-                "title":         alert.get("title"),
-                "description":   alert.get("description"),
-                "status":        alert.get("status"),
-                "category":      alert.get("category"),
-                "detector":      alert.get("detectionSource"),
-                "machine_id":    alert.get("machineId"),
-                "incident_id":   alert.get("incidentId"),
+                "defender_id": alert.get("id") or alert.get("alertId"),
+                "title": alert.get("title"),
+                "description": alert.get("description"),
+                "status": alert.get("status"),
+                "category": alert.get("category"),
+                "detector": alert.get("detectionSource"),
+                "machine_id": alert.get("machineId"),
+                "incident_id": alert.get("incidentId"),
                 "mitre_tactics": alert.get("mitreTechniques"),
             },
         )

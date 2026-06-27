@@ -24,17 +24,15 @@ import asyncio
 from typing import Any
 
 import structlog
-from fastapi import WebSocket
 
 from app.core.redis import TenantRedisClient
 from app.realtime import channels as ch
-from app.realtime.manager import connection_manager
 from app.realtime.schemas import RealtimeEvent
 from app.realtime.subscriptions import subscription_manager
 
 logger = structlog.get_logger(__name__)
 
-QUEUE_MAX_SIZE = 128   # per-connection backpressure limit
+QUEUE_MAX_SIZE = 128  # per-connection backpressure limit
 
 
 class RealtimeBroadcaster:
@@ -132,6 +130,7 @@ def active_queue_count() -> int:
 
 # ─── Redis pub/sub listener ───────────────────────────────────────────────────
 
+
 class RealtimeListener:
     """
     Subscribes to the tenant:*:realtime:* Redis pub/sub pattern and delivers
@@ -155,7 +154,7 @@ class RealtimeListener:
                         pubsub.get_message(ignore_subscribe_messages=True),
                         timeout=1.0,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 except asyncio.CancelledError:
                     break
@@ -173,7 +172,7 @@ class RealtimeListener:
                     continue
 
                 tenant_id = ch.extract_tenant_from_pubsub(full_channel)
-                channel   = ch.extract_channel_from_pubsub(full_channel)
+                channel = ch.extract_channel_from_pubsub(full_channel)
                 if not tenant_id or not channel:
                     continue
 

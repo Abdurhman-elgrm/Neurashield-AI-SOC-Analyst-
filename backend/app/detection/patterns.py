@@ -82,6 +82,7 @@ def _safe_regex_match(pattern: str, text: str) -> bool:
 
 # ─── Field access ─────────────────────────────────────────────────────────────
 
+
 def _get_field(event: NormalizedEvent, path: str) -> Any:
     """
     Dot-notation field access with unlimited nesting depth.
@@ -148,8 +149,7 @@ def evaluate_condition(condition: dict[str, Any], event: NormalizedEvent) -> boo
 
     if op == _OP_ANY_OF_GROUPS:
         return any(
-            all(evaluate_condition(c, event) for c in grp)
-            for grp in condition.get("groups", [])
+            all(evaluate_condition(c, event) for c in grp) for grp in condition.get("groups", [])
         )
 
     if op == _OP_NONE_OF:
@@ -174,6 +174,7 @@ def evaluate_conditions(conditions: list[dict[str, Any]], event: NormalizedEvent
 
 
 # ─── Operator dispatch ────────────────────────────────────────────────────────
+
 
 def _apply_op(op: str, actual: Any, expected: Any) -> bool:
     if op == _OP_EXISTS:

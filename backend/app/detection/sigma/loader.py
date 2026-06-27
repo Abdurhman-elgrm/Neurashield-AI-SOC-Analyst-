@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.detection_rule import DetectionRule, RuleSeverity, RuleType
-from .parser import SigmaParseResult, parse_sigma_yaml
+
 from .builtin_rules import BUILTIN_SIGMA_YAML, BUILTIN_UEBA_RULES
+from .parser import SigmaParseResult, parse_sigma_yaml
 
 logger = structlog.get_logger(__name__)
 

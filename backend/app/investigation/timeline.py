@@ -38,11 +38,11 @@ def _action_from_category(category: str) -> str:
     _MAP = {
         "process": "process_execution",
         "network": "network_connection",
-        "file":    "file_operation",
-        "auth":    "authentication",
+        "file": "file_operation",
+        "auth": "authentication",
         "registry": "registry_access",
-        "dns":     "dns_query",
-        "other":   "event",
+        "dns": "dns_query",
+        "other": "event",
     }
     return _MAP.get(str(category).lower(), "event")
 
@@ -151,8 +151,8 @@ def build_timeline(
 
     timestamps = [e.timestamp for e in entries if e.timestamp > 0]
     first_seen = min(timestamps) if timestamps else 0.0
-    last_seen  = max(timestamps) if timestamps else 0.0
-    duration   = max(last_seen - first_seen, 0.0)
+    last_seen = max(timestamps) if timestamps else 0.0
+    duration = max(last_seen - first_seen, 0.0)
 
     return AttackTimeline(
         investigation_id=investigation_id,

@@ -7,6 +7,7 @@ Redis keys are missing (e.g. after a pod restart).
 
 One global instance — covers all active tenants.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,6 @@ _SNAPSHOT_INTERVAL_SECS = int(os.getenv("UEBA_BASELINE_SNAPSHOT_INTERVAL_SECS", 
 
 
 class BaselineSnapshotWorker:
-
     async def run(self, stop_event: asyncio.Event) -> None:
         logger.info("baseline_snapshot_worker_started", interval_secs=_SNAPSHOT_INTERVAL_SECS)
 
@@ -33,7 +33,7 @@ class BaselineSnapshotWorker:
         while not stop_event.is_set():
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=_SNAPSHOT_INTERVAL_SECS)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
             if stop_event.is_set():
@@ -45,7 +45,9 @@ class BaselineSnapshotWorker:
 
     async def _load_tenant_ids(self) -> list[str]:
         from sqlalchemy import select
+
         from app.models.tenant import Tenant
+
         async with database_manager.session() as db:
             result = await db.execute(
                 select(Tenant.id).where(
@@ -60,6 +62,7 @@ class BaselineSnapshotWorker:
             tenant_ids = await self._load_tenant_ids()
             redis = redis_manager.get_client()
             from app.ueba.baseline_persistence import BaselinePersistenceService
+
             async with database_manager.session() as db:
                 for tid in tenant_ids:
                     svc = BaselinePersistenceService(tid, redis)
@@ -73,6 +76,7 @@ class BaselineSnapshotWorker:
             tenant_ids = await self._load_tenant_ids()
             redis = redis_manager.get_client()
             from app.ueba.baseline_persistence import BaselinePersistenceService
+
             async with database_manager.session() as db:
                 for tid in tenant_ids:
                     svc = BaselinePersistenceService(tid, redis)

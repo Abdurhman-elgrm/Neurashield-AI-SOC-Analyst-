@@ -11,40 +11,38 @@ Operations:
   change_status  — validated status transition with audit trail
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: F401 – used in type stubs
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, ValidationError
-from app.core.metrics import INVESTIGATIONS_CREATED_TOTAL
-from app.models.investigation import Investigation
 from app.analyst.schemas import (
-    InvestigationStatus,
-    InvestigationVerdict,
     STATUS_TRANSITIONS,
+    InvestigationVerdict,
     MergeRequest,
     ReopenRequest,
     VerdictCreate,
 )
 from app.analyst.verdicts import VerdictService
-from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: F401 – used in type stubs
+from app.core.exceptions import NotFoundError, ValidationError
+from app.core.metrics import INVESTIGATIONS_CREATED_TOTAL
+from app.models.investigation import Investigation
 
 logger = structlog.get_logger(__name__)
 
 # Severity → threat_score mapping
 _SEVERITY_SCORE: dict[str, int] = {
     "critical": 90,
-    "high":     70,
-    "medium":   45,
-    "low":      20,
+    "high": 70,
+    "medium": 45,
+    "low": 20,
 }
 
 
 class CaseService:
-
     @staticmethod
     async def get_investigation(
         db: AsyncSession,
@@ -86,7 +84,7 @@ class CaseService:
             )
 
         inv.status = new_status
-        inv.updated_at = datetime.now(tz=timezone.utc)
+        inv.updated_at = datetime.now(tz=UTC)
         await db.flush([inv])
         logger.info(
             "investigation_status_changed",
@@ -111,9 +109,7 @@ class CaseService:
         target = "investigating" if "investigating" in allowed else "triaged"
         if target not in allowed:
             return inv  # already in a post-open state
-        return await CaseService.change_status(
-            db, tenant_id, investigation_id, analyst_id, target
-        )
+        return await CaseService.change_status(db, tenant_id, investigation_id, analyst_id, target)
 
     @staticmethod
     async def close_case(
@@ -143,7 +139,7 @@ class CaseService:
                 return inv
 
         inv.status = target
-        inv.updated_at = datetime.now(tz=timezone.utc)
+        inv.updated_at = datetime.now(tz=UTC)
         await db.flush([inv])
         return inv
 
@@ -156,7 +152,11 @@ class CaseService:
         payload: ReopenRequest | None = None,
     ) -> Investigation:
         return await CaseService.change_status(
-            db, tenant_id, investigation_id, analyst_id, "investigating",
+            db,
+            tenant_id,
+            investigation_id,
+            analyst_id,
+            "investigating",
             reason=payload.reason if payload else None,
         )
 
@@ -186,7 +186,7 @@ class CaseService:
             sec = await CaseService.get_investigation(db, tenant_id, sec_id)
             # Close secondary regardless of current status
             sec.status = "closed"
-            sec.updated_at = datetime.now(tz=timezone.utc)
+            sec.updated_at = datetime.now(tz=UTC)
             await db.flush([sec])
 
         logger.info(
@@ -211,6 +211,7 @@ class CaseService:
     ) -> Investigation:
         """Manually open a new investigation case."""
         from uuid import uuid4
+
         group_id = str(uuid4())
         score = _SEVERITY_SCORE.get(severity, 45)
 
@@ -231,7 +232,9 @@ class CaseService:
             attack_progression=[],
             recommended_actions=[],
             # store linked alert IDs in context JSON for reference
-            context_json={"alert_ids": alert_ids, "severity": severity} if alert_ids else {"severity": severity},
+            context_json={"alert_ids": alert_ids, "severity": severity}
+            if alert_ids
+            else {"severity": severity},
         )
         db.add(investigation)
         await db.commit()
@@ -252,6 +255,7 @@ class CaseService:
         # Auto-generate a playbook in the background using linked alert context
         from app.core.utils import create_task_safe
         from app.workers.investigation_worker import _auto_generate_investigation_playbook
+
         create_task_safe(
             _auto_generate_investigation_playbook(
                 investigation_id=str(investigation.id),
@@ -279,6 +283,7 @@ class CaseService:
         sort: str = "desc",
     ) -> tuple[list[Investigation], str | None]:
         import base64
+
         limit = min(limit, 200)
 
         conditions = [Investigation.tenant_id == tenant_id]
@@ -311,6 +316,7 @@ class CaseService:
                 ts_str, _, id_str = raw.partition("|")
                 ts = datetime.fromisoformat(ts_str)
                 from sqlalchemy import and_
+
                 conditions.append(
                     and_(
                         Investigation.created_at <= ts,
@@ -321,9 +327,7 @@ class CaseService:
                 pass
 
         order = (
-            Investigation.created_at.desc()
-            if sort == "desc"
-            else Investigation.created_at.asc()
+            Investigation.created_at.desc() if sort == "desc" else Investigation.created_at.asc()
         )
         result = await db.execute(
             select(Investigation)

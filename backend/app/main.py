@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from fastapi import FastAPI
@@ -11,7 +11,12 @@ from app.core.config import settings
 from app.core.database import database_manager
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import ContentLengthLimitMiddleware, PrometheusMiddleware, RequestContextMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    ContentLengthLimitMiddleware,
+    PrometheusMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.core.redis import redis_manager
 
 logger = structlog.get_logger(__name__)
@@ -31,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Set Prometheus build info once at startup.
     from app.core.metrics import BUILD_INFO
+
     BUILD_INFO.info({"version": settings.APP_VERSION, "environment": settings.ENVIRONMENT})
 
     # ── Run Alembic migrations on every startup ────────────────────────────
@@ -38,8 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Runs in a thread executor so the async event loop is not blocked.
     import asyncio
     import os
-    from alembic.config import Config
+
     from alembic import command as alembic_command
+    from alembic.config import Config
 
     logger.info("running_database_migrations")
     try:
@@ -68,9 +75,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Auto-ingest RAG knowledge base if empty ────────────────────────────
     async def _maybe_ingest_rag() -> None:
         async with database_manager.session() as db:
+            from sqlalchemy import func, select
+
             from app.ai.rag import ingest_all
-            from sqlalchemy import select, func
             from app.models.rag_chunk import RAGChunk
+
             count_result = await db.execute(select(func.count()).select_from(RAGChunk))
             count = count_result.scalar() or 0
             if count < 100:
@@ -81,6 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("rag_already_populated", chunk_count=count)
 
     from app.core.utils import create_task_safe
+
     create_task_safe(_maybe_ingest_rag(), name="startup_rag_ingest")
     # ──────────────────────────────────────────────────────────────────────
 
@@ -89,6 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             async with database_manager.session() as db:
                 from app.services.playbook_seed import seed_system_playbook_templates
+
                 await seed_system_playbook_templates(db)
         except Exception:
             logger.warning("playbook_seed_failed", exc_info=True)
@@ -109,6 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     try:
         from app.core.redis import initialize_stream_redis
+
         await initialize_stream_redis()
         logger.info("stream_redis_ready")
     except Exception as stream_exc:
@@ -175,6 +187,7 @@ def create_application() -> FastAPI:
 
     # ─── Routes ───────────────────────────────────────────────────────────────
     from app.api.v1.router import api_router
+
     app.include_router(api_router, prefix=settings.API_PREFIX)
 
     return app

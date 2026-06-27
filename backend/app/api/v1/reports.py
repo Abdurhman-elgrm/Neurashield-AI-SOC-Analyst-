@@ -9,9 +9,10 @@ packs (SOC 2 Type II, ISO 27001, PCI-DSS).  All data is tenant-scoped.
 The report is intentionally read-only and deterministic — the same parameters
 always produce the same data for the same period.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -25,12 +26,13 @@ from app.models.generated_report import GeneratedReport
 from app.models.tenant_member import TenantMember
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, PaginatedResponse
-from app.services.report_generator_service import ReportGeneratorService, REPORT_TYPE_LABELS
+from app.services.report_generator_service import ReportGeneratorService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 # ─── Response schema ──────────────────────────────────────────────────────────
+
 
 class AlertSummary(BaseModel):
     total: int = 0
@@ -87,15 +89,17 @@ class ComplianceReport(BaseModel):
 
 # ─── Framework control mappings ───────────────────────────────────────────────
 
+
 def _soc2_controls(
     alerts: AlertSummary,
     investigations: InvestigationSummary,
     agents: AgentSummary,
 ) -> list[ComplianceFrameworkControl]:
-    fp_rate = (
-        alerts.false_positive / alerts.total if alerts.total else 0.0
+    fp_rate = alerts.false_positive / alerts.total if alerts.total else 0.0
+    ack_ok = (
+        alerts.mean_time_to_acknowledge_hours is not None
+        and alerts.mean_time_to_acknowledge_hours <= 4.0
     )
-    ack_ok = alerts.mean_time_to_acknowledge_hours is not None and alerts.mean_time_to_acknowledge_hours <= 4.0
     return [
         ComplianceFrameworkControl(
             control_id="CC7.2",
@@ -110,9 +114,12 @@ def _soc2_controls(
             status="pass" if ack_ok else "partial",
             evidence=(
                 f"Mean time to acknowledge: {alerts.mean_time_to_acknowledge_hours:.1f}h"
-                if alerts.mean_time_to_acknowledge_hours else "No alerts acknowledged in period"
+                if alerts.mean_time_to_acknowledge_hours
+                else "No alerts acknowledged in period"
             ),
-            metric=f"{alerts.mean_time_to_acknowledge_hours:.1f}h" if alerts.mean_time_to_acknowledge_hours else None,
+            metric=f"{alerts.mean_time_to_acknowledge_hours:.1f}h"
+            if alerts.mean_time_to_acknowledge_hours
+            else None,
         ),
         ComplianceFrameworkControl(
             control_id="CC9.2",
@@ -204,12 +211,15 @@ def _pci_dss_controls(
                 if alerts.mean_time_to_close_hours
                 else "No alerts closed in period"
             ),
-            metric=f"{alerts.mean_time_to_close_hours:.1f}h" if alerts.mean_time_to_close_hours else None,
+            metric=f"{alerts.mean_time_to_close_hours:.1f}h"
+            if alerts.mean_time_to_close_hours
+            else None,
         ),
     ]
 
 
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/compliance", response_model=APIResponse[ComplianceReport])
 async def get_compliance_report(
@@ -218,15 +228,15 @@ async def get_compliance_report(
     framework: Literal["soc2", "iso27001", "pci_dss"] = Query(default="soc2"),
     from_days: int = Query(default=30, ge=1, le=365),
 ) -> APIResponse[ComplianceReport]:
-    from app.models.tenant_member import TenantMember
     m: TenantMember = member  # type: ignore[assignment]
     tenant_id = m.tenant_id
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     period_start = now - timedelta(days=from_days)
 
     # ── Alert metrics ─────────────────────────────────────────────────────────
-    alert_rows = await db.execute(text("""
+    alert_rows = await db.execute(
+        text("""
         SELECT
             COUNT(*) FILTER (WHERE TRUE)                              AS total,
             COUNT(*) FILTER (WHERE status = 'open')                   AS open,
@@ -245,7 +255,9 @@ async def get_compliance_report(
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at >= :period_start
           AND deleted_at IS NULL
-    """), {"tid": str(tenant_id), "period_start": period_start})
+    """),
+        {"tid": str(tenant_id), "period_start": period_start},
+    )
     ar = alert_rows.fetchone()
 
     alerts = AlertSummary(
@@ -265,7 +277,8 @@ async def get_compliance_report(
     )
 
     # ── Investigation metrics ─────────────────────────────────────────────────
-    inv_rows = await db.execute(text("""
+    inv_rows = await db.execute(
+        text("""
         SELECT
             COUNT(*) FILTER (WHERE TRUE)                          AS total,
             COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved','false_positive')) AS open,
@@ -275,18 +288,23 @@ async def get_compliance_report(
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at >= :period_start
-    """), {"tid": str(tenant_id), "period_start": period_start})
+    """),
+        {"tid": str(tenant_id), "period_start": period_start},
+    )
     ir = inv_rows.fetchone()
 
     # Collect distinct behavior names from JSONB
-    beh_rows = await db.execute(text("""
+    beh_rows = await db.execute(
+        text("""
         SELECT DISTINCT jsonb_array_elements(behaviors_json->'detected_behaviors')->>'behavior_name' AS bname
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at >= :period_start
           AND behaviors_json IS NOT NULL
         LIMIT 20
-    """), {"tid": str(tenant_id), "period_start": period_start})
+    """),
+        {"tid": str(tenant_id), "period_start": period_start},
+    )
     behaviors = [r[0] for r in beh_rows.fetchall() if r[0]]
 
     investigations = InvestigationSummary(
@@ -299,7 +317,8 @@ async def get_compliance_report(
     )
 
     # ── Agent metrics ─────────────────────────────────────────────────────────
-    agent_rows = await db.execute(text("""
+    agent_rows = await db.execute(
+        text("""
         SELECT
             COUNT(*)                                                  AS total,
             COUNT(*) FILTER (WHERE status = 'online')                 AS online,
@@ -307,7 +326,9 @@ async def get_compliance_report(
         FROM agents
         WHERE tenant_id = CAST(:tid AS uuid)
           AND deleted_at IS NULL
-    """), {"tid": str(tenant_id)})
+    """),
+        {"tid": str(tenant_id)},
+    )
     agr = agent_rows.fetchone()
     total_agents = agr.total or 0
     online_agents = agr.online or 0
@@ -321,14 +342,17 @@ async def get_compliance_report(
     )
 
     # ── Event metrics ─────────────────────────────────────────────────────────
-    ev_rows = await db.execute(text("""
+    ev_rows = await db.execute(
+        text("""
         SELECT category, COUNT(*) AS cnt
         FROM events
         WHERE tenant_id = CAST(:tid AS uuid)
           AND event_timestamp >= :period_start
         GROUP BY category
         LIMIT 20
-    """), {"tid": str(tenant_id), "period_start": period_start})
+    """),
+        {"tid": str(tenant_id), "period_start": period_start},
+    )
     by_cat = {r[0]: r[1] for r in ev_rows.fetchall() if r[0]}
     events = EventSummary(
         total_events=sum(by_cat.values()),
@@ -360,6 +384,7 @@ async def get_compliance_report(
 
 # ─── Generated Reports ────────────────────────────────────────────────────────
 
+
 class GeneratedReportSummary(BaseModel):
     id: str
     report_type: str
@@ -370,13 +395,17 @@ class GeneratedReportSummary(BaseModel):
     period_end: str
     created_at: str
 
+
 class GeneratedReportDetail(GeneratedReportSummary):
     sections: list | None = None
     metrics: dict | None = None
     error_message: str | None = None
 
+
 class GenerateReportRequest(BaseModel):
-    report_type: Literal["executive_summary", "threat_report", "compliance_summary"] = "executive_summary"
+    report_type: Literal["executive_summary", "threat_report", "compliance_summary"] = (
+        "executive_summary"
+    )
     period_days: int = Field(default=30, ge=7, le=365)
 
 
@@ -389,6 +418,7 @@ async def generate_report(
     m: TenantMember = member  # type: ignore[assignment]
 
     from app.models.tenant import Tenant
+
     tenant_result = await db.execute(select(Tenant.name).where(Tenant.id == m.tenant_id))
     company_name = tenant_result.scalar_one_or_none() or "Your Organization"
 
@@ -413,21 +443,29 @@ async def list_generated_reports(
 ) -> PaginatedResponse[GeneratedReportSummary]:
     m: TenantMember = member  # type: ignore[assignment]
 
-    total = (await db.execute(
-        select(func.count()).where(GeneratedReport.tenant_id == m.tenant_id)
-    )).scalar_one()
+    total = (
+        await db.execute(select(func.count()).where(GeneratedReport.tenant_id == m.tenant_id))
+    ).scalar_one()
 
-    rows = (await db.execute(
-        select(GeneratedReport)
-        .where(GeneratedReport.tenant_id == m.tenant_id)
-        .order_by(GeneratedReport.created_at.desc())
-        .offset((page - 1) * limit)
-        .limit(limit)
-    )).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(GeneratedReport)
+                .where(GeneratedReport.tenant_id == m.tenant_id)
+                .order_by(GeneratedReport.created_at.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return PaginatedResponse[GeneratedReportSummary].offset(
         data=[_to_summary(r) for r in rows],
-        page=page, limit=limit, total=total,
+        page=page,
+        limit=limit,
+        total=total,
     )
 
 
@@ -438,13 +476,16 @@ async def get_generated_report(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[GeneratedReportDetail]:
     from uuid import UUID as _UUID
+
     from app.core.exceptions import NotFoundError
+
     m: TenantMember = member  # type: ignore[assignment]
     try:
         rid = _UUID(report_id)
     except ValueError:
         from app.core.exceptions import ValidationError
-        raise ValidationError("Invalid report ID")
+
+        raise ValidationError("Invalid report ID") from None
 
     result = await db.execute(
         select(GeneratedReport).where(
@@ -456,12 +497,14 @@ async def get_generated_report(
     if report is None:
         raise NotFoundError(f"Report {report_id} not found")
 
-    return APIResponse.ok(GeneratedReportDetail(
-        **_to_summary(report).model_dump(),
-        sections=report.sections,
-        metrics=report.metrics,
-        error_message=report.error_message,
-    ))
+    return APIResponse.ok(
+        GeneratedReportDetail(
+            **_to_summary(report).model_dump(),
+            sections=report.sections,
+            metrics=report.metrics,
+            error_message=report.error_message,
+        )
+    )
 
 
 def _to_summary(r: GeneratedReport) -> GeneratedReportSummary:

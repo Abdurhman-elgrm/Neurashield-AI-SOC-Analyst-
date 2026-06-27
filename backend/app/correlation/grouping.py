@@ -41,6 +41,7 @@ _MAX_GROUP_EVENTS = 5_000
 
 # ─── Models ───────────────────────────────────────────────────────────────────
 
+
 class InvestigationGroup(BaseModel):
     """Snapshot of a group's current state (read from Redis)."""
 
@@ -60,6 +61,7 @@ class InvestigationGroup(BaseModel):
 
 
 # ─── Grouper ──────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class CorrelationGrouper:
@@ -100,9 +102,9 @@ class CorrelationGrouper:
         or return None if no group exists yet.
         """
         for key_fn, id_val in [
-            (self._cid_key,  payload.get("correlation_id")),
+            (self._cid_key, payload.get("correlation_id")),
             (self._ptid_key, payload.get("process_tree_id")),
-            (self._sid_key,  payload.get("session_id")),
+            (self._sid_key, payload.get("session_id")),
         ]:
             if id_val:
                 inv_id = await self.client.get(key_fn(id_val))
@@ -135,9 +137,7 @@ class CorrelationGrouper:
         await self._update_group(inv_id, payload, score, event_ts)
         return inv_id
 
-    async def add_event_to_group(
-        self, inv_id: str, event_id: str, event_ts: float
-    ) -> None:
+    async def add_event_to_group(self, inv_id: str, event_id: str, event_ts: float) -> None:
         """Append event_id to the group's ZSET; prune oldest if over cap."""
         zset_key = self._grp_events_key(inv_id)
         await self.client.zadd(zset_key, {event_id: event_ts})
@@ -191,9 +191,9 @@ class CorrelationGrouper:
 
     async def _write_mapping_keys(self, payload: dict[str, Any], inv_id: str) -> None:
         for key_fn, id_val in [
-            (self._cid_key,  payload.get("correlation_id")),
+            (self._cid_key, payload.get("correlation_id")),
             (self._ptid_key, payload.get("process_tree_id")),
-            (self._sid_key,  payload.get("session_id")),
+            (self._sid_key, payload.get("session_id")),
         ]:
             if id_val:
                 await self.client.set(key_fn(id_val), inv_id, ex=_GROUP_TTL_SECONDS)

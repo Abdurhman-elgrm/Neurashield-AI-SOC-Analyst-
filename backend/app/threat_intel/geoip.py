@@ -17,6 +17,7 @@ Cache-stampede protection (Redis lock):
   the first acquires the SETNX lock and makes the external request; the others
   wait _LOCK_WAIT seconds and then read from cache.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,9 +33,9 @@ from app.core.config import settings
 logger = structlog.get_logger(__name__)
 
 # ─── Runtime knobs ────────────────────────────────────────────────────────────
-_CACHE_TTL = 86400   # 24 hours
-_LOCK_TTL  = 10      # seconds a single lookup may hold the Redis lock
-_LOCK_WAIT = 2.0     # seconds to wait when another process holds the lock
+_CACHE_TTL = 86400  # 24 hours
+_LOCK_TTL = 10  # seconds a single lookup may hold the Redis lock
+_LOCK_WAIT = 2.0  # seconds to wait when another process holds the lock
 
 # Resolved once at module import time from the central settings object.
 # Override at runtime with MAXMIND_DB_PATH env var (picked up by Settings).
@@ -42,9 +43,28 @@ _MAXMIND_DB_PATH: str = settings.MAXMIND_DB_PATH
 
 # ─── Private IP ranges ────────────────────────────────────────────────────────
 _PRIVATE_RANGES = (
-    "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-    "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.",
-    "172.29.", "172.30.", "172.31.", "192.168.", "127.", "::1", "fc", "fd",
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+    "127.",
+    "::1",
+    "fc",
+    "fd",
 )
 
 
@@ -67,24 +87,25 @@ def _is_private(ip: str) -> bool:
 
 try:
     import geoip2.database  # type: ignore[import-untyped]
-    import geoip2.errors    # type: ignore[import-untyped]
+    import geoip2.errors  # type: ignore[import-untyped]
+
     _GEOIP2_AVAILABLE = True
 except ImportError:
     _GEOIP2_AVAILABLE = False
 
-_maxmind_reader: "geoip2.database.Reader | None" = None
+_maxmind_reader: geoip2.database.Reader | None = None
 _maxmind_lock = threading.Lock()
-_maxmind_init_attempted = False   # avoid repeated failing opens
+_maxmind_init_attempted = False  # avoid repeated failing opens
 
 
-def _get_maxmind_reader() -> "geoip2.database.Reader | None":
+def _get_maxmind_reader() -> geoip2.database.Reader | None:
     """Returns the singleton MaxMind reader, initialising it on first call."""
     global _maxmind_reader, _maxmind_init_attempted
 
     if not _GEOIP2_AVAILABLE or not _MAXMIND_DB_PATH:
         return None
     if _maxmind_init_attempted:
-        return _maxmind_reader   # may be None if init failed
+        return _maxmind_reader  # may be None if init failed
 
     with _maxmind_lock:
         if not _maxmind_init_attempted:
@@ -119,7 +140,7 @@ def _lookup_maxmind(ip: str) -> GeoResult | None:
             city=response.city.name,
             latitude=response.location.latitude,
             longitude=response.location.longitude,
-            isp=None,   # ISP data requires the ASN or ISP database; see fallback
+            isp=None,  # ISP data requires the ASN or ISP database; see fallback
         )
     except Exception:
         # AddressNotFoundError, ValueError (invalid IP), etc.
@@ -127,6 +148,7 @@ def _lookup_maxmind(ip: str) -> GeoResult | None:
 
 
 # ─── Main service ─────────────────────────────────────────────────────────────
+
 
 class GeoIPService:
     """
@@ -139,12 +161,12 @@ class GeoIPService:
     _IP_API_FIELDS = "status,country,countryCode,city,lat,lon,isp,query"
 
     @staticmethod
-    async def lookup(ip: str, redis: "Redis[str] | None" = None) -> GeoResult:  # type: ignore[name-defined]
+    async def lookup(ip: str, redis: Redis[str] | None = None) -> GeoResult:  # type: ignore[name-defined]
         if not ip or _is_private(ip):
             return GeoResult(is_private=True)
 
         cache_key = f"geoip:{ip}"
-        lock_key  = f"geoip:lock:{ip}"
+        lock_key = f"geoip:lock:{ip}"
 
         # ── 1. Redis cache ─────────────────────────────────────────────────
         if redis is not None:
@@ -187,7 +209,7 @@ class GeoIPService:
     @staticmethod
     async def _lookup_ipapi(
         ip: str,
-        redis: "Redis[str] | None",
+        redis: Redis[str] | None,
         cache_key: str,
         lock_key: str,
     ) -> GeoResult:
@@ -227,8 +249,9 @@ class GeoIPService:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 async def _cache_result(
-    redis: "Redis[str] | None",  # type: ignore[name-defined]
+    redis: Redis[str] | None,  # type: ignore[name-defined]
     cache_key: str,
     lock_key: str,
     result: GeoResult,

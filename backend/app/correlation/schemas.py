@@ -12,6 +12,7 @@ entity output format contract:
 CorrelationMetadata holds the deterministic cross-event linkage identifiers.
 All IDs are UUID5 strings — stable across pipeline replays.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -30,12 +31,13 @@ from app.correlation.entities import (
 
 class EntitySet(BaseModel):
     """All entities extracted from a single normalized event, grouped by type."""
-    users:     list[UserEntity]    = Field(default_factory=list)
-    hosts:     list[HostEntity]    = Field(default_factory=list)
-    ips:       list[IPEntity]      = Field(default_factory=list)
-    domains:   list[DomainEntity]  = Field(default_factory=list)
+
+    users: list[UserEntity] = Field(default_factory=list)
+    hosts: list[HostEntity] = Field(default_factory=list)
+    ips: list[IPEntity] = Field(default_factory=list)
+    domains: list[DomainEntity] = Field(default_factory=list)
     processes: list[ProcessEntity] = Field(default_factory=list)
-    hashes:    list[HashEntity]    = Field(default_factory=list)
+    hashes: list[HashEntity] = Field(default_factory=list)
 
 
 class CorrelationMetadata(BaseModel):
@@ -57,12 +59,13 @@ class CorrelationMetadata(BaseModel):
                        Not a DB foreign key — use it to JOIN on process_guid in
                        a future correlation query.
     """
-    correlation_id:      str
-    session_id:          str | None
-    process_tree_id:     str | None
-    event_chain_id:      str
+
+    correlation_id: str
+    session_id: str | None
+    process_tree_id: str | None
+    event_chain_id: str
     related_entity_keys: list[str] = Field(default_factory=list)
-    parent_event_id:     str | None
+    parent_event_id: str | None
 
 
 class ExtractionResult(BaseModel):
@@ -70,9 +73,10 @@ class ExtractionResult(BaseModel):
     Complete output of EntityExtractor.extract() for one event.
     Embed in the normalized event stream payload via enrich_normalized_payload().
     """
-    event_id:             str
-    tenant_id:            str
-    entities:             EntitySet
+
+    event_id: str
+    tenant_id: str
+    entities: EntitySet
     correlation_metadata: CorrelationMetadata
 
     def to_dict(self) -> dict[str, Any]:

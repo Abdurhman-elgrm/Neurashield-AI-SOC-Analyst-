@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import Event, EventCategory
@@ -15,7 +15,6 @@ logger = structlog.get_logger(__name__)
 
 
 class EventService:
-
     @staticmethod
     async def get_by_id(
         db: AsyncSession,

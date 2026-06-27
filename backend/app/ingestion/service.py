@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -9,15 +9,17 @@ from uuid import UUID
 async def _invalidate_dashboard_cache(tenant_id: str) -> None:
     try:
         from app.api.v1.dashboard import _invalidate_dashboard_cache as _dash_invalidate
+
         await _dash_invalidate(tenant_id)
     except Exception:
         pass
+
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError, UnauthorizedError
+from app.core.exceptions import UnauthorizedError
 from app.core.metrics import AGENT_HEARTBEATS_TOTAL, EVENTS_INGESTED_TOTAL
 from app.core.redis import TenantRedisClient
 from app.core.security import hash_agent_token, verify_agent_token
@@ -35,7 +37,6 @@ from app.ingestion.validators import validate_batch
 from app.models.agent import Agent, AgentOsType, AgentStatus
 from app.models.heartbeat import Heartbeat
 from app.pipeline.publisher import StreamPublisher
-from app.pipeline import stream_names
 
 logger = structlog.get_logger(__name__)
 
@@ -43,26 +44,48 @@ _ENROLLMENT_TOKEN_BYTES = 32
 
 # Explicit allowlist of extra fields an agent may send beyond the RawEventPayload schema.
 # Windows Event Log structured fields + Sysmon modern channel fields only.
-_ALLOWED_EXTRA_FIELDS: frozenset[str] = frozenset({
-    "event_id_windows",
-    "Image", "CommandLine", "ParentImage", "ParentCommandLine",
-    "TargetUserName", "SubjectUserName", "TargetDomainName", "SubjectDomainName",
-    "ServiceName", "GroupName", "MemberName",
-    "ProcessId", "ParentProcessId", "LogonType", "PrivilegeList",
-    "WorkstationName", "CurrentDirectory", "IntegrityLevel",
-    "TargetObject", "Details", "EventType", "RuleName",
-    "DestinationIp", "DestinationPort", "SourceIp", "SourcePort", "Protocol",
-    "DestinationHostname",
-    "source_ip",
-})
+_ALLOWED_EXTRA_FIELDS: frozenset[str] = frozenset(
+    {
+        "event_id_windows",
+        "Image",
+        "CommandLine",
+        "ParentImage",
+        "ParentCommandLine",
+        "TargetUserName",
+        "SubjectUserName",
+        "TargetDomainName",
+        "SubjectDomainName",
+        "ServiceName",
+        "GroupName",
+        "MemberName",
+        "ProcessId",
+        "ParentProcessId",
+        "LogonType",
+        "PrivilegeList",
+        "WorkstationName",
+        "CurrentDirectory",
+        "IntegrityLevel",
+        "TargetObject",
+        "Details",
+        "EventType",
+        "RuleName",
+        "DestinationIp",
+        "DestinationPort",
+        "SourceIp",
+        "SourcePort",
+        "Protocol",
+        "DestinationHostname",
+        "source_ip",
+    }
+)
 
-_VALID_CATEGORIES: frozenset[str] = frozenset({
-    "auth", "process", "network", "file", "dns", "registry", "other"
-})
+_VALID_CATEGORIES: frozenset[str] = frozenset(
+    {"auth", "process", "network", "file", "dns", "registry", "other"}
+)
 _MAX_FUTURE_SKEW_SECONDS = 300  # 5 minutes — reject events timestamped too far in future
 
 
-def _sanitize_event_fields(event: "RawEventPayload", now: "datetime") -> "RawEventPayload":
+def _sanitize_event_fields(event: RawEventPayload, now: datetime) -> RawEventPayload:
     """
     Sanitize agent-supplied event fields to prevent injection attacks.
     Returns a new model instance with sanitized fields (Pydantic models are immutable).
@@ -75,8 +98,7 @@ def _sanitize_event_fields(event: "RawEventPayload", now: "datetime") -> "RawEve
 
     # Reject events timestamped more than 5 min in the future (agent clock manipulation)
     if event.timestamp.tzinfo is None:
-        from datetime import timezone
-        ts = event.timestamp.replace(tzinfo=timezone.utc)
+        ts = event.timestamp.replace(tzinfo=UTC)
     else:
         ts = event.timestamp
     if (ts - now).total_seconds() > _MAX_FUTURE_SKEW_SECONDS:
@@ -88,7 +110,6 @@ def _sanitize_event_fields(event: "RawEventPayload", now: "datetime") -> "RawEve
 
 
 class IngestionService:
-
     @staticmethod
     async def enroll_agent(
         db: AsyncSession,
@@ -103,11 +124,13 @@ class IngestionService:
         # exists for this tenant, rotate its token and update metadata instead
         # of creating a duplicate record.
         existing = await db.execute(
-            select(Agent).where(
+            select(Agent)
+            .where(
                 Agent.tenant_id == tenant_id,
                 Agent.hostname == payload.hostname,
                 Agent.deleted_at.is_(None),
-            ).limit(1)
+            )
+            .limit(1)
         )
         agent = existing.scalar_one_or_none()
 
@@ -185,8 +208,9 @@ class IngestionService:
     ) -> IngestBatchResponse:
         validate_batch(payload.events)
 
-        from datetime import datetime, timezone
-        _now = datetime.now(tz=timezone.utc)
+        from datetime import datetime
+
+        _now = datetime.now(tz=UTC)
         sanitized_events = [_sanitize_event_fields(e, _now) for e in payload.events]
 
         idempotency = IdempotencyStore(redis_client)
@@ -246,7 +270,7 @@ class IngestionService:
         agent: Agent,
         payload: HeartbeatRequest,
     ) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
 
         heartbeat = Heartbeat(
             tenant_id=agent.tenant_id,
@@ -274,25 +298,25 @@ def _build_stream_message(agent: Agent, event: RawEventPayload) -> dict[str, Any
     # Spread allowlisted extra fields (e.g. event_id_windows, Image, CommandLine, TargetUserName
     # sent by the Windows agent) so the normalizer can read them at the top level.
     message: dict[str, Any] = {
-        k: v
-        for k, v in (event.model_extra or {}).items()
-        if k in _ALLOWED_EXTRA_FIELDS
+        k: v for k, v in (event.model_extra or {}).items() if k in _ALLOWED_EXTRA_FIELDS
     }
-    message.update({
-        # Authoritative agent metadata — always override what the agent claims
-        "agent_id":  str(agent.id),
-        "tenant_id": str(agent.tenant_id),
-        "hostname":  agent.hostname,
-        "os_type":   agent.os_type.value,
-        # Named event fields
-        "event_id":  event.event_id,
-        "timestamp": event.timestamp.isoformat(),
-        "category":  event.category,
-        "process":   event.process,
-        "user":      event.user,
-        "network":   event.network,
-        "file":      event.file,
-        "registry":  event.registry,
-        "raw":       event.raw,
-    })
+    message.update(
+        {
+            # Authoritative agent metadata — always override what the agent claims
+            "agent_id": str(agent.id),
+            "tenant_id": str(agent.tenant_id),
+            "hostname": agent.hostname,
+            "os_type": agent.os_type.value,
+            # Named event fields
+            "event_id": event.event_id,
+            "timestamp": event.timestamp.isoformat(),
+            "category": event.category,
+            "process": event.process,
+            "user": event.user,
+            "network": event.network,
+            "file": event.file,
+            "registry": event.registry,
+            "raw": event.raw,
+        }
+    )
     return message

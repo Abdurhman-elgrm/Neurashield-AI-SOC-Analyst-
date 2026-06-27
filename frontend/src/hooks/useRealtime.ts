@@ -26,6 +26,6 @@ export function useRealtime<P = unknown>(
       );
     });
     return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [ws, eventType, ...deps]);
 }

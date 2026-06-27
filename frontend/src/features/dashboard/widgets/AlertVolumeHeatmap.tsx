@@ -36,7 +36,7 @@ export function AlertVolumeHeatmap({ timeRange }: Props) {
     queryKey: ["dashboard", "heatmap", timeRange],
     queryFn: () =>
       apiClient.get(`/dashboard/alert-heatmap?timeRange=${timeRange}`)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .then((r) => ((r.data as any).data ?? r.data) as HeatmapCell[])
         .catch(() => [] as HeatmapCell[]),
     staleTime: 300_000,

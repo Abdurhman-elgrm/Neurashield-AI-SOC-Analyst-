@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, UniqueConstraint, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
 
 class TenantMember(Base, TimestampMixin, SoftDeleteMixin):
@@ -19,9 +19,7 @@ class TenantMember(Base, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = "tenant_members"
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tenants.id", ondelete="RESTRICT"),
@@ -41,9 +39,7 @@ class TenantMember(Base, TimestampMixin, SoftDeleteMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    joined_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     custom_permissions: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
@@ -79,12 +75,12 @@ class TenantMember(Base, TimestampMixin, SoftDeleteMixin):
     )
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    tenant: Mapped["Tenant"] = relationship(  # type: ignore[name-defined]
+    tenant: Mapped[Tenant] = relationship(  # type: ignore[name-defined]
         "Tenant",
         back_populates="members",
         lazy="noload",
     )
-    user: Mapped["User"] = relationship(  # type: ignore[name-defined]
+    user: Mapped[User] = relationship(  # type: ignore[name-defined]
         "User",
         back_populates="memberships",
         foreign_keys=[user_id],

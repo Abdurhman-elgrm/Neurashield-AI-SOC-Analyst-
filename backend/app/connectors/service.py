@@ -2,10 +2,11 @@
 ConnectorService — authenticates via API key, then queues parsed events
 into the raw_events Redis stream.
 """
+
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -14,17 +15,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.base import ParsedEvent
-from app.core.exceptions import NotFoundError, UnauthorizedError
+from app.core.exceptions import UnauthorizedError
 from app.core.redis import TenantRedisClient
 from app.models.api_key import ApiKey
-from app.pipeline import stream_names
 from app.pipeline.publisher import StreamPublisher
 
 logger = structlog.get_logger(__name__)
 
 
 class ConnectorService:
-
     @staticmethod
     async def resolve_tenant(db: AsyncSession, raw_key: str) -> UUID:
         """
@@ -46,11 +45,11 @@ class ConnectorService:
         if key is None:
             raise UnauthorizedError("Invalid or revoked API key")
 
-        if key.expires_at and key.expires_at < datetime.now(tz=timezone.utc):
+        if key.expires_at and key.expires_at < datetime.now(tz=UTC):
             raise UnauthorizedError("API key has expired")
 
         # Touch last_used_at (best-effort, no commit required)
-        key.last_used_at = datetime.now(tz=timezone.utc)
+        key.last_used_at = datetime.now(tz=UTC)
 
         logger.debug(
             "connector_api_key_resolved",

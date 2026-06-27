@@ -26,8 +26,8 @@ from app.investigation.schemas import (
     GraphNodeType,
 )
 
-
 # ─── Node-type inference ──────────────────────────────────────────────────────
+
 
 def _infer_node_type(entity_key: str) -> GraphNodeType:
     if entity_key.startswith("user:"):
@@ -48,11 +48,12 @@ def _infer_node_type(entity_key: str) -> GraphNodeType:
 def _node_label(entity_key: str) -> str:
     for prefix in ("user:", "host:", "ip:", "proc:", "hash:", "domain:"):
         if entity_key.startswith(prefix):
-            return entity_key[len(prefix):]
+            return entity_key[len(prefix) :]
     return entity_key
 
 
 # ─── Graph builder ────────────────────────────────────────────────────────────
+
 
 class AttackGraphBuilder:
     """
@@ -78,7 +79,7 @@ class AttackGraphBuilder:
         for ek in entity_keys:
             self._upsert_node(ek, ts)
 
-        if host_key and host_key not in {ek for ek in entity_keys}:
+        if host_key and host_key not in set(entity_keys):
             self._upsert_node(host_key, ts)
 
         # Derive edges from context
@@ -159,18 +160,14 @@ class AttackGraphBuilder:
     def get_children(graph: AttackGraph, node_id: str) -> list[str]:
         """Return direct children via SPAWNED or PARENT_OF edges."""
         child_types = {GraphEdgeType.SPAWNED, GraphEdgeType.PARENT_OF}
-        return [
-            e.target for e in graph.edges
-            if e.source == node_id and e.edge_type in child_types
-        ]
+        return [e.target for e in graph.edges if e.source == node_id and e.edge_type in child_types]
 
     @staticmethod
     def get_parents(graph: AttackGraph, node_id: str) -> list[str]:
         """Return direct parents via SPAWNED or PARENT_OF edges."""
         parent_types = {GraphEdgeType.SPAWNED, GraphEdgeType.PARENT_OF}
         return [
-            e.source for e in graph.edges
-            if e.target == node_id and e.edge_type in parent_types
+            e.source for e in graph.edges if e.target == node_id and e.edge_type in parent_types
         ]
 
     @staticmethod
@@ -251,12 +248,12 @@ class AttackGraphBuilder:
         ts: float,
     ) -> None:
         proc = snap.get("process") or {}
-        net  = snap.get("network") or {}
+        net = snap.get("network") or {}
 
-        user_keys   = [k for k in entity_keys if k.startswith("user:")]
-        proc_keys   = [k for k in entity_keys if k.startswith("proc:")]
-        ip_keys     = [k for k in entity_keys if k.startswith("ip:")]
-        hash_keys   = [k for k in entity_keys if k.startswith("hash:")]
+        user_keys = [k for k in entity_keys if k.startswith("user:")]
+        proc_keys = [k for k in entity_keys if k.startswith("proc:")]
+        ip_keys = [k for k in entity_keys if k.startswith("ip:")]
+        hash_keys = [k for k in entity_keys if k.startswith("hash:")]
         domain_keys = [k for k in entity_keys if k.startswith("domain:")]
 
         # Prefer explicit host entity keys; fall back to hostname-derived key
@@ -317,7 +314,7 @@ class AttackGraphBuilder:
             return 0
         # Nodes with no incoming edges are roots
         has_incoming: set[str] = set()
-        for src, targets in self._adj.items():
+        for _, targets in self._adj.items():
             has_incoming.update(targets)
         roots = [n for n in self._nodes if n not in has_incoming]
         if not roots:

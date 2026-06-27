@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncGenerator, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import orjson
 import structlog
 
 from app.core.metrics import WORKER_STREAM_LAG
 from app.core.redis import TenantRedisClient
-from app.pipeline import stream_names
 
 logger = structlog.get_logger(__name__)
 

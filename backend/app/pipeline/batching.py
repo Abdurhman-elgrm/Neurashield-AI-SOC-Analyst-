@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncGenerator, Generic, TypeVar
+from collections.abc import AsyncGenerator
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -38,7 +39,7 @@ class BatchAccumulator(Generic[T]):
 
             try:
                 item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if batch:
                     yield batch
                     batch = []

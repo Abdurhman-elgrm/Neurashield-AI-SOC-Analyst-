@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -14,14 +14,13 @@ from app.detection.sigma import bulk_import_defaults
 from app.models.tenant import Tenant
 from app.models.tenant_member import TenantMember
 from app.models.user import User
-from app.rbac.roles import Role, ROLE_HIERARCHY
+from app.rbac.roles import ROLE_HIERARCHY, Role
 from app.services.audit_service import AuditService
 
 logger = structlog.get_logger(__name__)
 
 
 class TenantService:
-
     @staticmethod
     async def create(
         db: AsyncSession,
@@ -46,7 +45,7 @@ class TenantService:
             tenant_id=tenant.id,
             user_id=owner.id,
             role=Role.OWNER.value,
-            joined_at=datetime.now(tz=timezone.utc),
+            joined_at=datetime.now(tz=UTC),
         )
         db.add(member)
         await db.flush([member])
@@ -280,12 +279,10 @@ class TenantService:
         # Prevent privilege escalation — actors below OWNER cannot assign a role >= their own.
         # OWNER (the highest role) is explicitly allowed to promote others to OWNER so that
         # ownership can be transferred without requiring a super-admin bypass.
-        actor_level  = ROLE_HIERARCHY.get(Role(actor.role), -1)
+        actor_level = ROLE_HIERARCHY.get(Role(actor.role), -1)
         target_level = ROLE_HIERARCHY.get(new_role, -1)
         if target_level > actor_level:
-            raise ForbiddenError(
-                "You cannot assign a role higher than your own"
-            )
+            raise ForbiddenError("You cannot assign a role higher than your own")
 
         if target.role == Role.OWNER.value and new_role != Role.OWNER:
             owner_count_result = await db.execute(
@@ -327,7 +324,5 @@ class TenantService:
 
     @staticmethod
     async def _slug_exists(db: AsyncSession, slug: str) -> bool:
-        result = await db.execute(
-            select(Tenant.id).where(Tenant.slug == slug)
-        )
+        result = await db.execute(select(Tenant.id).where(Tenant.slug == slug))
         return result.scalar_one_or_none() is not None

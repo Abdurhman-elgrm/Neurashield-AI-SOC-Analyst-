@@ -7,11 +7,11 @@ a rich analysis using RAG context + LLM reasoning.
 No blocking I/O: RAG query + LLM call are both async.
 Never raises: all exceptions are caught and a safe default is returned.
 """
+
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,22 +73,21 @@ class InvestigationAnalysis:
 
     def to_dict(self) -> dict:
         return {
-            "executive_summary":       self.executive_summary,
-            "attack_narrative":        self.attack_narrative,
-            "kill_chain_stage":        self.kill_chain_stage,
-            "kill_chain_index":        self.kill_chain_index,
+            "executive_summary": self.executive_summary,
+            "attack_narrative": self.attack_narrative,
+            "kill_chain_stage": self.kill_chain_stage,
+            "kill_chain_index": self.kill_chain_index,
             "threat_actor_attribution": self.threat_actor_attribution,
-            "threat_actor_details":    self.threat_actor_details,
-            "evidence_strength":       self.evidence_strength,
-            "recommended_actions":     self.recommended_actions,
-            "verdict_suggestion":      self.verdict_suggestion,
-            "verdict_confidence":      self.verdict_confidence,
-            "rag_sources_used":        self.rag_sources_used,
+            "threat_actor_details": self.threat_actor_details,
+            "evidence_strength": self.evidence_strength,
+            "recommended_actions": self.recommended_actions,
+            "verdict_suggestion": self.verdict_suggestion,
+            "verdict_confidence": self.verdict_confidence,
+            "rag_sources_used": self.rag_sources_used,
         }
 
 
 class InvestigationAIAnalyzer:
-
     async def analyze(
         self,
         db: AsyncSession,
@@ -102,13 +101,13 @@ class InvestigationAIAnalyzer:
           behaviors_json, timeline_json, context_json, graph_json
         """
         try:
-            ttps     = self._extract_ttps(investigation_data)
+            ttps = self._extract_ttps(investigation_data)
             keywords = self._extract_keywords(investigation_data)
 
-            rag_chunks  = await rag_retrieve(db, ttps=ttps, keywords=keywords, limit=8)
+            rag_chunks = await rag_retrieve(db, ttps=ttps, keywords=keywords, limit=8)
             rag_context = self._format_rag_context(rag_chunks)
 
-            prompt  = self._build_prompt(investigation_data, rag_context)
+            prompt = self._build_prompt(investigation_data, rag_context)
             manager = get_llm_manager()
             response = await manager.generate(
                 prompt=prompt,
@@ -168,26 +167,26 @@ class InvestigationAIAnalyzer:
             conf_val = _CONFIDENCE_MAP.get(conf_val, 0.5)
 
         behaviors_raw = data.get("behaviors_json") or {}
-        context       = data.get("context_json") or {}
-        timeline      = data.get("timeline_json") or {}
+        context = data.get("context_json") or {}
+        timeline = data.get("timeline_json") or {}
 
         if not isinstance(context, dict):
             context = {}
         if not isinstance(timeline, dict):
             timeline = {}
 
-        hosts     = context.get("involved_hosts", context.get("hosts", []))
-        users     = context.get("involved_users", context.get("users", []))
-        src_ips   = context.get("source_ips", [])
-        dst_ips   = context.get("dest_ips", [])
+        hosts = context.get("involved_hosts", context.get("hosts", []))
+        users = context.get("involved_users", context.get("users", []))
+        src_ips = context.get("source_ips", [])
+        dst_ips = context.get("dest_ips", [])
         processes = context.get("suspicious_processes", context.get("processes", []))
 
         behaviors_str = json.dumps(behaviors_raw, indent=2)[:1500]
 
         return f"""INVESTIGATION ANALYSIS REQUEST
 
-Title: {data.get('title', 'Unknown')}
-Threat Score: {data.get('threat_score', 0)}/100
+Title: {data.get("title", "Unknown")}
+Threat Score: {data.get("threat_score", 0)}/100
 Confidence: {conf_val:.0%}
 
 DETECTED BEHAVIORS:
@@ -200,38 +199,39 @@ IPs: {src_ips + dst_ips}
 Processes: {processes}
 
 ATTACK TIMELINE:
-Duration: {timeline.get('duration_seconds', 0)} seconds
-Events: {timeline.get('total_events', 0)}
-First seen: {timeline.get('first_seen')}
-Last seen: {timeline.get('last_seen')}
+Duration: {timeline.get("duration_seconds", 0)} seconds
+Events: {timeline.get("total_events", 0)}
+First seen: {timeline.get("first_seen")}
+Last seen: {timeline.get("last_seen")}
 
 THREAT INTELLIGENCE CONTEXT:
 {rag_context}
 
 Analyze this investigation and provide your assessment in the required JSON format."""
 
-    def _parse_response(
-        self, response: str, rag_chunks: list[str]
-    ) -> InvestigationAnalysis:
+    def _parse_response(self, response: str, rag_chunks: list[str]) -> InvestigationAnalysis:
         try:
             text = response.strip()
             # Strip markdown fences if present
             if text.startswith("```"):
                 lines = text.split("\n")
-                text = "\n".join(
-                    lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-                )
+                text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
             # Find outermost JSON object
             start = text.find("{")
-            end   = text.rfind("}")
+            end = text.rfind("}")
             if start != -1 and end > start:
                 text = text[start : end + 1]
             data = json.loads(text)
 
             # Validate kill chain stage against allowed values
             _VALID_KILL_CHAIN = {
-                "Reconnaissance", "Weaponization", "Delivery",
-                "Exploitation", "Installation", "Command & Control", "Actions on Objectives",
+                "Reconnaissance",
+                "Weaponization",
+                "Delivery",
+                "Exploitation",
+                "Installation",
+                "Command & Control",
+                "Actions on Objectives",
             }
             kc_stage = data.get("kill_chain_stage", "Exploitation")
             if kc_stage not in _VALID_KILL_CHAIN:
@@ -262,14 +262,14 @@ Analyze this investigation and provide your assessment in the required JSON form
                 kill_chain_index=kc_index,
                 threat_actor_attribution=data.get("threat_actor_attribution", "Unknown"),
                 threat_actor_details={
-                    "name":         data.get("threat_actor_attribution", "Unknown"),
-                    "confidence":   float(data.get("threat_actor_confidence", 0.0)),
+                    "name": data.get("threat_actor_attribution", "Unknown"),
+                    "confidence": float(data.get("threat_actor_confidence", 0.0)),
                     "matching_ttps": data.get("threat_actor_matching_ttps", []),
                 },
                 evidence_strength={
-                    "strong":        data.get("evidence_strong", []),
+                    "strong": data.get("evidence_strong", []),
                     "circumstantial": data.get("evidence_circumstantial", []),
-                    "noise":         data.get("evidence_noise", []),
+                    "noise": data.get("evidence_noise", []),
                 },
                 recommended_actions=data.get("recommended_actions", []),
                 verdict_suggestion=verdict,

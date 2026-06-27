@@ -7,9 +7,10 @@ Primary entry points:
 
 All other symbols are importable directly from their modules.
 """
+
+from app.correlation.enrichment import collect_entity_keys, enrich_normalized_payload
 from app.correlation.extractor import EntityExtractor, extract_entities
-from app.correlation.enrichment import enrich_normalized_payload, collect_entity_keys
-from app.correlation.schemas import ExtractionResult, EntitySet, CorrelationMetadata
+from app.correlation.schemas import CorrelationMetadata, EntitySet, ExtractionResult
 
 __all__ = [
     "EntityExtractor",

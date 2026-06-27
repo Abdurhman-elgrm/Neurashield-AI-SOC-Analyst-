@@ -3,12 +3,13 @@
 Secrets are stored Fernet-encrypted at rest using a key derived from JWT_SECRET.
 Backup codes are stored as SHA-256 hashes; raw codes are shown to the user once.
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pyotp
 import structlog
@@ -29,6 +30,7 @@ def _fernet() -> Fernet:
     """Derive a stable 32-byte Fernet key from JWT_SECRET via SHA-256."""
     key_bytes = hashlib.sha256(settings.JWT_SECRET.encode("utf-8")).digest()
     import base64
+
     return Fernet(base64.urlsafe_b64encode(key_bytes))
 
 
@@ -49,7 +51,6 @@ def _hash_backup_code(code: str) -> str:
 
 
 class MFAService:
-
     @staticmethod
     def generate_totp_setup(user: User) -> dict:
         """
@@ -93,7 +94,7 @@ class MFAService:
 
         user.totp_secret = encrypted_secret
         user.totp_enabled = True
-        user.totp_enabled_at = datetime.now(tz=timezone.utc)
+        user.totp_enabled_at = datetime.now(tz=UTC)
         user.mfa_backup_codes = hashed_codes
 
         return raw_codes

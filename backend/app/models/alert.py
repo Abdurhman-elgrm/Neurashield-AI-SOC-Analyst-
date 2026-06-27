@@ -52,15 +52,17 @@ class Alert(Base, TimestampMixin, SoftDeleteMixin):
         nullable=True,
     )
     status: Mapped[AlertStatus] = mapped_column(
-        Enum(AlertStatus, name="alert_status_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(AlertStatus, name="alert_status_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=AlertStatus.OPEN,
         index=True,
     )
     severity: Mapped[AlertSeverity] = mapped_column(
-        Enum(AlertSeverity, name="alert_severity_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            AlertSeverity,
+            name="alert_severity_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         index=True,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 
 import structlog
@@ -13,6 +14,7 @@ logger = structlog.get_logger(__name__)
 
 
 # ─── Base exception ───────────────────────────────────────────────────────────
+
 
 class AppError(Exception):
     """
@@ -38,6 +40,7 @@ class AppError(Exception):
 
 
 # ─── Domain exceptions ────────────────────────────────────────────────────────
+
 
 class NotFoundError(AppError):
     def __init__(self, message: str = "Resource not found", details: Any = None) -> None:
@@ -125,13 +128,15 @@ class LockedError(AppError):
 
 # ─── Response builder ─────────────────────────────────────────────────────────
 
+
 def _error_response(
     status_code: int,
     code: str,
     message: str,
     details: Any = None,
 ) -> JSONResponse:
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     return JSONResponse(
         status_code=status_code,
         content={
@@ -143,13 +148,14 @@ def _error_response(
             },
             "meta": {
                 "request_id": get_request_id(),
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                "timestamp": datetime.now(tz=UTC).isoformat(),
             },
         },
     )
 
 
 # ─── Exception handlers ───────────────────────────────────────────────────────
+
 
 def register_exception_handlers(app: FastAPI) -> None:
 
@@ -186,7 +192,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         details = [
             {
-                "field": ".".join(str(loc) for loc in err["loc"][1:]) if len(err["loc"]) > 1 else "body",
+                "field": ".".join(str(loc) for loc in err["loc"][1:])
+                if len(err["loc"]) > 1
+                else "body",
                 "message": err["msg"],
                 "type": err["type"],
             }

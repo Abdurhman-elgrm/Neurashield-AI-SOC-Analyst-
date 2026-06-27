@@ -7,7 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin, utcnow
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin, utcnow
 
 
 class PlaybookTemplate(Base, TimestampMixin, SoftDeleteMixin):
@@ -37,16 +37,14 @@ class PlaybookTemplate(Base, TimestampMixin, SoftDeleteMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    steps: Mapped[list["PlaybookTemplateStep"]] = relationship(
+    steps: Mapped[list[PlaybookTemplateStep]] = relationship(
         "PlaybookTemplateStep",
         back_populates="template",
         lazy="noload",
         order_by="PlaybookTemplateStep.step_order",
     )
 
-    __table_args__ = (
-        Index("idx_pt_system_enabled", "is_system", "enabled"),
-    )
+    __table_args__ = (Index("idx_pt_system_enabled", "is_system", "enabled"),)
 
 
 class PlaybookTemplateStep(Base):
@@ -79,7 +77,7 @@ class PlaybookTemplateStep(Base):
         DateTime(timezone=True), default=utcnow, server_default="NOW()", nullable=False
     )
 
-    template: Mapped["PlaybookTemplate"] = relationship(
+    template: Mapped[PlaybookTemplate] = relationship(
         "PlaybookTemplate", back_populates="steps", lazy="noload"
     )
 
@@ -122,13 +120,13 @@ class Playbook(Base, TimestampMixin, SoftDeleteMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    steps: Mapped[list["PlaybookStep"]] = relationship(
+    steps: Mapped[list[PlaybookStep]] = relationship(
         "PlaybookStep",
         back_populates="playbook",
         lazy="noload",
         order_by="PlaybookStep.step_order",
     )
-    runs: Mapped[list["PlaybookRun"]] = relationship(
+    runs: Mapped[list[PlaybookRun]] = relationship(
         "PlaybookRun", back_populates="playbook", lazy="noload"
     )
 
@@ -173,9 +171,7 @@ class PlaybookStep(Base):
         DateTime(timezone=True), default=utcnow, server_default="NOW()", nullable=False
     )
 
-    playbook: Mapped["Playbook"] = relationship(
-        "Playbook", back_populates="steps", lazy="noload"
-    )
+    playbook: Mapped[Playbook] = relationship("Playbook", back_populates="steps", lazy="noload")
 
 
 class PlaybookRun(Base):
@@ -206,9 +202,7 @@ class PlaybookRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    playbook: Mapped["Playbook"] = relationship(
-        "Playbook", back_populates="runs", lazy="noload"
-    )
+    playbook: Mapped[Playbook] = relationship("Playbook", back_populates="runs", lazy="noload")
 
 
 class PlaybookAutoConfig(Base, TimestampMixin):
@@ -231,4 +225,3 @@ class PlaybookAutoConfig(Base, TimestampMixin):
     updated_by_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-

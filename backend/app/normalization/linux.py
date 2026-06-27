@@ -26,6 +26,7 @@ Supported sources
     - open / openat / creat / unlink / rename — file activity
     - setuid / setgid — privilege change
 """
+
 from __future__ import annotations
 
 import re
@@ -103,14 +104,24 @@ _PROGRAM_SEVERITY_FLOOR: dict[str, int] = {
 
 # syslog severity names → internal severity (1–4)
 _SYSLOG_SEVERITY: dict[str, int] = {
-    "emerg": 4, "alert": 4, "crit": 4,
-    "err": 3, "error": 3, "warning": 3, "warn": 3,
+    "emerg": 4,
+    "alert": 4,
+    "crit": 4,
+    "err": 3,
+    "error": 3,
+    "warning": 3,
+    "warn": 3,
     "notice": 2,
-    "info": 1, "debug": 1,
-    "0": 4, "1": 4, "2": 4,
-    "3": 3, "4": 3,
+    "info": 1,
+    "debug": 1,
+    "0": 4,
+    "1": 4,
+    "2": 4,
+    "3": 3,
+    "4": 3,
     "5": 2,
-    "6": 1, "7": 1,
+    "6": 1,
+    "7": 1,
 }
 
 
@@ -215,6 +226,7 @@ _RE_PAM_SESSION_OPEN = re.compile(
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def normalize_linux_event(raw: dict[str, Any], base: NormalizedEvent) -> NormalizedEvent:
     """
     Maps Linux-specific event fields onto the NormalizedEvent schema.
@@ -295,6 +307,7 @@ def normalize_linux_event(raw: dict[str, Any], base: NormalizedEvent) -> Normali
 # ─────────────────────────────────────────────────────────────────────────────
 # Program-specific handlers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _handle_sshd(message: str, base: NormalizedEvent, raw: dict[str, Any]) -> None:
     base.category = "auth"
@@ -544,6 +557,7 @@ def _handle_generic_keywords(message: str, base: NormalizedEvent) -> None:
 # auditd syscall handler
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _handle_auditd_syscall(syscall: str, raw: dict[str, Any], base: NormalizedEvent) -> None:
     if syscall == "execve":
         base.category = "process"
@@ -584,14 +598,11 @@ def _handle_auditd_syscall(syscall: str, raw: dict[str, Any], base: NormalizedEv
 # Field extractors
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _get_program(raw: dict[str, Any]) -> str:
     """Returns the normalized program name (lowercase, path stripped)."""
     prog = (
-        raw.get("program")
-        or raw.get("process_name")
-        or raw.get("ident")
-        or raw.get("comm")
-        or ""
+        raw.get("program") or raw.get("process_name") or raw.get("ident") or raw.get("comm") or ""
     )
     return prog.split("/")[-1].lower()
 
@@ -606,7 +617,7 @@ def _extract_user_linux(raw: dict[str, Any]) -> NormalizedUser:
         user_sub.get("name")
         or raw.get("username")
         or raw.get("user_name")
-        or raw.get("acct")       # auditd USER_LOGIN record
+        or raw.get("acct")  # auditd USER_LOGIN record
     )
     uid_val = user_sub.get("id") or raw.get("uid")
 
@@ -698,6 +709,7 @@ def _extract_file_from_auditd(raw: dict[str, Any]) -> NormalizedFile:
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _merge_user(existing: NormalizedUser | None, override: NormalizedUser) -> NormalizedUser:
     """

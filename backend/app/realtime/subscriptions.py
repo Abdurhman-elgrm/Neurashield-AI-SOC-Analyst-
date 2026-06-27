@@ -18,7 +18,6 @@ All mutation methods are lock-protected for async safety.
 
 import asyncio
 from collections import defaultdict
-from typing import Any
 
 import structlog
 

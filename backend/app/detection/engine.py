@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import TenantRedisClient
 from app.detection.evaluator import RuleEvaluator
-from app.models.alert import Alert, AlertSeverity
-from app.models.detection_rule import DetectionRule, RuleType
+from app.models.alert import Alert
+from app.models.detection_rule import DetectionRule
 from app.models.suppression_rule import SuppressionRule
 from app.normalization.models import NormalizedEvent
 from app.pipeline.publisher import StreamPublisher
@@ -20,14 +20,14 @@ logger = structlog.get_logger(__name__)
 
 _MAX_ALERTS_PER_EVENT = 10
 _RULE_RATE_LIMIT_DEFAULT = 20
-_RULE_RATE_LIMIT_WINDOW  = 60  # seconds
+_RULE_RATE_LIMIT_WINDOW = 60  # seconds
 
 _SEVERITY_RANK: dict[str, int] = {
     "critical": 4,
-    "high":     3,
-    "medium":   2,
-    "low":      1,
-    "info":     0,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+    "info": 0,
 }
 
 
@@ -141,7 +141,7 @@ class DetectionEngine:
         return list(result.scalars().all())
 
     async def _load_suppression_rules(self) -> list[SuppressionRule]:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         result = await self._db.execute(
             select(SuppressionRule).where(
                 SuppressionRule.tenant_id == self._tenant_id,
@@ -160,19 +160,21 @@ class DetectionEngine:
     async def publish_alerts(self, alerts: list[Alert]) -> None:
         for alert in alerts:
             try:
-                await self._publisher.publish_alert({
-                    "alert_id": str(alert.id),
-                    "tenant_id": str(alert.tenant_id),
-                    "rule_id": str(alert.rule_id) if alert.rule_id else None,
-                    "severity": alert.severity.value,
-                    "title": alert.title,
-                    "status": alert.status.value,
-                    "source_host": alert.source_host,
-                    "evidence": alert.evidence,
-                    "mitre_tactics": alert.mitre_tactics,
-                    "mitre_techniques": alert.mitre_techniques,
-                    "created_at": alert.created_at.isoformat() if alert.created_at else None,
-                })
+                await self._publisher.publish_alert(
+                    {
+                        "alert_id": str(alert.id),
+                        "tenant_id": str(alert.tenant_id),
+                        "rule_id": str(alert.rule_id) if alert.rule_id else None,
+                        "severity": alert.severity.value,
+                        "title": alert.title,
+                        "status": alert.status.value,
+                        "source_host": alert.source_host,
+                        "evidence": alert.evidence,
+                        "mitre_tactics": alert.mitre_tactics,
+                        "mitre_techniques": alert.mitre_techniques,
+                        "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                    }
+                )
             except Exception as exc:
                 logger.error(
                     "alert_publish_failed",
@@ -182,6 +184,7 @@ class DetectionEngine:
 
 
 # ─── Suppression check ────────────────────────────────────────────────────────
+
 
 def _is_suppressed(
     alert: Alert,
@@ -234,6 +237,7 @@ def _matches_suppression(
 
 
 # ─── Deduplication helpers ────────────────────────────────────────────────────
+
 
 def _alert_entity_key(alert: Alert) -> str:
     host = alert.source_host or ""

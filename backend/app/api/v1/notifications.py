@@ -31,13 +31,16 @@ async def get_notification_preferences(
     member: CurrentMember,
 ) -> APIResponse[NotificationPreferencesResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
     prefs = m.notification_preferences or {}
-    return APIResponse.ok(NotificationPreferencesResponse(
-        email_high_critical_alerts=prefs.get("email_high_critical_alerts", True),
-        email_agent_offline=prefs.get("email_agent_offline", True),
-        email_new_investigation=prefs.get("email_new_investigation", False),
-    ))
+    return APIResponse.ok(
+        NotificationPreferencesResponse(
+            email_high_critical_alerts=prefs.get("email_high_critical_alerts", True),
+            email_agent_offline=prefs.get("email_agent_offline", True),
+            email_new_investigation=prefs.get("email_new_investigation", False),
+        )
+    )
 
 
 @router.patch("", response_model=APIResponse[NotificationPreferencesResponse])
@@ -51,9 +54,7 @@ async def update_notification_preferences(
     m: TenantMember = member  # type: ignore
 
     # Load fresh record
-    result = await db.execute(
-        select(TenantMember).where(TenantMember.id == m.id)
-    )
+    result = await db.execute(select(TenantMember).where(TenantMember.id == m.id))
     fresh = result.scalar_one()
 
     current = dict(fresh.notification_preferences or {})
@@ -63,8 +64,10 @@ async def update_notification_preferences(
 
     await db.commit()
 
-    return APIResponse.ok(NotificationPreferencesResponse(
-        email_high_critical_alerts=current.get("email_high_critical_alerts", True),
-        email_agent_offline=current.get("email_agent_offline", True),
-        email_new_investigation=current.get("email_new_investigation", False),
-    ))
+    return APIResponse.ok(
+        NotificationPreferencesResponse(
+            email_high_critical_alerts=current.get("email_high_critical_alerts", True),
+            email_agent_offline=current.get("email_agent_offline", True),
+            email_new_investigation=current.get("email_new_investigation", False),
+        )
+    )

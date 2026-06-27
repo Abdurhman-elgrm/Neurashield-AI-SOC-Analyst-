@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +12,7 @@ T = TypeVar("T")
 
 # ─── Response meta ────────────────────────────────────────────────────────────
 
+
 class ResponseMeta(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -19,14 +20,15 @@ class ResponseMeta(BaseModel):
     timestamp: str
 
     @classmethod
-    def now(cls) -> "ResponseMeta":
+    def now(cls) -> ResponseMeta:
         return cls(
             request_id=get_request_id(),
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+            timestamp=datetime.now(tz=UTC).isoformat(),
         )
 
 
 # ─── Error detail ─────────────────────────────────────────────────────────────
+
 
 class ErrorDetail(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -37,6 +39,7 @@ class ErrorDetail(BaseModel):
 
 
 # ─── Standard API response envelope ──────────────────────────────────────────
+
 
 class APIResponse(BaseModel, Generic[T]):
     """
@@ -50,11 +53,11 @@ class APIResponse(BaseModel, Generic[T]):
     meta: ResponseMeta
 
     @classmethod
-    def ok(cls, data: T) -> "APIResponse[T]":
+    def ok(cls, data: T) -> APIResponse[T]:
         return cls(data=data, error=None, meta=ResponseMeta.now())
 
     @classmethod
-    def fail(cls, code: str, message: str, details: Any = None) -> "APIResponse[None]":
+    def fail(cls, code: str, message: str, details: Any = None) -> APIResponse[None]:
         return cls(
             data=None,
             error=ErrorDetail(code=code, message=message, details=details),
@@ -64,8 +67,10 @@ class APIResponse(BaseModel, Generic[T]):
 
 # ─── Pagination ───────────────────────────────────────────────────────────────
 
+
 class CursorPagination(BaseModel):
     """For large collections: events, alerts."""
+
     next_cursor: str | None = None
     prev_cursor: str | None = None
     has_more: bool
@@ -74,6 +79,7 @@ class CursorPagination(BaseModel):
 
 class OffsetPagination(BaseModel):
     """For small bounded collections: members, rules, agents."""
+
     page: int
     limit: int
     total: int
@@ -93,7 +99,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
         prev_cursor: str | None,
         has_more: bool,
         limit: int,
-    ) -> "PaginatedResponse[T]":
+    ) -> PaginatedResponse[T]:
         return cls(
             data=data,
             pagination=CursorPagination(
@@ -112,7 +118,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
         page: int,
         limit: int,
         total: int,
-    ) -> "PaginatedResponse[T]":
+    ) -> PaginatedResponse[T]:
         return cls(
             data=data,
             pagination=OffsetPagination(
@@ -127,12 +133,15 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 # ─── Empty success response ───────────────────────────────────────────────────
 
+
 class EmptyResponse(BaseModel):
     """Used for operations that return nothing on success (e.g. DELETE)."""
+
     pass
 
 
 # ─── Common query params ──────────────────────────────────────────────────────
+
 
 class PaginationParams(BaseModel):
     page: int = Field(default=1, ge=1)

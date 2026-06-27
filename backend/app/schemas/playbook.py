@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 # ── Template schemas ──────────────────────────────────────────────────────────
+
 
 class PlaybookTemplateStepResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -59,7 +59,12 @@ class CreateTemplateRequest(BaseModel):
     @field_validator("steps")
     @classmethod
     def validate_step_action_types(cls, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        from app.models.playbook_action_types import VALID_ACTION_TYPE_VALUES, PRIVILEGED_ACTION_TYPES, PlaybookActionType
+        from app.models.playbook_action_types import (
+            PRIVILEGED_ACTION_TYPES,
+            VALID_ACTION_TYPE_VALUES,
+            PlaybookActionType,
+        )
+
         for i, step in enumerate(steps):
             action_type = step.get("action_type")
             if action_type is not None:
@@ -74,6 +79,7 @@ class CreateTemplateRequest(BaseModel):
 
 
 # ── Playbook schemas ──────────────────────────────────────────────────────────
+
 
 class PlaybookStepResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -155,6 +161,7 @@ class PlaybookRunResponse(BaseModel):
 
 # ── Containment schemas ───────────────────────────────────────────────────────
 
+
 class ContainmentRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=1000)
     alert_id: UUID | None = None
@@ -170,6 +177,7 @@ class ContainmentStatusResponse(BaseModel):
 
 
 # ── Response action schemas ───────────────────────────────────────────────────
+
 
 class ResponseActionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

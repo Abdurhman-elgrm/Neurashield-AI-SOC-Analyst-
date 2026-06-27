@@ -2,16 +2,16 @@
 RAG service — ingest knowledge sources into PostgreSQL and retrieve
 relevant chunks using pgvector cosine similarity with FTS fallback.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ log = structlog.get_logger(__name__)
 
 # ─── Embedding generation ─────────────────────────────────────────────────────
 
+
 async def _get_embedding(text_input: str) -> list[float] | None:
     """
     Generate a 1536-dimensional embedding using Google Gemini.
@@ -28,6 +29,7 @@ async def _get_embedding(text_input: str) -> list[float] | None:
     allowing graceful fallback to FTS retrieval.
     """
     from app.core.config import settings
+
     if not settings.GEMINI_API_KEY:
         return None
     try:
@@ -46,6 +48,7 @@ async def _get_embedding(text_input: str) -> list[float] | None:
     except Exception as exc:
         log.debug("rag_embedding_failed", error=str(exc)[:120])
         return None
+
 
 # ─── Static knowledge: Threat Actors ─────────────────────────────────────────
 
@@ -128,33 +131,107 @@ THREAT_ACTORS = [
 # ─── Static knowledge: Windows Event IDs ─────────────────────────────────────
 
 WINDOWS_EVENTS = {
-    "4624": ("Successful Logon", "An account was successfully logged on. Monitor for unusual logon types (Type 3=Network, Type 10=RemoteInteractive). Investigate off-hours or unusual source IPs.", ["T1078", "T1021"]),
-    "4625": ("Failed Logon", "An account failed to log on. Multiple failures indicate brute force (T1110). Check source IP and username patterns for credential stuffing.", ["T1110"]),
-    "4648": ("Logon with Explicit Credentials", "A logon was attempted using explicit credentials. Classic lateral movement indicator — common in Pass-the-Hash and runas attacks.", ["T1550.002", "T1021"]),
-    "4688": ("Process Creation", "A new process was created. Critical for detecting malicious execution. Check parent process and command line for encoded commands, LOLBins, Office spawning shells.", ["T1059", "T1055"]),
-    "4698": ("Scheduled Task Created", "A scheduled task was created. APT groups use schtasks.exe for persistence. Check task name, command, and creating process.", ["T1053.005"]),
-    "4702": ("Scheduled Task Updated", "Existing scheduled task was modified. Attackers update legitimate tasks to add malicious commands.", ["T1053.005"]),
-    "4719": ("Audit Policy Changed", "System audit policy was changed. Almost always malicious — attacker disabling logging to cover tracks.", ["T1562.002"]),
-    "4720": ("User Account Created", "New user account created. Attackers create backdoor accounts. Suspicious if outside IT hours.", ["T1136.001"]),
-    "4728": ("Member Added to Security Group", "User added to privileged security group. Check if target group has admin rights.", ["T1098"]),
-    "4768": ("Kerberos TGT Request", "Kerberos authentication ticket requested. Golden ticket attacks show unusual patterns (non-existent users, impossible timestamps).", ["T1558.001"]),
-    "4769": ("Kerberos Service Ticket", "Kerberos service ticket requested. Kerberoasting shows many requests for service accounts from single host.", ["T1558.003"]),
-    "4776": ("Credential Validation", "Domain controller attempted NTLM credential validation. Monitor for unusual sources or non-existent accounts.", ["T1078", "T1110"]),
-    "7045": ("Service Installed", "A new Windows service was installed. Highly suspicious outside patching windows. PsExec, Cobalt Strike install services for persistence/execution.", ["T1543.003"]),
-    "1102": ("Audit Log Cleared", "The security audit log was cleared. Almost always malicious — attacker covering tracks. Correlate with recent logins.", ["T1070.001"]),
-    "4104": ("PowerShell Script Block", "PowerShell script block logged. Review decoded content for Invoke-Expression, DownloadString, -EncodedCommand, AMSI bypass attempts.", ["T1059.001"]),
-    "4657": ("Registry Value Modified", "Registry object modification. Monitor HKLM/HKCU Run keys, AppInit_DLLs, Image File Execution Options for persistence.", ["T1547.001"]),
-    "5140": ("Network Share Accessed", "Network share object accessed. Monitor ADMIN$, C$, IPC$ access from unusual sources — common in PsExec lateral movement.", ["T1021.002"]),
-    "4656": ("Handle Requested (LSASS)", "Object handle requested. Critical when targeting lsass.exe for credential dumping via Mimikatz or Procdump.", ["T1003.001"]),
+    "4624": (
+        "Successful Logon",
+        "An account was successfully logged on. Monitor for unusual logon types (Type 3=Network, Type 10=RemoteInteractive). Investigate off-hours or unusual source IPs.",
+        ["T1078", "T1021"],
+    ),
+    "4625": (
+        "Failed Logon",
+        "An account failed to log on. Multiple failures indicate brute force (T1110). Check source IP and username patterns for credential stuffing.",
+        ["T1110"],
+    ),
+    "4648": (
+        "Logon with Explicit Credentials",
+        "A logon was attempted using explicit credentials. Classic lateral movement indicator — common in Pass-the-Hash and runas attacks.",
+        ["T1550.002", "T1021"],
+    ),
+    "4688": (
+        "Process Creation",
+        "A new process was created. Critical for detecting malicious execution. Check parent process and command line for encoded commands, LOLBins, Office spawning shells.",
+        ["T1059", "T1055"],
+    ),
+    "4698": (
+        "Scheduled Task Created",
+        "A scheduled task was created. APT groups use schtasks.exe for persistence. Check task name, command, and creating process.",
+        ["T1053.005"],
+    ),
+    "4702": (
+        "Scheduled Task Updated",
+        "Existing scheduled task was modified. Attackers update legitimate tasks to add malicious commands.",
+        ["T1053.005"],
+    ),
+    "4719": (
+        "Audit Policy Changed",
+        "System audit policy was changed. Almost always malicious — attacker disabling logging to cover tracks.",
+        ["T1562.002"],
+    ),
+    "4720": (
+        "User Account Created",
+        "New user account created. Attackers create backdoor accounts. Suspicious if outside IT hours.",
+        ["T1136.001"],
+    ),
+    "4728": (
+        "Member Added to Security Group",
+        "User added to privileged security group. Check if target group has admin rights.",
+        ["T1098"],
+    ),
+    "4768": (
+        "Kerberos TGT Request",
+        "Kerberos authentication ticket requested. Golden ticket attacks show unusual patterns (non-existent users, impossible timestamps).",
+        ["T1558.001"],
+    ),
+    "4769": (
+        "Kerberos Service Ticket",
+        "Kerberos service ticket requested. Kerberoasting shows many requests for service accounts from single host.",
+        ["T1558.003"],
+    ),
+    "4776": (
+        "Credential Validation",
+        "Domain controller attempted NTLM credential validation. Monitor for unusual sources or non-existent accounts.",
+        ["T1078", "T1110"],
+    ),
+    "7045": (
+        "Service Installed",
+        "A new Windows service was installed. Highly suspicious outside patching windows. PsExec, Cobalt Strike install services for persistence/execution.",
+        ["T1543.003"],
+    ),
+    "1102": (
+        "Audit Log Cleared",
+        "The security audit log was cleared. Almost always malicious — attacker covering tracks. Correlate with recent logins.",
+        ["T1070.001"],
+    ),
+    "4104": (
+        "PowerShell Script Block",
+        "PowerShell script block logged. Review decoded content for Invoke-Expression, DownloadString, -EncodedCommand, AMSI bypass attempts.",
+        ["T1059.001"],
+    ),
+    "4657": (
+        "Registry Value Modified",
+        "Registry object modification. Monitor HKLM/HKCU Run keys, AppInit_DLLs, Image File Execution Options for persistence.",
+        ["T1547.001"],
+    ),
+    "5140": (
+        "Network Share Accessed",
+        "Network share object accessed. Monitor ADMIN$, C$, IPC$ access from unusual sources — common in PsExec lateral movement.",
+        ["T1021.002"],
+    ),
+    "4656": (
+        "Handle Requested (LSASS)",
+        "Object handle requested. Critical when targeting lsass.exe for credential dumping via Mimikatz or Procdump.",
+        ["T1003.001"],
+    ),
 }
 
 # Allowlisted RAG source URLs — only these exact origins are permitted.
 # Prevents SSRF if an attacker somehow influences the URL being fetched.
-_ALLOWED_RAG_ORIGINS: frozenset[str] = frozenset({
-    "https://raw.githubusercontent.com",
-    "https://www.cisa.gov",
-    "https://lolbas-project.github.io",
-})
+_ALLOWED_RAG_ORIGINS: frozenset[str] = frozenset(
+    {
+        "https://raw.githubusercontent.com",
+        "https://www.cisa.gov",
+        "https://lolbas-project.github.io",
+    }
+)
 
 # Maximum response body size per source (prevents memory exhaustion).
 _MAX_RAG_RESPONSE_BYTES = 25 * 1024 * 1024  # 25 MiB
@@ -163,6 +240,7 @@ _MAX_RAG_RESPONSE_BYTES = 25 * 1024 * 1024  # 25 MiB
 def _validate_rag_url(url: str) -> None:
     """Raise ValueError if URL is not in the allowlist or uses a disallowed scheme."""
     import urllib.parse
+
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("https",):
         raise ValueError(f"RAG URL must use HTTPS, got: {parsed.scheme!r}")
@@ -172,6 +250,7 @@ def _validate_rag_url(url: str) -> None:
 
 
 # ─── HTTP helper ──────────────────────────────────────────────────────────────
+
 
 async def _http_get(client: httpx.AsyncClient, url: str) -> bytes | None:
     try:
@@ -195,21 +274,22 @@ async def _http_get(client: httpx.AsyncClient, url: str) -> bytes | None:
                     return None
                 return body
             if resp.status_code == 429:
-                await asyncio.sleep(5 * (2 ** attempt))
+                await asyncio.sleep(5 * (2**attempt))
                 continue
             if resp.status_code >= 500:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
                 continue
             log.warning("rag_http_error", url=url, status=resp.status_code)
             return None
         except Exception as exc:
             log.warning("rag_http_fetch_failed", url=url, error=str(exc)[:120])
             if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
     return None
 
 
 # ─── Upsert helper ────────────────────────────────────────────────────────────
+
 
 async def _upsert_chunks(db: AsyncSession, rows: list[dict[str, Any]]) -> int:
     """
@@ -231,11 +311,11 @@ async def _upsert_chunks(db: AsyncSession, rows: list[dict[str, Any]]) -> int:
     stmt = stmt.on_conflict_do_update(
         index_elements=["chunk_id"],
         set_={
-            "content":    stmt.excluded.content,
-            "title":      stmt.excluded.title,
-            "tags":       stmt.excluded.tags,
-            "metadata":   stmt.excluded.metadata,
-            "embedding":  stmt.excluded.embedding,
+            "content": stmt.excluded.content,
+            "title": stmt.excluded.title,
+            "tags": stmt.excluded.tags,
+            "metadata": stmt.excluded.metadata,
+            "embedding": stmt.excluded.embedding,
             "updated_at": func.now(),
         },
     )
@@ -245,6 +325,7 @@ async def _upsert_chunks(db: AsyncSession, rows: list[dict[str, Any]]) -> int:
 
 
 # ─── Source 1: MITRE ATT&CK ───────────────────────────────────────────────────
+
 
 async def _ingest_mitre(db: AsyncSession, client: httpx.AsyncClient) -> int:
     log.info("rag_ingest_mitre_starting")
@@ -298,18 +379,20 @@ async def _ingest_mitre(db: AsyncSession, client: httpx.AsyncClient) -> int:
                 f"Detection:\n{detection or 'Monitor platform telemetry for indicators of this technique.'}"
             )
 
-            rows.append({
-                "source":   "mitre_attack",
-                "chunk_id": f"mitre_{tech_id}",
-                "title":    f"{tech_id}: {name}",
-                "content":  content,
-                "tags":     [tech_id, tactic or "unknown"],
-                "metadata": {
-                    "tactic":         tactic,
-                    "platforms":      platforms,
-                    "is_subtechnique": is_sub,
-                },
-            })
+            rows.append(
+                {
+                    "source": "mitre_attack",
+                    "chunk_id": f"mitre_{tech_id}",
+                    "title": f"{tech_id}: {name}",
+                    "content": content,
+                    "tags": [tech_id, tactic or "unknown"],
+                    "metadata": {
+                        "tactic": tactic,
+                        "platforms": platforms,
+                        "is_subtechnique": is_sub,
+                    },
+                }
+            )
             count += 1
             if count >= 400:
                 break
@@ -324,6 +407,7 @@ async def _ingest_mitre(db: AsyncSession, client: httpx.AsyncClient) -> int:
 
 # ─── Source 2: Threat Actors (static) ────────────────────────────────────────
 
+
 async def _ingest_threat_actors(db: AsyncSession) -> int:
     rows: list[dict[str, Any]] = []
     for actor in THREAT_ACTORS:
@@ -337,29 +421,28 @@ async def _ingest_threat_actors(db: AsyncSession) -> int:
             f"Tools Used: {', '.join(actor['tools'])}"
         )
         slug = name.lower().replace(" ", "_")
-        tags = (
-            actor["ttps"]
-            + [name.lower()]
-            + [a.lower() for a in actor["aliases"]]
+        tags = actor["ttps"] + [name.lower()] + [a.lower() for a in actor["aliases"]]
+        rows.append(
+            {
+                "source": "threat_actors",
+                "chunk_id": f"actor_{slug}",
+                "title": f"Threat Actor: {name}",
+                "content": content,
+                "tags": tags,
+                "metadata": {
+                    "origin": actor["origin"],
+                    "targets": actor["targets"],
+                    "aliases": actor["aliases"],
+                },
+            }
         )
-        rows.append({
-            "source":    "threat_actors",
-            "chunk_id":  f"actor_{slug}",
-            "title":     f"Threat Actor: {name}",
-            "content":   content,
-            "tags":      tags,
-            "metadata": {
-                "origin":   actor["origin"],
-                "targets":  actor["targets"],
-                "aliases":  actor["aliases"],
-            },
-        })
     ingested = await _upsert_chunks(db, rows)
     log.info("rag_ingest_threat_actors_done", ingested=ingested)
     return ingested
 
 
 # ─── Source 3: Windows Event IDs (static) ────────────────────────────────────
+
 
 async def _ingest_windows_events(db: AsyncSession) -> int:
     rows: list[dict[str, Any]] = []
@@ -371,20 +454,23 @@ async def _ingest_windows_events(db: AsyncSession) -> int:
             f"Detection: Monitor Windows Security event log for EventID {event_id}. "
             f"Correlate with source IP, username, process name, and frequency."
         )
-        rows.append({
-            "source":    "windows_events",
-            "chunk_id":  f"winevent_{event_id}",
-            "title":     f"Windows Event {event_id}: {name}",
-            "content":   content,
-            "tags":      ttps + [f"eventid_{event_id}", "windows"],
-            "metadata": {"event_id": event_id, "platform": "windows"},
-        })
+        rows.append(
+            {
+                "source": "windows_events",
+                "chunk_id": f"winevent_{event_id}",
+                "title": f"Windows Event {event_id}: {name}",
+                "content": content,
+                "tags": ttps + [f"eventid_{event_id}", "windows"],
+                "metadata": {"event_id": event_id, "platform": "windows"},
+            }
+        )
     ingested = await _upsert_chunks(db, rows)
     log.info("rag_ingest_windows_events_done", ingested=ingested)
     return ingested
 
 
 # ─── Source 4: CISA KEV (top 50 most recent) ──────────────────────────────────
+
 
 async def _ingest_cisa_kev(db: AsyncSession, client: httpx.AsyncClient) -> int:
     log.info("rag_ingest_cisa_kev_starting")
@@ -408,14 +494,14 @@ async def _ingest_cisa_kev(db: AsyncSession, client: httpx.AsyncClient) -> int:
 
     rows: list[dict[str, Any]] = []
     for v in vulns_sorted:
-        cve_id      = v.get("cveID", "")
-        vendor      = v.get("vendorProject", "")
-        product     = v.get("product", "")
-        vuln_name   = v.get("vulnerabilityName", "")
-        short_desc  = v.get("shortDescription", "")
-        req_action  = v.get("requiredAction", "")
-        date_added  = v.get("dateAdded", "")
-        ransomware  = v.get("knownRansomwareCampaignUse", "Unknown")
+        cve_id = v.get("cveID", "")
+        vendor = v.get("vendorProject", "")
+        product = v.get("product", "")
+        vuln_name = v.get("vulnerabilityName", "")
+        short_desc = v.get("shortDescription", "")
+        req_action = v.get("requiredAction", "")
+        date_added = v.get("dateAdded", "")
+        ransomware = v.get("knownRansomwareCampaignUse", "Unknown")
 
         content = (
             f"CVE: {cve_id}\n"
@@ -427,20 +513,22 @@ async def _ingest_cisa_kev(db: AsyncSession, client: httpx.AsyncClient) -> int:
             f"Added to CISA KEV: {date_added}\n"
             f"Known Ransomware Use: {ransomware}"
         )
-        rows.append({
-            "source":    "cisa_kev",
-            "chunk_id":  f"kev_{cve_id}",
-            "title":     f"CISA KEV: {cve_id} — {product}",
-            "content":   content,
-            "tags":      [cve_id, vendor.lower(), product.lower(), "cisa_kev", "vulnerability"],
-            "metadata": {
-                "cve_id":     cve_id,
-                "vendor":     vendor,
-                "product":    product,
-                "date_added": date_added,
-                "ransomware": ransomware,
-            },
-        })
+        rows.append(
+            {
+                "source": "cisa_kev",
+                "chunk_id": f"kev_{cve_id}",
+                "title": f"CISA KEV: {cve_id} — {product}",
+                "content": content,
+                "tags": [cve_id, vendor.lower(), product.lower(), "cisa_kev", "vulnerability"],
+                "metadata": {
+                    "cve_id": cve_id,
+                    "vendor": vendor,
+                    "product": product,
+                    "date_added": date_added,
+                    "ransomware": ransomware,
+                },
+            }
+        )
 
     ingested = await _upsert_chunks(db, rows)
     log.info("rag_ingest_cisa_kev_done", ingested=ingested)
@@ -448,6 +536,7 @@ async def _ingest_cisa_kev(db: AsyncSession, client: httpx.AsyncClient) -> int:
 
 
 # ─── Source 5: LOLBAS ─────────────────────────────────────────────────────────
+
 
 async def _ingest_lolbas(db: AsyncSession, client: httpx.AsyncClient) -> int:
     log.info("rag_ingest_lolbas_starting")
@@ -463,11 +552,11 @@ async def _ingest_lolbas(db: AsyncSession, client: httpx.AsyncClient) -> int:
         if not isinstance(entry, dict):
             continue
 
-        name        = entry.get("Name", "")
+        name = entry.get("Name", "")
         description = entry.get("Description", "")
-        commands    = entry.get("Commands") or []
-        paths       = entry.get("Paths") or []
-        path_str    = paths[0].get("Path", "") if paths and isinstance(paths[0], dict) else ""
+        commands = entry.get("Commands") or []
+        paths = entry.get("Paths") or []
+        path_str = paths[0].get("Path", "") if paths and isinstance(paths[0], dict) else ""
 
         # Filter: only binaries with Execute/Download/AWL-Bypass commands
         useful_types = {"execute", "download", "awl bypass", "compile", "upload"}
@@ -492,14 +581,16 @@ async def _ingest_lolbas(db: AsyncSession, client: httpx.AsyncClient) -> int:
             f"Commands:\n" + "\n".join(f"  - {c}" for c in cmd_descriptions) + "\n"
             f"Detection: Monitor for unusual use of {name} with these arguments."
         )
-        rows.append({
-            "source":    "lolbas",
-            "chunk_id":  f"lolbas_{name.lower().replace(' ', '_')}",
-            "title":     f"LOLBAS: {name}",
-            "content":   content,
-            "tags":      ["lolbas", "T1218", name.lower()],
-            "metadata": {"binary": name, "path": path_str},
-        })
+        rows.append(
+            {
+                "source": "lolbas",
+                "chunk_id": f"lolbas_{name.lower().replace(' ', '_')}",
+                "title": f"LOLBAS: {name}",
+                "content": content,
+                "tags": ["lolbas", "T1218", name.lower()],
+                "metadata": {"binary": name, "path": path_str},
+            }
+        )
 
     ingested = await _upsert_chunks(db, rows)
     log.info("rag_ingest_lolbas_done", ingested=ingested)
@@ -507,6 +598,7 @@ async def _ingest_lolbas(db: AsyncSession, client: httpx.AsyncClient) -> int:
 
 
 # ─── Main ingestion entry point ───────────────────────────────────────────────
+
 
 async def ingest_all(db: AsyncSession, force: bool = False) -> dict[str, int]:
     """
@@ -520,8 +612,7 @@ async def ingest_all(db: AsyncSession, force: bool = False) -> dict[str, int]:
         if force:
             return False
         result = await db.execute(
-            select(func.count()).select_from(RAGChunk)
-            .where(RAGChunk.source == source_name)
+            select(func.count()).select_from(RAGChunk).where(RAGChunk.source == source_name)
         )
         return (result.scalar() or 0) > 0
 
@@ -532,7 +623,7 @@ async def ingest_all(db: AsyncSession, force: bool = False) -> dict[str, int]:
     ) as client:
         # Static sources (no HTTP — always fast)
         for source_name, fn in [
-            ("threat_actors",  lambda: _ingest_threat_actors(db)),
+            ("threat_actors", lambda: _ingest_threat_actors(db)),
             ("windows_events", lambda: _ingest_windows_events(db)),
         ]:
             if not await _source_has_data(source_name):
@@ -548,8 +639,8 @@ async def ingest_all(db: AsyncSession, force: bool = False) -> dict[str, int]:
         # Network sources (may be slow — run with per-source error handling)
         for source_name, fn in [
             ("mitre_attack", lambda: _ingest_mitre(db, client)),
-            ("cisa_kev",     lambda: _ingest_cisa_kev(db, client)),
-            ("lolbas",       lambda: _ingest_lolbas(db, client)),
+            ("cisa_kev", lambda: _ingest_cisa_kev(db, client)),
+            ("lolbas", lambda: _ingest_lolbas(db, client)),
         ]:
             if not await _source_has_data(source_name):
                 try:
@@ -567,6 +658,7 @@ async def ingest_all(db: AsyncSession, force: bool = False) -> dict[str, int]:
 
 
 # ─── Retrieval ────────────────────────────────────────────────────────────────
+
 
 async def retrieve(
     db: AsyncSession,
@@ -596,12 +688,11 @@ async def retrieve(
         try:
             from pgvector.sqlalchemy import Vector
             from sqlalchemy import cast
+
             vec_result = await db.execute(
                 select(RAGChunk)
                 .where(RAGChunk.embedding.is_not(None))
-                .order_by(
-                    RAGChunk.embedding.cosine_distance(cast(query_embedding, Vector(1536)))
-                )
+                .order_by(RAGChunk.embedding.cosine_distance(cast(query_embedding, Vector(1536))))
                 .limit(limit)
             )
             for row in vec_result.scalars().all():
@@ -619,9 +710,7 @@ async def retrieve(
     if ttps:
         for ttp in ttps[:6]:
             result = await db.execute(
-                select(RAGChunk)
-                .where(RAGChunk.tags.contains([ttp]))
-                .limit(3)
+                select(RAGChunk).where(RAGChunk.tags.contains([ttp])).limit(3)
             )
             for row in result.scalars().all():
                 cid = str(row.chunk_id)
@@ -668,8 +757,7 @@ async def retrieve(
     # Step 4 — broad keyword fallback if still short
     if len(chunks) < 3 and keywords:
         kw_query = " | ".join(
-            kw for kw in keywords[:6]
-            if kw.isalnum() or (kw.replace("_", "").isalnum())
+            kw for kw in keywords[:6] if kw.isalnum() or (kw.replace("_", "").isalnum())
         )
         if kw_query:
             broad_result = await db.execute(

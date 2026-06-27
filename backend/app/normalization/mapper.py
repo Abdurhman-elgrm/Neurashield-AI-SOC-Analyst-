@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
+from app.normalization.linux import normalize_linux_event
 from app.normalization.models import NormalizedEvent
 from app.normalization.windows import normalize_windows_event
-from app.normalization.linux import normalize_linux_event
 
 logger = structlog.get_logger(__name__)
 
 _SEVERITY_MAP = {
-    "low": 1, "info": 1,
+    "low": 1,
+    "info": 1,
     "medium": 2,
     "high": 3,
     "critical": 4,
@@ -26,14 +27,14 @@ _SEVERITY_MAP = {
 # operationally critical (disk full, service crash) but carry no inherent
 # security signal and must not appear as "critical" in the Security Events Explorer.
 _CATEGORY_SEC_FLOOR: dict[str, int] = {
-    "auth":     2,  # Authentication events → medium floor (security-relevant by nature)
-    "process":  2,  # Process execution → medium floor
-    "network":  2,  # Network traffic → medium floor
-    "dns":      1,  # DNS → low unless enriched
-    "file":     1,  # File access → low unless enriched
+    "auth": 2,  # Authentication events → medium floor (security-relevant by nature)
+    "process": 2,  # Process execution → medium floor
+    "network": 2,  # Network traffic → medium floor
+    "dns": 1,  # DNS → low unless enriched
+    "file": 1,  # File access → low unless enriched
     "registry": 1,  # Registry → low unless enriched
-    "system":   1,  # System logs → always low (ops severity ≠ security severity)
-    "other":    1,
+    "system": 1,  # System logs → always low (ops severity ≠ security severity)
+    "other": 1,
 }
 
 # Agent-reported severity is NOT trusted as a security signal for these categories.
@@ -42,12 +43,14 @@ _LOW_TRUST_CATEGORIES = frozenset({"system", "other"})
 _MEDIUM_TRUST_CATEGORIES = frozenset({"file", "registry", "dns"})
 
 # UEBA flags that always indicate high-confidence attack activity.
-_HIGH_CONFIDENCE_CHAIN_FLAGS = frozenset({
-    "impossible_travel",
-    "brute_force_success",
-    "lateral_movement",
-    "lateral_movement_xdomain",
-})
+_HIGH_CONFIDENCE_CHAIN_FLAGS = frozenset(
+    {
+        "impossible_travel",
+        "brute_force_success",
+        "lateral_movement",
+        "lateral_movement_xdomain",
+    }
+)
 
 
 def compute_security_severity(
@@ -85,15 +88,15 @@ def compute_security_severity(
 
     # Threat Intel boost
     if abuse_confidence >= 75:
-        base = min(base + 2, 4)   # Confirmed malicious → jump two tiers
+        base = min(base + 2, 4)  # Confirmed malicious → jump two tiers
     elif is_threat_ip or abuse_confidence >= 25:
-        base = min(base + 1, 4)   # Suspicious → jump one tier
+        base = min(base + 1, 4)  # Suspicious → jump one tier
 
     # UEBA boost
     if ueba_score >= 0.80:
-        base = min(base + 2, 4)   # Strong behavioral anomaly → jump two tiers
+        base = min(base + 2, 4)  # Strong behavioral anomaly → jump two tiers
     elif ueba_score >= 0.50:
-        base = min(base + 1, 4)   # Moderate anomaly → jump one tier
+        base = min(base + 1, 4)  # Moderate anomaly → jump one tier
 
     # Attack chain floor: high-confidence flags lock in at least HIGH
     if any(f in ueba_flags for f in _HIGH_CONFIDENCE_CHAIN_FLAGS):
@@ -101,23 +104,24 @@ def compute_security_severity(
 
     return base
 
+
 # Human-readable labels used by the old agent format → Windows field names
 _LABEL_TO_WIN_FIELD: dict[str, str] = {
-    "Account Name":         "TargetUserName",
+    "Account Name": "TargetUserName",
     "Subject Account Name": "SubjectUserName",
-    "New Account Name":     "TargetUserName",
-    "Target Account Name":  "TargetUserName",
-    "Logon Account":        "TargetUserName",
-    "Network Address":      "__src_ip",
-    "New Process Name":     "Image",
+    "New Account Name": "TargetUserName",
+    "Target Account Name": "TargetUserName",
+    "Logon Account": "TargetUserName",
+    "Network Address": "__src_ip",
+    "New Process Name": "Image",
     "Creator Process Name": "ParentImage",
     "Process Command Line": "CommandLine",
-    "Service Name":         "ServiceName",
-    "Image Path":           "Image",
-    "Group Name":           "GroupName",
-    "Member Name":          "MemberName",
-    "Process Name":         "Image",
-    "Logon Type":           "LogonType",
+    "Service Name": "ServiceName",
+    "Image Path": "Image",
+    "Group Name": "GroupName",
+    "Member Name": "MemberName",
+    "Process Name": "Image",
+    "Logon Type": "LogonType",
 }
 
 
@@ -174,7 +178,8 @@ def _enrich_from_raw_message(message: dict[str, Any]) -> dict[str, Any]:
         line = line.strip()
         if ": " in line:
             k, _, v = line.partition(": ")
-            k = k.strip(); v = v.strip()
+            k = k.strip()
+            v = v.strip()
             if k and v and v not in ("-", ""):
                 mapped = _LABEL_TO_WIN_FIELD.get(k)
                 if mapped:
@@ -189,7 +194,8 @@ def _enrich_from_raw_message(message: dict[str, Any]) -> dict[str, Any]:
             part = part.strip()
             if "=" in part:
                 k, _, v = part.partition("=")
-                k = k.strip(); v = v.strip()
+                k = k.strip()
+                v = v.strip()
                 if k and v and v not in ("-", ""):
                     extra.setdefault(k, v)
 
@@ -207,27 +213,40 @@ def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent
     Entry point for the normalization pipeline.
     Converts a raw stream message into a NormalizedEvent.
     """
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
 
     ts_raw = message.get("timestamp")
     try:
         if isinstance(ts_raw, str):
             ts = datetime.fromisoformat(ts_raw)
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+                ts = ts.replace(tzinfo=UTC)
         elif isinstance(ts_raw, (int, float)):
-            ts = datetime.fromtimestamp(ts_raw, tz=timezone.utc)
+            ts = datetime.fromtimestamp(ts_raw, tz=UTC)
         else:
             ts = now
     except Exception:
         ts = now
 
     severity_raw = message.get("severity", "low")
-    severity = _SEVERITY_MAP.get(str(severity_raw).lower(), 1) if isinstance(severity_raw, str) else int(severity_raw or 1)
+    severity = (
+        _SEVERITY_MAP.get(str(severity_raw).lower(), 1)
+        if isinstance(severity_raw, str)
+        else int(severity_raw or 1)
+    )
 
-    _VALID_CATEGORIES = frozenset({
-        "auth", "process", "network", "file", "registry", "dns", "system", "other",
-    })
+    _VALID_CATEGORIES = frozenset(
+        {
+            "auth",
+            "process",
+            "network",
+            "file",
+            "registry",
+            "dns",
+            "system",
+            "other",
+        }
+    )
     category_raw = str(message.get("category", "other")).lower()
     category = category_raw if category_raw in _VALID_CATEGORIES else "other"
 
@@ -254,27 +273,39 @@ def map_stream_message_to_normalized(message: dict[str, Any]) -> NormalizedEvent
     # (os-specific normalizers will enrich them further)
     if message.get("process"):
         from app.normalization.models import NormalizedProcess
+
         p = message["process"]
         if isinstance(p, dict):
-            base.process = NormalizedProcess(**{k: p.get(k) for k in dataclasses.fields(NormalizedProcess) if k in p})
+            base.process = NormalizedProcess(
+                **{k: p.get(k) for k in dataclasses.fields(NormalizedProcess) if k in p}
+            )
 
     if message.get("network"):
         from app.normalization.models import NormalizedNetwork
+
         n = message["network"]
         if isinstance(n, dict):
-            base.network = NormalizedNetwork(**{k: n.get(k) for k in dataclasses.fields(NormalizedNetwork) if k in n})
+            base.network = NormalizedNetwork(
+                **{k: n.get(k) for k in dataclasses.fields(NormalizedNetwork) if k in n}
+            )
 
     if message.get("file"):
         from app.normalization.models import NormalizedFile
+
         f = message["file"]
         if isinstance(f, dict):
-            base.file = NormalizedFile(**{k: f.get(k) for k in dataclasses.fields(NormalizedFile) if k in f})
+            base.file = NormalizedFile(
+                **{k: f.get(k) for k in dataclasses.fields(NormalizedFile) if k in f}
+            )
 
     if message.get("user"):
         from app.normalization.models import NormalizedUser
+
         u = message["user"]
         if isinstance(u, dict):
-            base.user = NormalizedUser(**{k: u.get(k) for k in dataclasses.fields(NormalizedUser) if k in u})
+            base.user = NormalizedUser(
+                **{k: u.get(k) for k in dataclasses.fields(NormalizedUser) if k in u}
+            )
 
     # Fallback: parse raw.message text for old-format agent events that don't
     # include structured fields (event_id_windows, Image, CommandLine, etc.)

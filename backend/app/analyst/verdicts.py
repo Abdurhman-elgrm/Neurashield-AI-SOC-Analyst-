@@ -7,17 +7,18 @@ Each verdict change creates an immutable InvestigationVerdict row.
 The denormalised investigations.verdict column is kept in sync.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import InvestigationVerdict as VerdictEnum
+from app.analyst.schemas import VerdictCreate
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.analyst import InvestigationVerdict
 from app.models.investigation import Investigation
-from app.analyst.schemas import InvestigationVerdict as VerdictEnum, VerdictCreate
 
 logger = structlog.get_logger(__name__)
 
@@ -25,7 +26,6 @@ _VALID_VERDICTS: frozenset[str] = frozenset(v.value for v in VerdictEnum)
 
 
 class VerdictService:
-
     @staticmethod
     async def set_verdict(
         db: AsyncSession,
@@ -64,7 +64,7 @@ class VerdictService:
         )
         db.add(verdict_row)
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         inv.verdict = payload.verdict.value
         inv.verdict_set_at = now
         inv.verdict_set_by = analyst_id

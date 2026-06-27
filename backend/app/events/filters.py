@@ -14,8 +14,7 @@ column names.
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Column, and_, cast, not_, or_
-from sqlalchemy.dialects.postgresql import ARRAY, TEXT
+from sqlalchemy import Column, and_, not_, or_
 from sqlalchemy.sql.expression import ColumnElement
 
 from app.events.schemas import FilterCondition, FilterGroup, FilterOperator
@@ -24,21 +23,21 @@ from app.models.event import Event
 # ─── Whitelist of filterable fields ──────────────────────────────────────────
 
 _COLUMN_MAP: dict[str, Column] = {  # type: ignore[type-arg]
-    "host_name":       Event.host_name,
-    "username":        Event.username,
-    "source_ip":       Event.source_ip,
-    "dest_ip":         Event.dest_ip,
-    "process_name":    Event.process_name,
-    "category":        Event.category,
-    "severity":        Event.severity,
+    "host_name": Event.host_name,
+    "username": Event.username,
+    "source_ip": Event.source_ip,
+    "dest_ip": Event.dest_ip,
+    "process_name": Event.process_name,
+    "category": Event.category,
+    "severity": Event.severity,
     "event_timestamp": Event.event_timestamp,
-    "ingested_at":     Event.ingested_at,
-    "agent_id":        Event.agent_id,
-    "raw_id":          Event.raw_id,
-    "correlation_id":  Event.correlation_id,    # type: ignore[attr-defined]
-    "session_id":      Event.session_id,         # type: ignore[attr-defined]
-    "process_tree_id": Event.process_tree_id,    # type: ignore[attr-defined]
-    "event_chain_id":  Event.event_chain_id,     # type: ignore[attr-defined]
+    "ingested_at": Event.ingested_at,
+    "agent_id": Event.agent_id,
+    "raw_id": Event.raw_id,
+    "correlation_id": Event.correlation_id,  # type: ignore[attr-defined]
+    "session_id": Event.session_id,  # type: ignore[attr-defined]
+    "process_tree_id": Event.process_tree_id,  # type: ignore[attr-defined]
+    "event_chain_id": Event.event_chain_id,  # type: ignore[attr-defined]
 }
 
 
@@ -96,8 +95,7 @@ def build_condition(cond: FilterCondition) -> ColumnElement:  # type: ignore[typ
     col = _COLUMN_MAP.get(cond.field)
     if col is None:
         raise FilterValidationError(
-            f"Field '{cond.field}' is not filterable. "
-            f"Allowed: {sorted(_COLUMN_MAP)}"
+            f"Field '{cond.field}' is not filterable. Allowed: {sorted(_COLUMN_MAP)}"
         )
     return _apply_op(col, cond.op, cond.value)
 

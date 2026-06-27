@@ -7,13 +7,14 @@ SLA targets (minutes):
   medium   : respond 240 / resolve 480
   low      : respond 1440/ resolve 4320
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, and_, case, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -30,28 +31,29 @@ router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 SLA_RESOLVE: dict[str, int] = {
     "critical": 120,
-    "high":     240,
-    "medium":   480,
-    "low":      4320,
+    "high": 240,
+    "medium": 480,
+    "low": 4320,
 }
 SLA_RESPOND: dict[str, int] = {
     "critical": 15,
-    "high":     60,
-    "medium":   240,
-    "low":      1440,
+    "high": 60,
+    "medium": 240,
+    "low": 1440,
 }
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _parse_range(time_range: str) -> datetime:
     """Return UTC datetime for the start of the requested period."""
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     mapping = {
-        "7d":  timedelta(days=7),
+        "7d": timedelta(days=7),
         "30d": timedelta(days=30),
         "90d": timedelta(days=90),
         "24h": timedelta(hours=24),
-        "7days":  timedelta(days=7),
+        "7days": timedelta(days=7),
         "30days": timedelta(days=30),
     }
     delta = mapping.get(time_range, timedelta(days=30))
@@ -60,11 +62,11 @@ def _parse_range(time_range: str) -> datetime:
 
 def _elapsed_minutes(created: datetime, ended: datetime | None) -> float:
     """Minutes between created and ended (or now if open)."""
-    end = ended or datetime.now(tz=timezone.utc)
+    end = ended or datetime.now(tz=UTC)
     if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
+        created = created.replace(tzinfo=UTC)
     if end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
+        end = end.replace(tzinfo=UTC)
     return max(0.0, (end - created).total_seconds() / 60.0)
 
 
@@ -74,6 +76,7 @@ def _is_terminal(status: str) -> bool:
 
 # ─── /metrics/sla-summary ────────────────────────────────────────────────────
 
+
 @router.get("/sla-summary", response_model=APIResponse[dict])
 async def get_sla_summary(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
@@ -81,6 +84,7 @@ async def get_sla_summary(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -93,15 +97,21 @@ async def get_sla_summary(
     alerts = result.scalars().all()
 
     if not alerts:
-        return APIResponse.ok({
-            "compliance_pct": 0.0, "compliance_delta": 0.0,
-            "total_breaches": 0, "breach_delta": 0,
-            "avg_response_minutes": 0, "avg_resolve_minutes": 0,
-            "within_sla": 0, "total": 0,
-        })
+        return APIResponse.ok(
+            {
+                "compliance_pct": 0.0,
+                "compliance_delta": 0.0,
+                "total_breaches": 0,
+                "breach_delta": 0,
+                "avg_response_minutes": 0,
+                "avg_resolve_minutes": 0,
+                "within_sla": 0,
+                "total": 0,
+            }
+        )
 
     # Prior period for delta
-    prior_since = since - (datetime.now(tz=timezone.utc) - since)
+    prior_since = since - (datetime.now(tz=UTC) - since)
     prior_result = await db.execute(
         select(Alert).where(
             Alert.tenant_id == m.tenant_id,
@@ -119,9 +129,18 @@ async def get_sla_summary(
         respond_times: list[float] = []
 
         for a in alts:
-            target_resolve = SLA_RESOLVE.get(a.severity.value if hasattr(a.severity, "value") else str(a.severity), 480)
-            target_respond = SLA_RESPOND.get(a.severity.value if hasattr(a.severity, "value") else str(a.severity), 240)
-            elapsed = _elapsed_minutes(a.created_at, a.updated_at if _is_terminal(a.status.value if hasattr(a.status, "value") else str(a.status)) else None)
+            target_resolve = SLA_RESOLVE.get(
+                a.severity.value if hasattr(a.severity, "value") else str(a.severity), 480
+            )
+            target_respond = SLA_RESPOND.get(
+                a.severity.value if hasattr(a.severity, "value") else str(a.severity), 240
+            )
+            elapsed = _elapsed_minutes(
+                a.created_at,
+                a.updated_at
+                if _is_terminal(a.status.value if hasattr(a.status, "value") else str(a.status))
+                else None,
+            )
 
             respond_times.append(min(elapsed, target_respond))  # capped at target for open
             if _is_terminal(a.status.value if hasattr(a.status, "value") else str(a.status)):
@@ -137,28 +156,33 @@ async def get_sla_summary(
 
         compliance = (within_sla / max(1, total)) * 100
         return {
-            "total": total, "within_sla": within_sla,
-            "breaches": breaches, "compliance": compliance,
+            "total": total,
+            "within_sla": within_sla,
+            "breaches": breaches,
+            "compliance": compliance,
             "avg_resolve": (sum(resolve_times) / len(resolve_times)) if resolve_times else 0,
             "avg_respond": (sum(respond_times) / len(respond_times)) if respond_times else 0,
         }
 
-    curr  = _compute(alerts)
+    curr = _compute(alerts)
     prior = _compute(prior_alerts)
 
-    return APIResponse.ok({
-        "compliance_pct":        round(curr["compliance"], 1),
-        "compliance_delta":      round(curr["compliance"] - prior["compliance"], 1),
-        "total_breaches":        curr["breaches"],
-        "breach_delta":          curr["breaches"] - prior["breaches"],
-        "avg_response_minutes":  round(curr["avg_respond"]),
-        "avg_resolve_minutes":   round(curr["avg_resolve"]),
-        "within_sla":            curr["within_sla"],
-        "total":                 curr["total"],
-    })
+    return APIResponse.ok(
+        {
+            "compliance_pct": round(curr["compliance"], 1),
+            "compliance_delta": round(curr["compliance"] - prior["compliance"], 1),
+            "total_breaches": curr["breaches"],
+            "breach_delta": curr["breaches"] - prior["breaches"],
+            "avg_response_minutes": round(curr["avg_respond"]),
+            "avg_resolve_minutes": round(curr["avg_resolve"]),
+            "within_sla": curr["within_sla"],
+            "total": curr["total"],
+        }
+    )
 
 
 # ─── /metrics/sla-by-severity ────────────────────────────────────────────────
+
 
 @router.get("/sla-by-severity", response_model=APIResponse[list])
 async def get_sla_by_severity(
@@ -167,6 +191,7 @@ async def get_sla_by_severity(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -181,11 +206,11 @@ async def get_sla_by_severity(
     rows: dict[str, dict] = {}
     for sev in ["critical", "high", "medium", "low"]:
         rows[sev] = {
-            "severity":        sev,
-            "target_minutes":  SLA_RESOLVE[sev],
-            "total_alerts":    0,
-            "breached":        0,
-            "elapsed_sum":     0.0,
+            "severity": sev,
+            "target_minutes": SLA_RESOLVE[sev],
+            "total_alerts": 0,
+            "breached": 0,
+            "elapsed_sum": 0.0,
         }
 
     for a in alerts:
@@ -208,18 +233,21 @@ async def get_sla_by_severity(
         within = total - breached
         avg = (r["elapsed_sum"] / total) if total else 0
         compliance = (within / max(1, total)) * 100
-        out.append({
-            "severity":       sev,
-            "target_minutes": r["target_minutes"],
-            "avg_minutes":    round(avg),
-            "compliance_pct": round(compliance, 1),
-            "total_alerts":   total,
-            "breached":       breached,
-        })
+        out.append(
+            {
+                "severity": sev,
+                "target_minutes": r["target_minutes"],
+                "avg_minutes": round(avg),
+                "compliance_pct": round(compliance, 1),
+                "total_alerts": total,
+                "breached": breached,
+            }
+        )
     return APIResponse.ok(out)
 
 
 # ─── /metrics/sla-breaches ───────────────────────────────────────────────────
+
 
 @router.get("/sla-breaches", response_model=APIResponse[dict])
 async def get_sla_breaches(
@@ -229,15 +257,18 @@ async def get_sla_breaches(
     page: int = Query(default=1, ge=1),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
     page_size = 20
 
     result = await db.execute(
-        select(Alert).where(
+        select(Alert)
+        .where(
             Alert.tenant_id == m.tenant_id,
             Alert.created_at >= since,
-        ).order_by(Alert.created_at.desc())
+        )
+        .order_by(Alert.created_at.desc())
     )
     alerts = result.scalars().all()
 
@@ -248,28 +279,33 @@ async def get_sla_breaches(
         target = SLA_RESOLVE.get(sev, 480)
         elapsed = _elapsed_minutes(a.created_at, a.updated_at if _is_terminal(status_str) else None)
         if elapsed > target:
-            items.append({
-                "alert_id":        str(a.id),
-                "title":           a.title or "Untitled",
-                "severity":        sev,
-                "created_at":      a.created_at.isoformat(),
-                "resolved_at":     a.updated_at.isoformat() if _is_terminal(status_str) else None,
-                "assigned_to":     None,
-                "elapsed_minutes": round(elapsed),
-                "target_minutes":  target,
-                "breach_type":     "resolution" if _is_terminal(status_str) else "response",
-            })
+            items.append(
+                {
+                    "alert_id": str(a.id),
+                    "title": a.title or "Untitled",
+                    "severity": sev,
+                    "created_at": a.created_at.isoformat(),
+                    "resolved_at": a.updated_at.isoformat() if _is_terminal(status_str) else None,
+                    "assigned_to": None,
+                    "elapsed_minutes": round(elapsed),
+                    "target_minutes": target,
+                    "breach_type": "resolution" if _is_terminal(status_str) else "response",
+                }
+            )
 
     total = len(items)
     offset = (page - 1) * page_size
-    return APIResponse.ok({
-        "items": items[offset: offset + page_size],
-        "total": total,
-        "page":  page,
-    })
+    return APIResponse.ok(
+        {
+            "items": items[offset : offset + page_size],
+            "total": total,
+            "page": page,
+        }
+    )
 
 
 # ─── /metrics/sla-breach-rate ────────────────────────────────────────────────
+
 
 @router.get("/sla-breach-rate", response_model=APIResponse[list])
 async def get_sla_breach_rate(
@@ -278,14 +314,17 @@ async def get_sla_breach_rate(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
     result = await db.execute(
-        select(Alert).where(
+        select(Alert)
+        .where(
             Alert.tenant_id == m.tenant_id,
             Alert.created_at >= since,
-        ).order_by(Alert.created_at)
+        )
+        .order_by(Alert.created_at)
     )
     alerts = result.scalars().all()
 
@@ -309,15 +348,18 @@ async def get_sla_breach_rate(
     out = []
     for date, d in sorted(by_date.items()):
         total = max(1, d["total"])
-        out.append({
-            "date":             date,
-            "warn_breach_pct":  round((d["warn"] / total) * 100, 1),
-            "crit_breach_pct":  round((d["crit"] / total) * 100, 1),
-        })
+        out.append(
+            {
+                "date": date,
+                "warn_breach_pct": round((d["warn"] / total) * 100, 1),
+                "crit_breach_pct": round((d["crit"] / total) * 100, 1),
+            }
+        )
     return APIResponse.ok(out)
 
 
 # ─── /metrics/response-time-distribution ─────────────────────────────────────
+
 
 @router.get("/response-time-distribution", response_model=APIResponse[list])
 async def get_response_time_distribution(
@@ -326,6 +368,7 @@ async def get_response_time_distribution(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -338,13 +381,13 @@ async def get_response_time_distribution(
     alerts = result.scalars().all()
 
     bins = [
-        {"label": "<15m",   "max_minutes": 15,    "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": "15-30m", "max_minutes": 30,    "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": "30-60m", "max_minutes": 60,    "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": "1-2h",   "max_minutes": 120,   "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": "2-4h",   "max_minutes": 240,   "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": "4-8h",   "max_minutes": 480,   "critical": 0, "high": 0, "medium": 0, "low": 0},
-        {"label": ">8h",    "max_minutes": 99999, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "<15m", "max_minutes": 15, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "15-30m", "max_minutes": 30, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "30-60m", "max_minutes": 60, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "1-2h", "max_minutes": 120, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "2-4h", "max_minutes": 240, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": "4-8h", "max_minutes": 480, "critical": 0, "high": 0, "medium": 0, "low": 0},
+        {"label": ">8h", "max_minutes": 99999, "critical": 0, "high": 0, "medium": 0, "low": 0},
     ]
     prev_max = 0
     for b in bins:
@@ -367,6 +410,7 @@ async def get_response_time_distribution(
 
 # ─── /metrics/analyst-sla ────────────────────────────────────────────────────
 
+
 @router.get("/analyst-sla", response_model=APIResponse[list])
 async def get_analyst_sla(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
@@ -374,6 +418,7 @@ async def get_analyst_sla(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -394,9 +439,7 @@ async def get_analyst_sla(
     analyst_ids = list({i.assigned_to for i in investigations if i.assigned_to})
 
     # Fetch user names
-    user_result = await db.execute(
-        select(User).where(User.id.in_(analyst_ids))
-    )
+    user_result = await db.execute(select(User).where(User.id.in_(analyst_ids)))
     users = {u.id: u for u in user_result.scalars().all()}
 
     # Compute per-analyst stats
@@ -405,22 +448,33 @@ async def get_analyst_sla(
         uid = inv.assigned_to
         if uid not in analyst_stats:
             analyst_stats[uid] = {
-                "user_id":        str(uid),
-                "name":           users.get(uid, type("U", (), {"full_name": str(uid)[:8]})()).full_name,
-                "handled":        0,
-                "within_sla":     0,
-                "open_breaches":  0,
-                "resolve_times":  [],
-                "respond_times":  [],
+                "user_id": str(uid),
+                "name": users.get(uid, type("U", (), {"full_name": str(uid)[:8]})()).full_name,
+                "handled": 0,
+                "within_sla": 0,
+                "open_breaches": 0,
+                "resolve_times": [],
+                "respond_times": [],
             }
         stats = analyst_stats[uid]
         stats["handled"] += 1
 
         status_str = inv.status if isinstance(inv.status, str) else inv.status.value
-        elapsed = _elapsed_minutes(inv.created_at, inv.updated_at if status_str in ("resolved", "closed", "false_positive") else None)
+        elapsed = _elapsed_minutes(
+            inv.created_at,
+            inv.updated_at if status_str in ("resolved", "closed", "false_positive") else None,
+        )
 
         # Use threat_score-based SLA (high score = critical)
-        sev = "critical" if inv.threat_score >= 80 else "high" if inv.threat_score >= 60 else "medium" if inv.threat_score >= 30 else "low"
+        sev = (
+            "critical"
+            if inv.threat_score >= 80
+            else "high"
+            if inv.threat_score >= 60
+            else "medium"
+            if inv.threat_score >= 30
+            else "low"
+        )
         target = SLA_RESOLVE[sev]
 
         stats["respond_times"].append(min(elapsed, 60))  # first hour approximation
@@ -434,26 +488,33 @@ async def get_analyst_sla(
                 stats["open_breaches"] += 1
 
     out = []
-    for uid, s in analyst_stats.items():
+    for _, s in analyst_stats.items():
         handled = s["handled"]
-        within  = s["within_sla"]
+        within = s["within_sla"]
         resolve_times = s["resolve_times"]
         respond_times = s["respond_times"]
-        out.append({
-            "user_id":               s["user_id"],
-            "name":                  s["name"],
-            "handled":               handled,
-            "within_sla":            within,
-            "compliance_pct":        round((within / max(1, handled)) * 100, 1),
-            "avg_response_minutes":  round(sum(respond_times) / len(respond_times)) if respond_times else 0,
-            "avg_resolve_minutes":   round(sum(resolve_times) / len(resolve_times)) if resolve_times else 0,
-            "open_breaches":         s["open_breaches"],
-        })
+        out.append(
+            {
+                "user_id": s["user_id"],
+                "name": s["name"],
+                "handled": handled,
+                "within_sla": within,
+                "compliance_pct": round((within / max(1, handled)) * 100, 1),
+                "avg_response_minutes": round(sum(respond_times) / len(respond_times))
+                if respond_times
+                else 0,
+                "avg_resolve_minutes": round(sum(resolve_times) / len(resolve_times))
+                if resolve_times
+                else 0,
+                "open_breaches": s["open_breaches"],
+            }
+        )
 
     return APIResponse.ok(sorted(out, key=lambda x: -x["compliance_pct"]))
 
 
 # ─── /metrics/mttr ───────────────────────────────────────────────────────────
+
 
 @router.get("/mttr", response_model=APIResponse[list])
 async def get_mttr(
@@ -462,6 +523,7 @@ async def get_mttr(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -487,18 +549,21 @@ async def get_mttr(
     for sev in ["critical", "high", "medium", "low"]:
         vals = sorted(buckets[sev])
         n = len(vals)
-        mean   = sum(vals) / n if n else 0
+        mean = sum(vals) / n if n else 0
         median = vals[n // 2] if n else 0
-        out.append({
-            "severity":        sev,
-            "mean_minutes":    round(mean),
-            "median_minutes":  round(median),
-            "sample_count":    n,
-        })
+        out.append(
+            {
+                "severity": sev,
+                "mean_minutes": round(mean),
+                "median_minutes": round(median),
+                "sample_count": n,
+            }
+        )
     return APIResponse.ok(out)
 
 
 # ─── /metrics/alert-volume ───────────────────────────────────────────────────
+
 
 @router.get("/alert-volume", response_model=APIResponse[list])
 async def get_alert_volume(
@@ -508,14 +573,17 @@ async def get_alert_volume(
     group_by: str = Query(default="day,severity"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
     result = await db.execute(
-        select(Alert).where(
+        select(Alert)
+        .where(
             Alert.tenant_id == m.tenant_id,
             Alert.created_at >= since,
-        ).order_by(Alert.created_at)
+        )
+        .order_by(Alert.created_at)
     )
     alerts = result.scalars().all()
 
@@ -523,7 +591,14 @@ async def get_alert_volume(
     for a in alerts:
         date_key = a.created_at.strftime("%Y-%m-%d")
         if date_key not in by_date:
-            by_date[date_key] = {"date": date_key, "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+            by_date[date_key] = {
+                "date": date_key,
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "info": 0,
+            }
         sev = (a.severity.value if hasattr(a.severity, "value") else str(a.severity)).lower()
         if sev in by_date[date_key]:
             by_date[date_key][sev] += 1
@@ -533,6 +608,7 @@ async def get_alert_volume(
 
 # ─── /metrics/analyst-performance ────────────────────────────────────────────
 
+
 @router.get("/analyst-performance", response_model=APIResponse[list])
 async def get_analyst_performance(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
@@ -540,9 +616,10 @@ async def get_analyst_performance(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
-    today_start = datetime.now(tz=timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(tz=UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
     result = await db.execute(
         select(Investigation).where(
@@ -567,9 +644,9 @@ async def get_analyst_performance(
         if uid not in stats:
             u = users.get(uid)
             stats[uid] = {
-                "user_id":    str(uid),
-                "name":       getattr(u, "full_name", None) or getattr(u, "email", str(uid)[:8]),
-                "email":      getattr(u, "email", ""),
+                "user_id": str(uid),
+                "name": getattr(u, "full_name", None) or getattr(u, "email", str(uid)[:8]),
+                "email": getattr(u, "email", ""),
                 "triaged_today": 0,
                 "open_count": 0,
                 "resolve_times": [],
@@ -577,7 +654,7 @@ async def get_analyst_performance(
         s = stats[uid]
         status_str = inv.status if isinstance(inv.status, str) else inv.status.value
         if _is_terminal(status_str):
-            if inv.updated_at and inv.updated_at.replace(tzinfo=timezone.utc) >= today_start:
+            if inv.updated_at and inv.updated_at.replace(tzinfo=UTC) >= today_start:
                 s["triaged_today"] += 1
             s["resolve_times"].append(_elapsed_minutes(inv.created_at, inv.updated_at))
         else:
@@ -586,18 +663,21 @@ async def get_analyst_performance(
     out = []
     for s in stats.values():
         rt = s["resolve_times"]
-        out.append({
-            "user_id":               s["user_id"],
-            "name":                  s["name"],
-            "email":                 s["email"],
-            "alerts_triaged_today":  s["triaged_today"],
-            "avg_resolution_minutes": round(sum(rt) / len(rt)) if rt else 0,
-            "open_assignments":      s["open_count"],
-        })
+        out.append(
+            {
+                "user_id": s["user_id"],
+                "name": s["name"],
+                "email": s["email"],
+                "alerts_triaged_today": s["triaged_today"],
+                "avg_resolution_minutes": round(sum(rt) / len(rt)) if rt else 0,
+                "open_assignments": s["open_count"],
+            }
+        )
     return APIResponse.ok(sorted(out, key=lambda x: -x["alerts_triaged_today"]))
 
 
 # ─── /metrics/verdict-distribution ───────────────────────────────────────────
+
 
 @router.get("/verdict-distribution", response_model=APIResponse[dict])
 async def get_verdict_distribution(
@@ -606,6 +686,7 @@ async def get_verdict_distribution(
     timeRange: str = Query(default="30d"),
 ):
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -637,6 +718,7 @@ async def get_verdict_distribution(
 # Note: this is served under /dashboard prefix but logically belongs here.
 # We mount it here and alias it in the router.
 
+
 @router.get("/geo-threats-data", response_model=APIResponse[list], include_in_schema=False)
 async def _get_geo_threats_internal(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
@@ -645,6 +727,7 @@ async def _get_geo_threats_internal(
 ):
     """Internal — called by /dashboard/geo-threats alias."""
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     since = _parse_range(timeRange)
 
@@ -672,11 +755,21 @@ async def _get_geo_threats_internal(
         sev_str = sev.value if hasattr(sev, "value") else str(sev)
         key = country
         if key not in country_counts:
-            country_counts[key] = {"lat": lat, "lng": lng, "count": 0, "severity": sev_str, "country": country}
+            country_counts[key] = {
+                "lat": lat,
+                "lng": lng,
+                "count": 0,
+                "severity": sev_str,
+                "country": country,
+            }
         country_counts[key]["count"] += 1
         # Escalate severity if needed
         sev_order = ["low", "medium", "high", "critical"]
-        existing_idx = sev_order.index(country_counts[key]["severity"]) if country_counts[key]["severity"] in sev_order else 0
+        existing_idx = (
+            sev_order.index(country_counts[key]["severity"])
+            if country_counts[key]["severity"] in sev_order
+            else 0
+        )
         curr_idx = sev_order.index(sev_str) if sev_str in sev_order else 0
         if curr_idx > existing_idx:
             country_counts[key]["severity"] = sev_str

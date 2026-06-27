@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -10,7 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ServiceUnavailableError, UnauthorizedError
+from app.core.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnauthorizedError,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -41,7 +47,6 @@ def _hash_token_for_storage(token: str) -> str:
 
 
 class AuthService:
-
     @staticmethod
     async def register(
         db: AsyncSession,
@@ -93,9 +98,9 @@ class AuthService:
 
         verify_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
         # Use local string variables (not ORM attributes) so there's no session dependency.
-        _email     = email.lower().strip()
+        _email = email.lower().strip()
         _full_name = full_name.strip()
-        _user_id   = str(user.id)
+        _user_id = str(user.id)
 
         try:
             sent = await send_verification_email(_email, _full_name, verify_url)
@@ -156,7 +161,10 @@ class AuthService:
                     details={"code": "MFA_REQUIRED"},
                 )
             from app.services.mfa_service import MFAService
-            if not MFAService.verify_totp(user, mfa_code) and not MFAService.verify_backup_code(user, mfa_code):
+
+            if not MFAService.verify_totp(user, mfa_code) and not MFAService.verify_backup_code(
+                user, mfa_code
+            ):
                 await AuditService.log(
                     db,
                     action="user.mfa_failed",
@@ -198,8 +206,8 @@ class AuthService:
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
             if sent_at.tzinfo is None:
-                sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=_VERIFICATION_EXPIRY_HOURS):
+                sent_at = sent_at.replace(tzinfo=UTC)
+            if datetime.now(tz=UTC) - sent_at > timedelta(hours=_VERIFICATION_EXPIRY_HOURS):
                 raise NotFoundError("Verification link has expired. Please request a new one.")
 
         user.email_verified = True
@@ -232,23 +240,24 @@ class AuthService:
         if user.email_verification_sent_at:
             sent_at = user.email_verification_sent_at
             if sent_at.tzinfo is None:
-                sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=1):
+                sent_at = sent_at.replace(tzinfo=UTC)
+            if datetime.now(tz=UTC) - sent_at < timedelta(minutes=1):
                 logger.info(
                     "resend_verification_rate_limited",
                     user_id=str(user.id),
                     retry_after_seconds=int(
-                        (sent_at + timedelta(minutes=1) - datetime.now(tz=timezone.utc)).total_seconds()
+                        (sent_at + timedelta(minutes=1) - datetime.now(tz=UTC)).total_seconds()
                     ),
                 )
                 return
 
         new_token = _generate_verification_token()
         user.email_verification_token = _hash_token_for_storage(new_token)
-        user.email_verification_sent_at = datetime.now(tz=timezone.utc)
+        user.email_verification_sent_at = datetime.now(tz=UTC)
         await db.flush([user])
 
         from app.services.email_service import send_verification_email
+
         verify_url = f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
         try:
             sent = await send_verification_email(user.email, user.full_name, verify_url)
@@ -273,7 +282,7 @@ class AuthService:
         try:
             user_id = UUID(payload.sub)
         except ValueError:
-            raise UnauthorizedError("Malformed refresh token")
+            raise UnauthorizedError("Malformed refresh token") from None
 
         if payload.jti is None:
             raise UnauthorizedError("Refresh token missing JTI")
@@ -323,7 +332,7 @@ class AuthService:
                 jti=jti,
                 error=str(exc),
             )
-            raise ServiceUnavailableError("Logout failed — please try again")
+            raise ServiceUnavailableError("Logout failed — please try again") from exc
 
     # ─── Private helpers ──────────────────────────────────────────────────────
 
@@ -342,9 +351,7 @@ class AuthService:
         )
         refresh_token_str, jti = create_refresh_token(subject=str(user.id))
 
-        expire = datetime.now(tz=timezone.utc) + timedelta(
-            days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
-        )
+        expire = datetime.now(tz=UTC) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         token_record = RefreshToken(
             user_id=user.id,
             jti=jti,
@@ -372,23 +379,24 @@ class AuthService:
         if user.password_reset_sent_at:
             sent_at = user.password_reset_sent_at
             if sent_at.tzinfo is None:
-                sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at < timedelta(minutes=1):
+                sent_at = sent_at.replace(tzinfo=UTC)
+            if datetime.now(tz=UTC) - sent_at < timedelta(minutes=1):
                 logger.info(
                     "forgot_password_rate_limited",
                     user_id=str(user.id),
                     retry_after_seconds=int(
-                        (sent_at + timedelta(minutes=1) - datetime.now(tz=timezone.utc)).total_seconds()
+                        (sent_at + timedelta(minutes=1) - datetime.now(tz=UTC)).total_seconds()
                     ),
                 )
                 return
 
         token = _generate_verification_token()
         user.password_reset_token = _hash_token_for_storage(token)
-        user.password_reset_sent_at = datetime.now(tz=timezone.utc)
+        user.password_reset_sent_at = datetime.now(tz=UTC)
         await db.flush([user])
 
         from app.services.email_service import send_password_reset_email
+
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
         try:
             sent = await send_password_reset_email(user.email, user.full_name, reset_url)
@@ -416,11 +424,9 @@ class AuthService:
         if user.password_reset_sent_at:
             sent_at = user.password_reset_sent_at
             if sent_at.tzinfo is None:
-                sent_at = sent_at.replace(tzinfo=timezone.utc)
-            if datetime.now(tz=timezone.utc) - sent_at > timedelta(hours=1):
-                raise NotFoundError(
-                    "Password reset link has expired — please request a new one"
-                )
+                sent_at = sent_at.replace(tzinfo=UTC)
+            if datetime.now(tz=UTC) - sent_at > timedelta(hours=1):
+                raise NotFoundError("Password reset link has expired — please request a new one")
 
         user.password_hash = hash_password(new_password)
         user.password_reset_token = None
@@ -466,24 +472,22 @@ class AuthService:
     @staticmethod
     async def _revoke_all_user_sessions(db: AsyncSession, user_id: UUID) -> int:
         """Revokes all active refresh tokens for a user. Returns count revoked."""
+        from datetime import datetime
+
         from sqlalchemy import update as sa_update
-        from datetime import datetime, timezone
+
         result = await db.execute(
             sa_update(RefreshToken)
             .where(
                 RefreshToken.user_id == user_id,
                 RefreshToken.revoked_at.is_(None),
             )
-            .values(revoked_at=datetime.now(tz=timezone.utc))
+            .values(revoked_at=datetime.now(tz=UTC))
             .execution_options(synchronize_session=False)
         )
         return result.rowcount
 
     @staticmethod
-    async def _get_refresh_token_by_jti(
-        db: AsyncSession, jti: str
-    ) -> RefreshToken | None:
-        result = await db.execute(
-            select(RefreshToken).where(RefreshToken.jti == jti)
-        )
+    async def _get_refresh_token_by_jti(db: AsyncSession, jti: str) -> RefreshToken | None:
+        result = await db.execute(select(RefreshToken).where(RefreshToken.jti == jti))
         return result.scalar_one_or_none()

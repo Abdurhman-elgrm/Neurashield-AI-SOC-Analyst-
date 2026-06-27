@@ -14,7 +14,7 @@ from app.core.logging import user_id_ctx
 from app.core.redis import get_redis
 from app.core.security import decode_access_token
 from app.rbac.permissions import Permission
-from app.rbac.roles import has_permission, get_effective_permissions
+from app.rbac.roles import get_effective_permissions
 
 logger = structlog.get_logger(__name__)
 
@@ -23,15 +23,15 @@ _bearer = HTTPBearer(auto_error=False)
 
 # ─── Token extraction ─────────────────────────────────────────────────────────
 
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Security(_bearer)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> "User":  # type: ignore[name-defined]
+) -> User:  # type: ignore[name-defined]
     """
     Decodes the Bearer JWT and returns the authenticated User.
     Raises UnauthorizedError if the token is missing, invalid, or the user is inactive.
     """
-    from app.models.user import User
     from app.services.user_service import UserService
 
     if credentials is None:
@@ -42,7 +42,7 @@ async def get_current_user(
     try:
         user_id = UUID(payload.sub)
     except ValueError:
-        raise UnauthorizedError("Malformed token subject")
+        raise UnauthorizedError("Malformed token subject") from None
 
     user = await UserService.get_by_id(db, user_id)
     if user is None or not user.is_active or user.is_deleted:
@@ -68,18 +68,18 @@ async def get_current_user(
 
 # ─── Tenant context ───────────────────────────────────────────────────────────
 
+
 async def get_current_tenant_member(
     x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
-    current_user: Annotated["User", Depends(get_current_user)] = None,  # type: ignore
+    current_user: Annotated[User, Depends(get_current_user)] = None,  # type: ignore
     db: Annotated[AsyncSession, Depends(get_db)] = None,  # type: ignore
-) -> "TenantMember":  # type: ignore[name-defined]
+) -> TenantMember:  # type: ignore[name-defined]
     """
     Resolves the tenant context from the X-Tenant-ID header and validates
     that the current user is an active member of that tenant.
 
     Returns the TenantMember record (which includes the user's role).
     """
-    from app.models.tenant_member import TenantMember
     from app.services.tenant_service import TenantService
 
     if not x_tenant_id:
@@ -88,7 +88,7 @@ async def get_current_tenant_member(
     try:
         tenant_id = UUID(x_tenant_id)
     except ValueError:
-        raise ForbiddenError("Invalid tenant ID format")
+        raise ForbiddenError("Invalid tenant ID format") from None
 
     member = await TenantService.get_active_member(db, tenant_id, current_user.id)
     if member is None:
@@ -99,6 +99,7 @@ async def get_current_tenant_member(
 
 # ─── Permission-based authorization ──────────────────────────────────────────
 
+
 def require_permission(permission: Permission) -> Depends:
     """
     Returns a FastAPI dependency that validates the current member holds
@@ -107,9 +108,10 @@ def require_permission(permission: Permission) -> Depends:
     Usage in routes:
         member: TenantMember = require_permission(Permission.ALERTS_UPDATE)
     """
+
     async def _check(
-        member: Annotated["TenantMember", Depends(get_current_tenant_member)],  # type: ignore
-    ) -> "TenantMember":  # type: ignore[name-defined]
+        member: Annotated[TenantMember, Depends(get_current_tenant_member)],  # type: ignore
+    ) -> TenantMember:  # type: ignore[name-defined]
         custom = getattr(member, "custom_permissions", None)
         effective = get_effective_permissions(member.role, custom)
         if permission not in effective:

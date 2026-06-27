@@ -9,6 +9,7 @@ Field paths follow the NormalizedEvent schema used by evaluate_conditions()
 and ThresholdEvaluator.  Pattern rules use list[dict] conditions;
 threshold rules use a dict with field / group_by / threshold / window_secs / filters.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +18,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.detection_rule import DetectionRule, RuleType, RuleSeverity
+from app.models.detection_rule import DetectionRule, RuleSeverity, RuleType
 
 logger = structlog.get_logger(__name__)
 
@@ -27,11 +28,9 @@ logger = structlog.get_logger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DEFAULT_RULES: list[dict[str, Any]] = [
-
     # ═══════════════════════════════════════════════════════════════════════
     #  CREDENTIAL ACCESS
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Mimikatz - Credential Dumping Tool Detected",
         "description": (
@@ -57,8 +56,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "critical",
         "conditions": [
-            {"field": "process.command_line", "op": "regex",
-             "value": r"sekurlsa|lsadump|kerberos::ptt|kerberos::golden"},
+            {
+                "field": "process.command_line",
+                "op": "regex",
+                "value": r"sekurlsa|lsadump|kerberos::ptt|kerberos::golden",
+            },
         ],
         "mitre_tactics": ["Credential Access"],
         "mitre_techniques": ["T1003.001", "T1558.001"],
@@ -84,11 +86,19 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "groups": [
                             [
                                 {"field": "process.name", "op": "eq", "value": "procdump.exe"},
-                                {"field": "process.command_line", "op": "contains", "value": "lsass"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "lsass",
+                                },
                             ],
                             [
                                 {"field": "process.name", "op": "eq", "value": "procdump64.exe"},
-                                {"field": "process.command_line", "op": "contains", "value": "lsass"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "lsass",
+                                },
                             ],
                         ],
                     },
@@ -97,8 +107,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "comsvcs"},
-                                {"field": "process.command_line", "op": "contains", "value": "MiniDump"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "comsvcs",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "MiniDump",
+                                },
                             ],
                         ],
                     },
@@ -107,8 +125,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "regex",
-                                 "value": r"lsass.*-ma\b|lsass.*-dump|\blsass\.exe.*\s+-"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "regex",
+                                    "value": r"lsass.*-ma\b|lsass.*-dump|\blsass\.exe.*\s+-",
+                                },
                             ],
                         ],
                     },
@@ -128,8 +149,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "high",
         "conditions": [
-            {"field": "process.name", "op": "in",
-             "value": ["pwdump", "pwdump6", "fgdump.exe", "wce.exe", "cachedump.exe"]},
+            {
+                "field": "process.name",
+                "op": "in",
+                "value": ["pwdump", "pwdump6", "fgdump.exe", "wce.exe", "cachedump.exe"],
+            },
         ],
         "mitre_tactics": ["Credential Access"],
         "mitre_techniques": ["T1003"],
@@ -249,11 +273,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1548.003"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  DEFENSE EVASION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Security Audit Log Cleared (Event 1102)",
         "description": (
@@ -329,11 +351,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1562.001"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  EXECUTION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Encoded PowerShell Execution (-EncodedCommand / -enc)",
         "description": (
@@ -360,8 +380,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "severity": "high",
         "conditions": [
             {"field": "process.name", "op": "eq", "value": "powershell.exe"},
-            {"field": "process.command_line", "op": "regex",
-             "value": r"DownloadString|DownloadFile|Invoke-WebRequest|iwr\s|curl\s.*http|Start-BitsTransfer"},
+            {
+                "field": "process.command_line",
+                "op": "regex",
+                "value": r"DownloadString|DownloadFile|Invoke-WebRequest|iwr\s|curl\s.*http|Start-BitsTransfer",
+            },
         ],
         "mitre_tactics": ["Execution", "Command and Control"],
         "mitre_techniques": ["T1059.001", "T1105"],
@@ -429,12 +452,21 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
             {
                 "op": "any_of",
                 "conditions": [
-                    {"field": "process.command_line", "op": "regex",
-                     "value": r"\\Temp\\|\\AppData\\Local\\Temp\\|\\Downloads\\|\\Desktop\\|\\Users\\Public\\"},
-                    {"field": "process.command_line", "op": "regex",
-                     "value": r"https?://|\\\\[0-9]{1,3}\.[0-9]{1,3}\."},
-                    {"field": "process.command_line", "op": "regex",
-                     "value": r"\.vbs\s+-e\s+|-e\s+[A-Za-z0-9+/]{20,}"},
+                    {
+                        "field": "process.command_line",
+                        "op": "regex",
+                        "value": r"\\Temp\\|\\AppData\\Local\\Temp\\|\\Downloads\\|\\Desktop\\|\\Users\\Public\\",
+                    },
+                    {
+                        "field": "process.command_line",
+                        "op": "regex",
+                        "value": r"https?://|\\\\[0-9]{1,3}\.[0-9]{1,3}\.",
+                    },
+                    {
+                        "field": "process.command_line",
+                        "op": "regex",
+                        "value": r"\.vbs\s+-e\s+|-e\s+[A-Za-z0-9+/]{20,}",
+                    },
                 ],
             },
         ],
@@ -451,8 +483,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "critical",
         "conditions": [
-            {"field": "process.command_line", "op": "regex",
-             "value": r"shadowcopy|shadow\s+delete|delete\s+shadows|vssadmin.*delete"},
+            {
+                "field": "process.command_line",
+                "op": "regex",
+                "value": r"shadowcopy|shadow\s+delete|delete\s+shadows|vssadmin.*delete",
+            },
         ],
         "mitre_tactics": ["Impact"],
         "mitre_techniques": ["T1490"],
@@ -470,8 +505,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "low",
         "conditions": [
-            {"field": "process.name", "op": "in",
-             "value": ["whoami.exe", "systeminfo.exe", "hostname.exe"]},
+            {
+                "field": "process.name",
+                "op": "in",
+                "value": ["whoami.exe", "systeminfo.exe", "hostname.exe"],
+            },
         ],
         "mitre_tactics": ["Discovery"],
         "mitre_techniques": ["T1033", "T1082"],
@@ -487,18 +525,19 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "severity": "medium",
         "conditions": [
             {"field": "process.name", "op": "eq", "value": "net.exe"},
-            {"field": "process.command_line", "op": "regex",
-             "value": r"\buser\b|\bgroup\b|\blocalgroup\b"},
+            {
+                "field": "process.command_line",
+                "op": "regex",
+                "value": r"\buser\b|\bgroup\b|\blocalgroup\b",
+            },
         ],
         "mitre_tactics": ["Discovery"],
         "mitre_techniques": ["T1087.001", "T1087.002"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  PERSISTENCE
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Scheduled Task Created (Event 4698)",
         "description": (
@@ -585,12 +624,21 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
             {
                 "op": "any_of",
                 "conditions": [
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"curl\s+|wget\s+|python\s+-c|bash\s+-i|nc\s+-|/tmp/|/dev/tcp"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"\|\s*bash|\|\s*sh|\|\s*python"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"base64\s+--decode|base64\s+-d\b|echo.*\|\s*sh"},
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"curl\s+|wget\s+|python\s+-c|bash\s+-i|nc\s+-|/tmp/|/dev/tcp",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"\|\s*bash|\|\s*sh|\|\s*python",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"base64\s+--decode|base64\s+-d\b|echo.*\|\s*sh",
+                    },
                 ],
             },
         ],
@@ -598,11 +646,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1053.003"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  PRIVILEGE ESCALATION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "New Local User Account Created (Event 4720)",
         "description": (
@@ -627,8 +673,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "high",
         "conditions": [
-            {"field": "raw.windows_event_id", "op": "in",
-             "value": ["4728", "4732", "4756"]},
+            {"field": "raw.windows_event_id", "op": "in", "value": ["4728", "4732", "4756"]},
         ],
         "mitre_tactics": ["Privilege Escalation"],
         "mitre_techniques": ["T1098"],
@@ -680,11 +725,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1014", "T1068"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  LATERAL MOVEMENT
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Remote Interactive Logon (RDP / Type 10) Detected",
         "description": (
@@ -780,11 +823,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1021"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  DISCOVERY
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Network Port Scanning - Rapid Distinct Destination Ports",
         "description": (
@@ -815,18 +856,15 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "low",
         "conditions": [
-            {"field": "process.name", "op": "in",
-             "value": ["tasklist.exe", "qprocess.exe"]},
+            {"field": "process.name", "op": "in", "value": ["tasklist.exe", "qprocess.exe"]},
         ],
         "mitre_tactics": ["Discovery"],
         "mitre_techniques": ["T1057"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  IMPACT
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Windows Backup / Recovery Disabled - Ransomware Indicator",
         "description": (
@@ -836,8 +874,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "critical",
         "conditions": [
-            {"field": "process.name", "op": "in",
-             "value": ["wbadmin.exe", "bcdedit.exe"]},
+            {"field": "process.name", "op": "in", "value": ["wbadmin.exe", "bcdedit.exe"]},
             {"field": "process.command_line", "op": "contains", "value": "delete"},
         ],
         "mitre_tactics": ["Impact"],
@@ -859,11 +896,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1562.001"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  COMMAND AND CONTROL
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Suspicious Outbound Connection to Known C2 Framework Ports",
         "description": (
@@ -874,18 +909,19 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "severity": "high",
         "conditions": [
             {"field": "category", "op": "eq", "value": "network"},
-            {"field": "network.dst_port", "op": "regex",
-             "value": r"^(4444|1337|8888|9999|31337|4445|8443)$"},
+            {
+                "field": "network.dst_port",
+                "op": "regex",
+                "value": r"^(4444|1337|8888|9999|31337|4445|8443)$",
+            },
         ],
         "mitre_tactics": ["Command and Control"],
         "mitre_techniques": ["T1071"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  COLLECTION / EXFILTRATION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "High-Volume Outbound Network Events - Possible Data Exfiltration",
         "description": (
@@ -916,18 +952,19 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "low",
         "conditions": [
-            {"field": "process.name", "op": "in",
-             "value": ["7z.exe", "winrar.exe", "rar.exe", "tar", "zip", "7za.exe"]},
+            {
+                "field": "process.name",
+                "op": "in",
+                "value": ["7z.exe", "winrar.exe", "rar.exe", "tar", "zip", "7za.exe"],
+            },
         ],
         "mitre_tactics": ["Collection"],
         "mitre_techniques": ["T1560.001"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  ACCOUNT MANAGEMENT / IDENTITY
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "User Password Reset by Non-Owner (Event 4724)",
         "description": (
@@ -952,8 +989,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "rule_type": "pattern",
         "severity": "medium",
         "conditions": [
-            {"field": "raw.windows_event_id", "op": "in",
-             "value": ["4946", "4947", "4948"]},
+            {"field": "raw.windows_event_id", "op": "in", "value": ["4946", "4947", "4948"]},
         ],
         "mitre_tactics": ["Defense Evasion"],
         "mitre_techniques": ["T1562.004"],
@@ -989,16 +1025,31 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
             {
                 "op": "any_of",
                 "conditions": [
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"-enc[a-z]*\s+[A-Za-z0-9+/]{20,}|-[Ee]ncodedCommand"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"amsiInitFailed|AmsiScanBuffer|amsiContext|DisableScriptBlockLogging"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"DownloadString|DownloadFile|Invoke-WebRequest|Start-BitsTransfer"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"sekurlsa|lsadump|kerberos::ptt|Invoke-Mimikatz"},
-                    {"field": "raw.message", "op": "regex",
-                     "value": r"TCPClient|Net\.Sockets|NetworkStream|StreamReader.*\d{1,3}\.\d{1,3}"},
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"-enc[a-z]*\s+[A-Za-z0-9+/]{20,}|-[Ee]ncodedCommand",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"amsiInitFailed|AmsiScanBuffer|amsiContext|DisableScriptBlockLogging",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"DownloadString|DownloadFile|Invoke-WebRequest|Start-BitsTransfer",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"sekurlsa|lsadump|kerberos::ptt|Invoke-Mimikatz",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"TCPClient|Net\.Sockets|NetworkStream|StreamReader.*\d{1,3}\.\d{1,3}",
+                    },
                 ],
             },
         ],
@@ -1006,11 +1057,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1059.001"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  HASH IOC — MALWAREBAZAAR CONFIRMED MALWARE
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Malware Hash Confirmed - MalwareBazaar IOC Match",
         "description": (
@@ -1026,11 +1075,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1204.002", "T1027"],
         "suppression_window_secs": 86400,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  RANSOMWARE & IMPACT
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Ransomware - Shadow Copy Deletion via VSSAdmin or WMI",
         "description": (
@@ -1047,20 +1094,60 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "vssadmin"},
-                                {"field": "process.command_line", "op": "contains", "value": "delete"},
-                                {"field": "process.command_line", "op": "contains", "value": "shadow"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "vssadmin",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "delete",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "shadow",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wmic"},
-                                {"field": "process.command_line", "op": "contains", "value": "shadowcopy"},
-                                {"field": "process.command_line", "op": "contains", "value": "delete"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wmic",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "shadowcopy",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "delete",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wmic"},
-                                {"field": "process.command_line", "op": "contains", "value": "shadow"},
-                                {"field": "process.command_line", "op": "contains", "value": "call"},
-                                {"field": "process.command_line", "op": "contains", "value": "delete"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wmic",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "shadow",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "call",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "delete",
+                                },
                             ],
                         ],
                     },
@@ -1097,14 +1184,34 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "bcdedit"},
-                                {"field": "process.command_line", "op": "contains", "value": "recoveryenabled"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "bcdedit",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "recoveryenabled",
+                                },
                                 {"field": "process.command_line", "op": "contains", "value": "no"},
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "bcdedit"},
-                                {"field": "process.command_line", "op": "contains", "value": "bootstatuspolicy"},
-                                {"field": "process.command_line", "op": "contains", "value": "ignoreallfailures"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "bcdedit",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "bootstatuspolicy",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "ignoreallfailures",
+                                },
                             ],
                         ],
                     },
@@ -1113,7 +1220,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "groups": [
                             [
                                 {"field": "raw.message", "op": "contains", "value": "bcdedit"},
-                                {"field": "raw.message", "op": "contains", "value": "recoveryenabled"},
+                                {
+                                    "field": "raw.message",
+                                    "op": "contains",
+                                    "value": "recoveryenabled",
+                                },
                             ],
                         ],
                     },
@@ -1140,14 +1251,38 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wbadmin"},
-                                {"field": "process.command_line", "op": "contains", "value": "delete"},
-                                {"field": "process.command_line", "op": "contains", "value": "catalog"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wbadmin",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "delete",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "catalog",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wbadmin"},
-                                {"field": "process.command_line", "op": "contains", "value": "delete"},
-                                {"field": "process.command_line", "op": "contains", "value": "backup"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wbadmin",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "delete",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "backup",
+                                },
                             ],
                         ],
                     },
@@ -1184,7 +1319,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\cipher.exe"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\cipher.exe",
+                                },
                                 {"field": "process.command_line", "op": "contains", "value": "/w:"},
                             ],
                         ],
@@ -1205,11 +1344,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1561.001"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  DEFENSE EVASION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Defense Evasion - Windows Firewall Disabled via netsh",
         "description": (
@@ -1226,13 +1363,33 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "netsh"},
-                                {"field": "process.command_line", "op": "contains", "value": "firewall"},
-                                {"field": "process.command_line", "op": "contains", "value": "state off"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "netsh",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "firewall",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "state off",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "netsh"},
-                                {"field": "process.command_line", "op": "contains", "value": "advfirewall"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "netsh",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "advfirewall",
+                                },
                                 {"field": "process.command_line", "op": "contains", "value": "off"},
                             ],
                         ],
@@ -1269,12 +1426,36 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "process.command_line", "op": "contains", "value": "amsiInitFailed"},
-                            {"field": "process.command_line", "op": "contains", "value": "AmsiScanBuffer"},
-                            {"field": "process.command_line", "op": "contains", "value": "amsiContext"},
-                            {"field": "process.command_line", "op": "contains", "value": "AmsiUtils"},
-                            {"field": "process.command_line", "op": "contains", "value": "DisableScriptBlockLogging"},
-                            {"field": "process.command_line", "op": "contains", "value": "EnableScriptBlockLogging"},
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "amsiInitFailed",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "AmsiScanBuffer",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "amsiContext",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "AmsiUtils",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "DisableScriptBlockLogging",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "EnableScriptBlockLogging",
+                            },
                         ],
                     },
                     {
@@ -1283,7 +1464,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                             {"field": "raw.message", "op": "contains", "value": "amsiInitFailed"},
                             {"field": "raw.message", "op": "contains", "value": "AmsiScanBuffer"},
                             {"field": "raw.message", "op": "contains", "value": "amsiContext"},
-                            {"field": "raw.message", "op": "contains", "value": "DisableScriptBlockLogging"},
+                            {
+                                "field": "raw.message",
+                                "op": "contains",
+                                "value": "DisableScriptBlockLogging",
+                            },
                         ],
                     },
                 ],
@@ -1309,12 +1494,28 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "logman"},
-                                {"field": "process.command_line", "op": "contains", "value": "stop"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "logman",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "stop",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "tracerpt"},
-                                {"field": "process.command_line", "op": "contains", "value": "-stop"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "tracerpt",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "-stop",
+                                },
                             ],
                         ],
                     },
@@ -1326,11 +1527,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1562.006"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  CREDENTIAL ACCESS
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Credential Access - SAM / NTDS Hive Copy Attempt",
         "description": (
@@ -1346,12 +1545,36 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "process.command_line", "op": "contains", "value": "\\System32\\config\\SAM"},
-                            {"field": "process.command_line", "op": "contains", "value": "\\System32\\config\\SYSTEM"},
-                            {"field": "process.command_line", "op": "contains", "value": "\\System32\\config\\SECURITY"},
-                            {"field": "process.command_line", "op": "contains", "value": "\\Windows\\NTDS\\NTDS.dit"},
-                            {"field": "process.command_line", "op": "contains", "value": "HKLM\\SAM"},
-                            {"field": "process.command_line", "op": "contains", "value": "HKLM\\SYSTEM"},
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "\\System32\\config\\SAM",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "\\System32\\config\\SYSTEM",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "\\System32\\config\\SECURITY",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "\\Windows\\NTDS\\NTDS.dit",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "HKLM\\SAM",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "HKLM\\SYSTEM",
+                            },
                         ],
                     },
                     {
@@ -1359,7 +1582,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "conditions": [
                             {"field": "raw.message", "op": "contains", "value": "\\config\\SAM"},
                             {"field": "raw.message", "op": "contains", "value": "NTDS.dit"},
-                            {"field": "raw.message", "op": "contains", "value": "HarddiskVolumeShadowCopy"},
+                            {
+                                "field": "raw.message",
+                                "op": "contains",
+                                "value": "HarddiskVolumeShadowCopy",
+                            },
                         ],
                     },
                 ],
@@ -1402,8 +1629,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\cmdkey.exe"},
-                                {"field": "process.command_line", "op": "contains", "value": "/list"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\cmdkey.exe",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "/list",
+                                },
                             ],
                         ],
                     },
@@ -1438,7 +1673,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "process.command_line", "op": "contains", "value": "lsadump::dcsync"},
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "lsadump::dcsync",
+                            },
                             {"field": "process.command_line", "op": "contains", "value": "dcsync"},
                         ],
                     },
@@ -1456,11 +1695,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1003.006"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  EXECUTION - LOLBins & LIVING-OFF-THE-LAND
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Execution - BITS Transfer Abuse via BITSAdmin",
         "description": (
@@ -1477,13 +1714,29 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\bitsadmin.exe"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\bitsadmin.exe",
+                                },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "/transfer"},
-                                        {"field": "process.command_line", "op": "contains", "value": "/create"},
-                                        {"field": "process.command_line", "op": "contains", "value": "/addfile"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/transfer",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/create",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/addfile",
+                                        },
                                     ],
                                 },
                             ],
@@ -1524,17 +1777,41 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.executable", "op": "endswith", "value": "\\csc.exe"},
-                                        {"field": "process.executable", "op": "endswith", "value": "\\vbc.exe"},
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\csc.exe",
+                                        },
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\vbc.exe",
+                                        },
                                     ],
                                 },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "\\AppData\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Temp\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\tmp\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Users\\Public\\"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\AppData\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Temp\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\tmp\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Users\\Public\\",
+                                        },
                                     ],
                                 },
                             ],
@@ -1547,8 +1824,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "raw.message", "op": "contains", "value": "csc.exe"},
-                                        {"field": "raw.message", "op": "contains", "value": "vbc.exe"},
+                                        {
+                                            "field": "raw.message",
+                                            "op": "contains",
+                                            "value": "csc.exe",
+                                        },
+                                        {
+                                            "field": "raw.message",
+                                            "op": "contains",
+                                            "value": "vbc.exe",
+                                        },
                                     ],
                                 },
                                 {"field": "raw.message", "op": "contains", "value": "\\Temp\\"},
@@ -1578,14 +1863,34 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\InstallUtil.exe"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\InstallUtil.exe",
+                                },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Temp\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\AppData\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "/logfile="},
-                                        {"field": "process.command_line", "op": "contains", "value": "/LogToConsole="},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Temp\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\AppData\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/logfile=",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/LogToConsole=",
+                                        },
                                     ],
                                 },
                             ],
@@ -1623,13 +1928,29 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\cmstp.exe"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\cmstp.exe",
+                                },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "/s"},
-                                        {"field": "process.command_line", "op": "contains", "value": "/au"},
-                                        {"field": "process.command_line", "op": "contains", "value": ".inf"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/s",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/au",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": ".inf",
+                                        },
                                     ],
                                 },
                             ],
@@ -1667,8 +1988,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\odbcconf.exe"},
-                                {"field": "process.command_line", "op": "contains", "value": "regsvr"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\odbcconf.exe",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "regsvr",
+                                },
                             ],
                         ],
                     },
@@ -1688,11 +2017,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1218.008"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  PRIVILEGE ESCALATION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Privilege Escalation - AlwaysInstallElevated MSI Policy",
         "description": (
@@ -1710,7 +2037,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "groups": [
                             [
                                 {"field": "raw.windows_event_id", "op": "eq", "value": "4657"},
-                                {"field": "raw.message", "op": "contains", "value": "AlwaysInstallElevated"},
+                                {
+                                    "field": "raw.message",
+                                    "op": "contains",
+                                    "value": "AlwaysInstallElevated",
+                                },
                             ],
                         ],
                     },
@@ -1718,7 +2049,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "AlwaysInstallElevated"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "AlwaysInstallElevated",
+                                },
                             ],
                         ],
                     },
@@ -1754,9 +2089,21 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+SYSTEM\b"},
                     {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+DWM-\d+"},
                     {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+UMFD-\d+"},
-                    {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+LOCAL SERVICE"},
-                    {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+NETWORK SERVICE"},
-                    {"field": "raw.message", "op": "regex", "value": r"Account Name:\s+Window Manager"},
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Account Name:\s+LOCAL SERVICE",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Account Name:\s+NETWORK SERVICE",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Account Name:\s+Window Manager",
+                    },
                 ],
             },
         ],
@@ -1764,11 +2111,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1134"],
         "suppression_window_secs": 3600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  DISCOVERY & RECONNAISSANCE
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Discovery - Active Directory Enumeration Tools",
         "description": (
@@ -1784,16 +2129,52 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "process.executable", "op": "contains", "value": "BloodHound"},
-                            {"field": "process.executable", "op": "contains", "value": "SharpHound"},
+                            {
+                                "field": "process.executable",
+                                "op": "contains",
+                                "value": "BloodHound",
+                            },
+                            {
+                                "field": "process.executable",
+                                "op": "contains",
+                                "value": "SharpHound",
+                            },
                             {"field": "process.executable", "op": "contains", "value": "adfind"},
-                            {"field": "process.command_line", "op": "contains", "value": "BloodHound"},
-                            {"field": "process.command_line", "op": "contains", "value": "SharpHound"},
-                            {"field": "process.command_line", "op": "contains", "value": "Get-ADUser"},
-                            {"field": "process.command_line", "op": "contains", "value": "Get-ADComputer"},
-                            {"field": "process.command_line", "op": "contains", "value": "Get-ADGroup"},
-                            {"field": "process.command_line", "op": "contains", "value": "Invoke-ACLScanner"},
-                            {"field": "process.command_line", "op": "contains", "value": "Find-LocalAdminAccess"},
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "BloodHound",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "SharpHound",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Get-ADUser",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Get-ADComputer",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Get-ADGroup",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Invoke-ACLScanner",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Find-LocalAdminAccess",
+                            },
                         ],
                     },
                     {
@@ -1827,12 +2208,28 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wmic"},
-                                {"field": "process.command_line", "op": "contains", "value": "AntiVirusProduct"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wmic",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "AntiVirusProduct",
+                                },
                             ],
                             [
-                                {"field": "process.command_line", "op": "contains", "value": "wmic"},
-                                {"field": "process.command_line", "op": "contains", "value": "FirewallProduct"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "wmic",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "contains",
+                                    "value": "FirewallProduct",
+                                },
                             ],
                         ],
                     },
@@ -1840,7 +2237,11 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "raw.message", "op": "contains", "value": "AntiVirusProduct"},
+                                {
+                                    "field": "raw.message",
+                                    "op": "contains",
+                                    "value": "AntiVirusProduct",
+                                },
                                 {"field": "raw.message", "op": "contains", "value": "wmic"},
                             ],
                         ],
@@ -1852,11 +2253,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1518.001"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  EXFILTRATION
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Exfiltration - Archive Tool Compressing User Data",
         "description": (
@@ -1876,20 +2275,56 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.executable", "op": "endswith", "value": "\\7z.exe"},
-                                        {"field": "process.executable", "op": "endswith", "value": "\\7za.exe"},
-                                        {"field": "process.executable", "op": "endswith", "value": "\\rar.exe"},
-                                        {"field": "process.executable", "op": "endswith", "value": "\\winzip32.exe"},
-                                        {"field": "process.executable", "op": "endswith", "value": "\\winrar.exe"},
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\7z.exe",
+                                        },
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\7za.exe",
+                                        },
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\rar.exe",
+                                        },
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\winzip32.exe",
+                                        },
+                                        {
+                                            "field": "process.executable",
+                                            "op": "endswith",
+                                            "value": "\\winrar.exe",
+                                        },
                                     ],
                                 },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Users\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Documents\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Desktop\\"},
-                                        {"field": "process.command_line", "op": "contains", "value": "\\Downloads\\"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Users\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Documents\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Desktop\\",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "\\Downloads\\",
+                                        },
                                     ],
                                 },
                             ],
@@ -1918,12 +2353,24 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "process.executable", "op": "endswith", "value": "\\ftp.exe"},
+                                {
+                                    "field": "process.executable",
+                                    "op": "endswith",
+                                    "value": "\\ftp.exe",
+                                },
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "-s:"},
-                                        {"field": "process.command_line", "op": "contains", "value": "/s:"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "-s:",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "/s:",
+                                        },
                                     ],
                                 },
                             ],
@@ -1945,11 +2392,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1048.003"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  PERSISTENCE
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Persistence - Startup Folder File Drop",
         "description": (
@@ -1965,15 +2410,31 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "file.path", "op": "contains", "value": "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\"},
-                            {"field": "file.path", "op": "contains", "value": "\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp\\"},
+                            {
+                                "field": "file.path",
+                                "op": "contains",
+                                "value": "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\",
+                            },
+                            {
+                                "field": "file.path",
+                                "op": "contains",
+                                "value": "\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp\\",
+                            },
                         ],
                     },
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "raw.message", "op": "contains", "value": "\\Programs\\Startup\\"},
-                            {"field": "raw.message", "op": "contains", "value": "\\Programs\\StartUp\\"},
+                            {
+                                "field": "raw.message",
+                                "op": "contains",
+                                "value": "\\Programs\\Startup\\",
+                            },
+                            {
+                                "field": "raw.message",
+                                "op": "contains",
+                                "value": "\\Programs\\StartUp\\",
+                            },
                         ],
                     },
                 ],
@@ -2009,8 +2470,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                         "op": "any_of_groups",
                         "groups": [
                             [
-                                {"field": "raw.message", "op": "contains", "value": "HKCU\\Software\\Classes\\CLSID"},
-                                {"field": "raw.message", "op": "contains", "value": "InprocServer32"},
+                                {
+                                    "field": "raw.message",
+                                    "op": "contains",
+                                    "value": "HKCU\\Software\\Classes\\CLSID",
+                                },
+                                {
+                                    "field": "raw.message",
+                                    "op": "contains",
+                                    "value": "InprocServer32",
+                                },
                             ],
                         ],
                     },
@@ -2046,11 +2515,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1543.003"],
         "suppression_window_secs": 300,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  LATERAL MOVEMENT
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "Lateral Movement - Pass-the-Ticket Kerberos Anomaly (Event 4769)",
         "description": (
@@ -2093,11 +2560,23 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 {
                                     "op": "any_of",
                                     "conditions": [
-                                        {"field": "process.command_line", "op": "contains", "value": "mmc.exe"},
-                                        {"field": "process.command_line", "op": "contains", "value": "dcomcnfg"},
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "mmc.exe",
+                                        },
+                                        {
+                                            "field": "process.command_line",
+                                            "op": "contains",
+                                            "value": "dcomcnfg",
+                                        },
                                     ],
                                 },
-                                {"field": "process.command_line", "op": "regex", "value": r"\\\\.+\\"},
+                                {
+                                    "field": "process.command_line",
+                                    "op": "regex",
+                                    "value": r"\\\\.+\\",
+                                },
                             ],
                         ],
                     },
@@ -2108,11 +2587,9 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "mitre_techniques": ["T1021.003"],
         "suppression_window_secs": 600,
     },
-
     # ═══════════════════════════════════════════════════════════════════════
     #  COMMAND AND CONTROL
     # ═══════════════════════════════════════════════════════════════════════
-
     {
         "name": "C2 - LOLBin Initiating Outbound High Port Connection",
         "description": (
@@ -2189,10 +2666,26 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
-                            {"field": "process.command_line", "op": "contains", "value": "TCPClient"},
-                            {"field": "process.command_line", "op": "contains", "value": "Net.Sockets"},
-                            {"field": "process.command_line", "op": "contains", "value": "NetworkStream"},
-                            {"field": "process.command_line", "op": "contains", "value": "StreamReader"},
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "TCPClient",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Net.Sockets",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "NetworkStream",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "StreamReader",
+                            },
                         ],
                     },
                     {
@@ -2224,6 +2717,7 @@ assert _RULE_COUNT == 80, (  # noqa: S101
 # Seeding function
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def seed_default_rules(db: AsyncSession, tenant_id: UUID) -> int:
     """
     Bulk-inserts all default detection rules for a newly created tenant.
@@ -2245,7 +2739,7 @@ async def seed_default_rules(db: AsyncSession, tenant_id: UUID) -> int:
             mitre_tactics=spec.get("mitre_tactics", []),
             mitre_techniques=spec.get("mitre_techniques", []),
             suppression_window_secs=spec.get("suppression_window_secs", 300),
-            created_by_id=None,   # system-seeded; no human actor
+            created_by_id=None,  # system-seeded; no human actor
             updated_by_id=None,
         )
         db.add(rule)

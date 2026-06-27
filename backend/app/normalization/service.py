@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -18,7 +18,6 @@ logger = structlog.get_logger(__name__)
 
 
 class NormalizationService:
-
     @staticmethod
     def normalize(message: dict[str, Any]) -> NormalizedEvent:
         return map_stream_message_to_normalized(message)
@@ -55,7 +54,7 @@ class NormalizationService:
             raw_id=normalized.event_id or None,
             category=category,
             severity=normalized.severity,
-            event_timestamp=normalized.timestamp or datetime.now(tz=timezone.utc),
+            event_timestamp=normalized.timestamp or datetime.now(tz=UTC),
             ingested_at=normalized.ingested_at,
             host_name=normalized.hostname or None,
             source_ip=normalized.source_ip,

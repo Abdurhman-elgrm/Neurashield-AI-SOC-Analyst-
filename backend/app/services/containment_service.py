@@ -10,14 +10,13 @@ Containment states:
 All state transitions are logged to response_actions for full audit trail.
 WebSocket broadcast is sent on every state change.
 """
+
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent, ContainmentState
@@ -28,7 +27,6 @@ logger = structlog.get_logger(__name__)
 
 
 class ContainmentService:
-
     @staticmethod
     async def quarantine(
         db: AsyncSession,
@@ -133,7 +131,7 @@ class ContainmentService:
         else:
             agent.containment_state = new_state
             agent.containment_reason = reason
-            agent.contained_at = datetime.now(tz=timezone.utc)
+            agent.contained_at = datetime.now(tz=UTC)
             agent.contained_by_id = actor_id
 
         action = ResponseAction(
@@ -159,6 +157,7 @@ class ContainmentService:
 
         # Non-blocking WebSocket broadcast
         from app.core.utils import create_task_safe
+
         create_task_safe(
             _broadcast_containment_change(tenant_id, agent, new_state, reason),
             name=f"containment_ws_{agent_id}",
@@ -183,19 +182,22 @@ async def _broadcast_containment_change(
 ) -> None:
     try:
         import json
-        from app.core.redis import redis_manager, TenantRedisClient
+
+        from app.core.redis import TenantRedisClient, redis_manager
         from app.pipeline import stream_names
 
         redis = redis_manager.get_client()
         ws_client = TenantRedisClient(redis, str(tenant_id), "pipeline")
-        payload = json.dumps({
-            "type": "agent.containment_changed",
-            "agent_id": str(agent.id),
-            "hostname": agent.hostname,
-            "containment_state": new_state.value,
-            "reason": reason,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        })
+        payload = json.dumps(
+            {
+                "type": "agent.containment_changed",
+                "agent_id": str(agent.id),
+                "hostname": agent.hostname,
+                "containment_state": new_state.value,
+                "reason": reason,
+                "timestamp": datetime.now(tz=UTC).isoformat(),
+            }
+        )
         await ws_client.publish(stream_names.ALERTS_PUBSUB_CHANNEL, payload)
     except Exception:
         logger.warning("containment_ws_broadcast_failed", exc_info=True)

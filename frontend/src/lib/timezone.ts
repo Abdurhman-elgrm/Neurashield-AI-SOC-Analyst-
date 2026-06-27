@@ -8,7 +8,7 @@ export function getUserTimezone(): string {
       const tz = parsed?.state?.user?.timezone
       if (tz && tz !== 'UTC') return tz
     }
-  } catch {}
+  } catch { /* ignore parse errors */ }
   return Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 

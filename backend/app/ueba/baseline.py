@@ -17,6 +17,7 @@ After-hours configuration:
 
   Future: per-tenant timezone offset stored in tenant settings table.
 """
+
 from __future__ import annotations
 
 import os
@@ -32,8 +33,8 @@ _TTL_30D = 86400 * 30
 _TTL_7D = 86400 * 7
 
 # Configurable business hours (UTC). Defaults cover UTC+2/+3 timezones.
-_BIZ_START = int(os.getenv("UEBA_BUSINESS_START_UTC", "5"))   # 05:00 UTC
-_BIZ_END   = int(os.getenv("UEBA_BUSINESS_END_UTC",   "23"))  # 23:00 UTC
+_BIZ_START = int(os.getenv("UEBA_BUSINESS_START_UTC", "5"))  # 05:00 UTC
+_BIZ_END = int(os.getenv("UEBA_BUSINESS_END_UTC", "23"))  # 23:00 UTC
 
 
 @dataclass
@@ -45,7 +46,6 @@ class BaselineFlags:
 
 
 class BehavioralBaseline:
-
     def __init__(self, redis: Redis, tenant_id: str) -> None:
         self._c = TenantRedisClient(redis, tenant_id, "ueba")
 
@@ -92,9 +92,7 @@ class BehavioralBaseline:
             "ts": float(raw["ts"]),
         }
 
-    async def set_last_location(
-        self, username: str, lat: float, lon: float
-    ) -> None:
+    async def set_last_location(self, username: str, lat: float, lon: float) -> None:
         key = f"user:{username}:last_location"
         await self._c.hset(key, {"lat": str(lat), "lon": str(lon), "ts": str(time.time())})
         await self._c.expire(key, _TTL_7D)

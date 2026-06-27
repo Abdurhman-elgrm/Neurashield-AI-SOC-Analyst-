@@ -9,7 +9,6 @@ and confidence band from all available investigation signals.
 All scoring is additive with explicit factor weights. Deterministic.
 """
 
-from typing import Any
 
 from app.investigation.schemas import (
     AttackTimeline,
@@ -20,23 +19,23 @@ from app.investigation.schemas import (
 
 # ─── Scoring factor weights ────────────────────────────────────────────────────
 
-_WEIGHT_CORR_RULE_BASE    = 5.0   # per correlated rule (from Phase 3.2)
-_WEIGHT_BEHAVIOR_BASE     = 8.0   # per detected behavior
-_WEIGHT_BEHAVIOR_CONF     = 5.0   # × behavior confidence bonus
-_WEIGHT_CROSS_HOST        = 10.0  # same user on 2+ hosts
-_WEIGHT_EXTRA_HOST        = 4.0   # each additional host beyond first 2
-_WEIGHT_PERSISTENCE       = 12.0  # persistence behavior present
-_WEIGHT_CREDENTIAL        = 10.0  # credential access behavior
-_WEIGHT_LATERAL           = 10.0  # lateral movement behavior
-_WEIGHT_SUSPICIOUS_PROC   = 6.0   # per suspicious process
-_WEIGHT_SUSPICIOUS_CMD    = 4.0   # per suspicious command
-_WEIGHT_CHAIN_DEPTH       = 2.0   # per hop in process tree depth
-_WEIGHT_HIGH_SEV_EVENT    = 1.5   # per high-severity (≥7) event
+_WEIGHT_CORR_RULE_BASE = 5.0  # per correlated rule (from Phase 3.2)
+_WEIGHT_BEHAVIOR_BASE = 8.0  # per detected behavior
+_WEIGHT_BEHAVIOR_CONF = 5.0  # × behavior confidence bonus
+_WEIGHT_CROSS_HOST = 10.0  # same user on 2+ hosts
+_WEIGHT_EXTRA_HOST = 4.0  # each additional host beyond first 2
+_WEIGHT_PERSISTENCE = 12.0  # persistence behavior present
+_WEIGHT_CREDENTIAL = 10.0  # credential access behavior
+_WEIGHT_LATERAL = 10.0  # lateral movement behavior
+_WEIGHT_SUSPICIOUS_PROC = 6.0  # per suspicious process
+_WEIGHT_SUSPICIOUS_CMD = 4.0  # per suspicious command
+_WEIGHT_CHAIN_DEPTH = 2.0  # per hop in process tree depth
+_WEIGHT_HIGH_SEV_EVENT = 1.5  # per high-severity (≥7) event
 
-_MAX_RULE_CONTRIBUTION    = 20.0
+_MAX_RULE_CONTRIBUTION = 20.0
 _MAX_BEHAVIOR_CONTRIBUTION = 40.0
-_MAX_PROC_CONTRIBUTION    = 12.0
-_MAX_CMD_CONTRIBUTION     = 8.0
+_MAX_PROC_CONTRIBUTION = 12.0
+_MAX_CMD_CONTRIBUTION = 8.0
 
 # TP/FP confidence mapping
 _TP_BY_SCORE: list[tuple[int, float]] = [
@@ -45,7 +44,7 @@ _TP_BY_SCORE: list[tuple[int, float]] = [
     (50, 0.55),
     (30, 0.35),
     (10, 0.15),
-    (0,  0.05),
+    (0, 0.05),
 ]
 
 
@@ -103,9 +102,7 @@ class InvestigationScorer:
         if timeline.distinct_hosts >= 2:
             cross = _WEIGHT_CROSS_HOST + (timeline.distinct_hosts - 2) * _WEIGHT_EXTRA_HOST
             factors["cross_host_activity"] = cross
-            breakdown.append(
-                f"{timeline.distinct_hosts} distinct host(s) (+{cross:.0f})"
-            )
+            breakdown.append(f"{timeline.distinct_hosts} distinct host(s) (+{cross:.0f})")
 
         # 5. Suspicious processes & commands
         proc_contrib = min(
@@ -135,15 +132,11 @@ class InvestigationScorer:
             breakdown.append(f"Process tree depth {tree_depth} (+{chain_contrib:.0f})")
 
         # 7. High-severity events
-        high_sev = sum(
-            1 for e in timeline.entries if e.severity >= 7
-        )
+        high_sev = sum(1 for e in timeline.entries if e.severity >= 7)
         sev_contrib = min(high_sev * _WEIGHT_HIGH_SEV_EVENT, 15.0)
         if sev_contrib:
             factors["high_severity_events"] = sev_contrib
-            breakdown.append(
-                f"{high_sev} high-severity event(s) (+{sev_contrib:.0f})"
-            )
+            breakdown.append(f"{high_sev} high-severity event(s) (+{sev_contrib:.0f})")
 
         raw_score = sum(factors.values())
         threat_score = int(min(raw_score, 100))
@@ -183,6 +176,4 @@ def score_investigation(
     correlation_score: int = 0,
     matched_rules: list[str] | None = None,
 ) -> InvestigationScore:
-    return _default_scorer.score(
-        timeline, behaviors, context, correlation_score, matched_rules
-    )
+    return _default_scorer.score(timeline, behaviors, context, correlation_score, matched_rules)

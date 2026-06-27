@@ -3,15 +3,18 @@ Email service — Resend (primary) with SMTP fallback.
 Resend uses HTTPS so it works on Railway without port-blocking issues.
 Never raises — email failure must never block business logic.
 """
+
 from __future__ import annotations
 
 import structlog
+
 from app.core.config import get_settings
 
 log = structlog.get_logger(__name__)
 
 
 # ─── HTML wrapper ─────────────────────────────────────────────────────────────
+
 
 def _html_wrapper(title: str, content: str, cta_url: str = "", cta_text: str = "") -> str:
     cta_block = ""
@@ -74,6 +77,7 @@ def _html_wrapper(title: str, content: str, cta_url: str = "", cta_text: str = "
 
 # ─── Internal send helper ─────────────────────────────────────────────────────
 
+
 async def _send_email(
     to_email: str,
     subject: str,
@@ -98,16 +102,17 @@ async def _send_email(
     # ── 1. SMTP port 465 (Gmail SSL — authenticated, inbox delivery) ──────────
     if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
         try:
-            import aiosmtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
+
+            import aiosmtplib
 
             smtp_port = int(settings.SMTP_PORT)
             from_addr = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"]    = f"NEURASHIELD SOC <{from_addr}>"
-            msg["To"]      = to_email
+            msg["From"] = f"NEURASHIELD SOC <{from_addr}>"
+            msg["To"] = to_email
             msg.attach(MIMEText(body_text, "plain", "utf-8"))
             if body_html:
                 msg.attach(MIMEText(body_html, "html", "utf-8"))
@@ -132,20 +137,31 @@ async def _send_email(
     if settings.RESEND_API_KEY:
         try:
             import httpx as _httpx
+
             from_addr = settings.RESEND_FROM_EMAIL or "NEURASHIELD <onboarding@resend.dev>"
-            payload: dict = {"from": from_addr, "to": [to_email], "subject": subject, "text": body_text}
+            payload: dict = {
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "text": body_text,
+            }
             if body_html:
                 payload["html"] = body_html
             async with _httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(
                     "https://api.resend.com/emails",
-                    headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}", "Content-Type": "application/json"},
+                    headers={
+                        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
                     json=payload,
                 )
             if resp.status_code in (200, 201):
                 log.info("email_sent_resend", to=to_email, subject=subject[:60])
                 return True
-            log.warning("email_resend_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
+            log.warning(
+                "email_resend_failed", to=to_email, status=resp.status_code, body=resp.text[:300]
+            )
         except Exception as exc:
             log.warning("email_resend_error", to=to_email, error=str(exc))
             # fall through to Brevo
@@ -154,11 +170,12 @@ async def _send_email(
     if settings.BREVO_API_KEY:
         try:
             import httpx as _httpx
+
             from_email = settings.BREVO_FROM_EMAIL or settings.SMTP_FROM_EMAIL or settings.SMTP_USER
             payload: dict = {
-                "sender":      {"name": "NEURASHIELD SOC", "email": from_email},
-                "to":          [{"email": to_email}],
-                "subject":     subject,
+                "sender": {"name": "NEURASHIELD SOC", "email": from_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
                 "textContent": body_text,
             }
             if body_html:
@@ -172,7 +189,9 @@ async def _send_email(
             if resp.status_code in (200, 201):
                 log.info("email_sent_brevo", to=to_email, subject=subject[:60])
                 return True
-            log.warning("email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300])
+            log.warning(
+                "email_brevo_failed", to=to_email, status=resp.status_code, body=resp.text[:300]
+            )
         except Exception as exc:
             log.warning("email_brevo_error", to=to_email, error=str(exc))
 
@@ -181,6 +200,7 @@ async def _send_email(
 
 
 # ─── Public email functions ───────────────────────────────────────────────────
+
 
 async def send_verification_email(
     to_email: str,
@@ -295,16 +315,15 @@ async def send_alert_email(
     severity_upper = severity.upper()
     sev_colors: dict[str, tuple[str, str]] = {
         "CRITICAL": ("#EF4444", "rgba(239,68,68,0.15)"),
-        "HIGH":     ("#F97316", "rgba(249,115,22,0.15)"),
-        "MEDIUM":   ("#F59E0B", "rgba(245,158,11,0.15)"),
-        "LOW":      ("#3B82F6", "rgba(59,130,246,0.15)"),
+        "HIGH": ("#F97316", "rgba(249,115,22,0.15)"),
+        "MEDIUM": ("#F59E0B", "rgba(245,158,11,0.15)"),
+        "LOW": ("#3B82F6", "rgba(59,130,246,0.15)"),
     }
     sev_color, sev_bg = sev_colors.get(severity_upper, ("#6366F1", "rgba(99,102,241,0.15)"))
 
     subject = f"[{severity_upper}] Security Alert: {alert_title}"
     body_text = (
-        f"Security alert on {source_host or 'unknown host'}: {alert_title}\n"
-        f"View: {alert_url}"
+        f"Security alert on {source_host or 'unknown host'}: {alert_title}\nView: {alert_url}"
     )
 
     rows: list[tuple[str, str]] = []
@@ -315,12 +334,15 @@ async def send_alert_email(
     if recommended_action:
         rows.append(("Recommended Action", recommended_action))
 
-    rows_html = "".join(f"""
+    rows_html = "".join(
+        f"""
     <div style="display:flex;justify-content:space-between;
                 padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
       <span style="color:#5C6373;font-size:12px;">{k}</span>
       <span style="color:#F5F7FA;font-size:12px;font-weight:500;">{v}</span>
-    </div>""" for k, v in rows)
+    </div>"""
+        for k, v in rows
+    )
 
     content_html = f"""
 <div style="display:inline-block;padding:4px 12px;border-radius:4px;
@@ -444,9 +466,9 @@ async def send_investigation_email(
     subject = f"New Investigation: {investigation_title}"
 
     verdict_map = {
-        "true_positive":       ("Likely True Positive",  "#EF4444", "rgba(239,68,68,0.12)"),
-        "false_positive":      ("Likely False Positive",  "#10B981", "rgba(16,185,129,0.12)"),
-        "needs_investigation": ("Needs Investigation",    "#F59E0B", "rgba(245,158,11,0.12)"),
+        "true_positive": ("Likely True Positive", "#EF4444", "rgba(239,68,68,0.12)"),
+        "false_positive": ("Likely False Positive", "#10B981", "rgba(16,185,129,0.12)"),
+        "needs_investigation": ("Needs Investigation", "#F59E0B", "rgba(245,158,11,0.12)"),
     }
 
     verdict_html = ""

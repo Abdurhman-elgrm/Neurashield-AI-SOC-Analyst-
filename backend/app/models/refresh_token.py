@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
 
@@ -19,9 +19,7 @@ class RefreshToken(Base, TimestampMixin):
 
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -32,12 +30,10 @@ class RefreshToken(Base, TimestampMixin):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
-        Index("idx_refresh_token_user_id", "user_id"),
-    )
+    __table_args__ = (Index("idx_refresh_token_user_id", "user_id"),)
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    user: Mapped["User"] = relationship(  # type: ignore[name-defined]
+    user: Mapped[User] = relationship(  # type: ignore[name-defined]
         "User",
         back_populates="refresh_tokens",
         lazy="noload",
@@ -45,13 +41,11 @@ class RefreshToken(Base, TimestampMixin):
 
     @property
     def is_valid(self) -> bool:
-        from datetime import timezone
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         return self.revoked_at is None and self.expires_at > now
 
     def revoke(self) -> None:
-        from datetime import timezone
-        self.revoked_at = datetime.now(tz=timezone.utc)
+        self.revoked_at = datetime.now(tz=UTC)
 
     def __repr__(self) -> str:
         return f"<RefreshToken id={self.id} user={self.user_id} jti={self.jti}>"

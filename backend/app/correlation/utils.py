@@ -5,6 +5,7 @@ All functions are stateless and allocation-minimal.  Regex patterns are
 pre-compiled at module load time so the hot path (per-event) pays no
 compilation cost.  No recursion anywhere in this module.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,10 +16,10 @@ from typing import Any
 # These are fixed constants — changing them invalidates all stored correlation
 # IDs across the entire event history.
 
-_NS_CORRELATION  = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-_NS_SESSION      = uuid.UUID("b2c3d4e5-f6a7-8901-bcde-f12345678901")
+_NS_CORRELATION = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+_NS_SESSION = uuid.UUID("b2c3d4e5-f6a7-8901-bcde-f12345678901")
 _NS_PROCESS_TREE = uuid.UUID("c3d4e5f6-a7b8-9012-cdef-123456789012")
-_NS_EVENT_CHAIN  = uuid.UUID("d4e5f6a7-b8c9-0123-def0-234567890123")
+_NS_EVENT_CHAIN = uuid.UUID("d4e5f6a7-b8c9-0123-def0-234567890123")
 
 # Pre-compiled structural IP patterns — not RFC-complete but allocation-free.
 _IPV4_RE = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
@@ -26,6 +27,7 @@ _IPV6_RE = re.compile(r"^[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}$")
 
 
 # ─── Core helpers ─────────────────────────────────────────────────────────────
+
 
 def safe_get(data: Any, *keys: str, default: Any = None) -> Any:
     """
@@ -74,6 +76,7 @@ def deterministic_uuid(namespace: uuid.UUID, *parts: str) -> str:
 
 
 # ─── Correlation ID factories ─────────────────────────────────────────────────
+
 
 def make_correlation_id(
     tenant_id: str,
@@ -129,6 +132,7 @@ def make_event_chain_id(
 
 
 # ─── Parsing helpers ──────────────────────────────────────────────────────────
+
 
 def parse_sysmon_hashes(raw_hashes: Any) -> dict[str, str]:
     """

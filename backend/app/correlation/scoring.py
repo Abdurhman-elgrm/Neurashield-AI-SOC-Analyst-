@@ -7,19 +7,19 @@ score = min(sum(rule.weight for rule in matched_rules), 100)
 Confidence bands: high ≥ 75, medium ≥ 40, low < 40.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.correlation.matcher import MatchResult, RuleMatch
 
-
 # ─── Output ───────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class CorrelationScore:
-    score: int                        # 0–100
-    confidence: str                   # "low" | "medium" | "high"
-    matched_rules: list[RuleMatch]    # ordered by weight desc
-    reasons: list[str]                # human-readable explanations
+    score: int  # 0–100
+    confidence: str  # "low" | "medium" | "high"
+    matched_rules: list[RuleMatch]  # ordered by weight desc
+    reasons: list[str]  # human-readable explanations
 
     @property
     def is_significant(self) -> bool:
@@ -28,6 +28,7 @@ class CorrelationScore:
 
 
 # ─── Scorer ───────────────────────────────────────────────────────────────────
+
 
 class CorrelationScorer:
     """Converts a MatchResult into a CorrelationScore. No I/O."""
@@ -60,8 +61,7 @@ class CorrelationScorer:
 
     def _reason(self, match: RuleMatch) -> str:
         return (
-            f"{match.rule.name}: {match.event_count} events "
-            f"in window (weight={match.rule.weight})"
+            f"{match.rule.name}: {match.event_count} events in window (weight={match.rule.weight})"
         )
 
 

@@ -39,7 +39,9 @@ export const ticketingApi = {
     apiClient.post<Ticket>("/integrations/tickets", payload).then((r) => r.data),
 
   getTicketsForInvestigation: (invId: string) =>
-    apiClient.get<Ticket[]>(`/integrations/tickets?investigation_id=${invId}`).then((r) => r.data),
+    apiClient
+      .get<{ status: string; data: Ticket[] | null }>(`/integrations/tickets?investigation_id=${invId}`)
+      .then((r) => (Array.isArray(r.data?.data) ? r.data.data : Array.isArray(r.data) ? (r.data as unknown as Ticket[]) : [])),
 
   getConfig: (provider: TicketProvider) =>
     apiClient.get<TicketingConfig>(`/integrations/config/${provider}`).then((r) => r.data),

@@ -1,7 +1,8 @@
 """Integration tests for the installer token API."""
+
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -14,7 +15,6 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models.installer_token import InstallerToken, InstallerTokenStatus
 
-
 _BASE = f"{settings.API_PREFIX}/installer"
 
 
@@ -23,7 +23,11 @@ async def setup(client: AsyncClient) -> dict[str, Any]:
     """Register a user, create a tenant, return full auth headers."""
     reg = await client.post(
         f"{settings.API_PREFIX}/auth/register",
-        json={"email": "installer-owner@example.com", "password": "TestPass1!", "full_name": "Owner"},
+        json={
+            "email": "installer-owner@example.com",
+            "password": "TestPass1!",
+            "full_name": "Owner",
+        },
     )
     assert reg.status_code == 201
     token = reg.json()["data"]["access_token"]
@@ -54,12 +58,10 @@ def _gen_payload(machine_name: str = "WIN-SRV-01") -> dict:
 
 # ─── Generate token ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestGenerateToken:
-
-    async def test_generate_returns_201_with_raw_token(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_generate_returns_201_with_raw_token(self, client: AsyncClient, setup: dict):
         resp = await client.post(
             f"{_BASE}/generate-token",
             json=_gen_payload(),
@@ -131,9 +133,9 @@ class TestGenerateToken:
 
 # ─── Status check ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestTokenStatus:
-
     async def test_get_status_pending(self, client: AsyncClient, setup: dict):
         gen = await client.post(
             f"{_BASE}/generate-token",
@@ -153,9 +155,7 @@ class TestTokenStatus:
         assert data["id"] == token_id
         assert data["token_preview"].startswith("inst_")
 
-    async def test_get_status_nonexistent_returns_404(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_get_status_nonexistent_returns_404(self, client: AsyncClient, setup: dict):
         resp = await client.get(
             f"{_BASE}/token/{uuid4()}/status",
             headers=setup["headers"],
@@ -175,9 +175,8 @@ class TestTokenStatus:
             organization="Other Org",
             machine_name="OTHER-HOST",
             status=InstallerTokenStatus.PENDING,
-            expires_at=__import__("datetime").datetime.now(
-                tz=__import__("datetime").timezone.utc
-            ) + timedelta(hours=1),
+            expires_at=__import__("datetime").datetime.now(tz=__import__("datetime").timezone.utc)
+            + timedelta(hours=1),
         )
         db_session.add(token)
         await db_session.flush()
@@ -195,9 +194,9 @@ class TestTokenStatus:
 
 # ─── List tokens ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestListTokens:
-
     async def test_list_empty_initially(self, client: AsyncClient, setup: dict):
         resp = await client.get(f"{_BASE}/tokens", headers=setup["headers"])
         assert resp.status_code == 200
@@ -236,9 +235,7 @@ class TestListTokens:
         for t in resp.json()["data"]:
             assert t["status"] == "pending"
 
-    async def test_list_filter_unknown_status_returns_all(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_list_filter_unknown_status_returns_all(self, client: AsyncClient, setup: dict):
         await client.post(
             f"{_BASE}/generate-token",
             json=_gen_payload("UNKNOWN-FILTER-HOST"),
@@ -273,9 +270,9 @@ class TestListTokens:
 
 # ─── Revoke token ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestRevokeToken:
-
     async def test_revoke_pending_token(self, client: AsyncClient, setup: dict):
         gen = await client.post(
             f"{_BASE}/generate-token",
@@ -295,9 +292,7 @@ class TestRevokeToken:
         assert data["status"] == "revoked"
         assert data["revoked_at"] is not None
 
-    async def test_revoke_nonexistent_returns_404(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_revoke_nonexistent_returns_404(self, client: AsyncClient, setup: dict):
         resp = await client.post(
             f"{_BASE}/revoke/{uuid4()}",
             json={},
@@ -309,7 +304,7 @@ class TestRevokeToken:
         self, client: AsyncClient, db_session: AsyncSession, setup: dict
     ):
         """Attempting to revoke an already-active token must return 409 Conflict."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         raw = "inst_activetokentest000000000000"
         token = InstallerToken(
@@ -319,7 +314,7 @@ class TestRevokeToken:
             organization="Corp",
             machine_name="ACTIVE-HOST",
             status=InstallerTokenStatus.ACTIVE,
-            expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(tz=UTC) + timedelta(hours=1),
         )
         db_session.add(token)
         await db_session.flush()
@@ -331,9 +326,7 @@ class TestRevokeToken:
         )
         assert resp.status_code == 409
 
-    async def test_revoke_requires_agents_manage_permission(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_revoke_requires_agents_manage_permission(self, client: AsyncClient, setup: dict):
         gen = await client.post(
             f"{_BASE}/generate-token",
             json=_gen_payload("PERM-HOST"),
@@ -352,12 +345,10 @@ class TestRevokeToken:
 
 # ─── Token lifecycle (end-to-end state machine) ───────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestTokenLifecycle:
-
-    async def test_generate_then_check_then_revoke(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_generate_then_check_then_revoke(self, client: AsyncClient, setup: dict):
         # 1. Generate
         gen = await client.post(
             f"{_BASE}/generate-token",
@@ -391,9 +382,7 @@ class TestTokenLifecycle:
         )
         assert final.json()["data"]["status"] == "revoked"
 
-    async def test_revoked_token_not_revokable_again(
-        self, client: AsyncClient, setup: dict
-    ):
+    async def test_revoked_token_not_revokable_again(self, client: AsyncClient, setup: dict):
         gen = await client.post(
             f"{_BASE}/generate-token",
             json=_gen_payload("DOUBLE-REVOKE-HOST"),
@@ -417,14 +406,14 @@ class TestTokenLifecycle:
 
 # ─── Expiry (seeded expired tokens) ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestExpiredToken:
-
     async def test_expired_token_shows_expired_status(
         self, client: AsyncClient, db_session: AsyncSession, setup: dict
     ):
         """A token whose expires_at is in the past shows 'expired' in list/status."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         raw = "inst_expiredtoken0000000000000000"
         token = InstallerToken(
@@ -434,7 +423,7 @@ class TestExpiredToken:
             organization="Corp",
             machine_name="EXPIRED-HOST",
             status=InstallerTokenStatus.EXPIRED,
-            expires_at=datetime.now(tz=timezone.utc) - timedelta(hours=2),
+            expires_at=datetime.now(tz=UTC) - timedelta(hours=2),
         )
         db_session.add(token)
         await db_session.flush()
@@ -449,7 +438,7 @@ class TestExpiredToken:
     async def test_list_filter_expired_returns_only_expired(
         self, client: AsyncClient, db_session: AsyncSession, setup: dict
     ):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         raw = "inst_expiredlist0000000000000000"
         token = InstallerToken(
@@ -459,7 +448,7 @@ class TestExpiredToken:
             organization="Corp",
             machine_name="EXP-LIST-HOST",
             status=InstallerTokenStatus.EXPIRED,
-            expires_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(tz=UTC) - timedelta(hours=1),
         )
         db_session.add(token)
         await db_session.flush()
@@ -478,7 +467,7 @@ class TestExpiredToken:
         self, client: AsyncClient, db_session: AsyncSession, setup: dict
     ):
         """Expired tokens are terminal — revoke must return 409."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         raw = "inst_expirevoke00000000000000000"
         token = InstallerToken(
@@ -488,7 +477,7 @@ class TestExpiredToken:
             organization="Corp",
             machine_name="EXP-REVOKE-HOST",
             status=InstallerTokenStatus.EXPIRED,
-            expires_at=datetime.now(tz=timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(tz=UTC) - timedelta(hours=1),
         )
         db_session.add(token)
         await db_session.flush()

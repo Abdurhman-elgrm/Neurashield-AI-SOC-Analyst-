@@ -62,7 +62,7 @@ const PLACEHOLDER: Record<Channel, string> = {
 
 // Map backend ChannelResponse → frontend NotificationRule
 function adaptChannel(ch: ChannelResponse): NotificationRule {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const configRaw = (ch as any).config ?? {};
   let destination = "";
   if (ch.type === "slack" || ch.type === "teams") destination = configRaw.webhook_url ?? "";

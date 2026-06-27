@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from uuid import UUID
 
 import structlog
@@ -12,12 +13,9 @@ logger = structlog.get_logger(__name__)
 
 
 class UserService:
-
     @staticmethod
     async def get_by_id(db: AsyncSession, user_id: UUID) -> User | None:
-        result = await db.execute(
-            select(User).where(User.id == user_id, User.deleted_at.is_(None))
-        )
+        result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -40,9 +38,7 @@ class UserService:
     @staticmethod
     async def email_exists(db: AsyncSession, email: str) -> bool:
         result = await db.execute(
-            select(User.id).where(
-                User.email == email.lower(), User.deleted_at.is_(None)
-            )
+            select(User.id).where(User.email == email.lower(), User.deleted_at.is_(None))
         )
         return result.scalar_one_or_none() is not None
 
@@ -55,14 +51,15 @@ class UserService:
         email_verified: bool = False,
         email_verification_token: str | None = None,
     ) -> User:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         user = User(
             email=email.lower().strip(),
             password_hash=password_hash,
             full_name=full_name.strip(),
             email_verified=email_verified,
             email_verification_token=email_verification_token,
-            email_verification_sent_at=datetime.now(tz=timezone.utc) if email_verification_token else None,
+            email_verification_sent_at=datetime.now(tz=UTC) if email_verification_token else None,
         )
         db.add(user)
         await db.flush([user])

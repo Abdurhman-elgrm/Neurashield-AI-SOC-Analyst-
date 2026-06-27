@@ -2,26 +2,27 @@
 Combines behavioral baseline flags and attack-chain indicators into a
 unified anomaly score (0.0–1.0) using additive weighted scoring.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 _WEIGHTS: dict[str, float] = {
-    "after_hours":               0.20,
-    "new_source_ip":             0.20,
-    "new_process_on_host":       0.20,
-    "privileged_user":           0.10,
-    "impossible_travel":         0.80,
-    "threat_ip_confirmed":       0.35,
-    "brute_force":               0.40,
-    "brute_force_success":       0.70,
-    "lateral_movement":          0.60,
-    "lateral_movement_xdomain":  0.65,  # Pass-the-Hash / multi-account auth from same IP
-    "credential_stuffing":       0.50,
+    "after_hours": 0.20,
+    "new_source_ip": 0.20,
+    "new_process_on_host": 0.20,
+    "privileged_user": 0.10,
+    "impossible_travel": 0.80,
+    "threat_ip_confirmed": 0.35,
+    "brute_force": 0.40,
+    "brute_force_success": 0.70,
+    "lateral_movement": 0.60,
+    "lateral_movement_xdomain": 0.65,  # Pass-the-Hash / multi-account auth from same IP
+    "credential_stuffing": 0.50,
     # Insider threat indicators
-    "insider_offhours_data":     0.35,  # High data volume during off-hours
-    "insider_rapid_access":      0.30,  # Rapid access to many distinct resources
-    "insider_sensitive_access":  0.40,  # Access to sensitive/unusual resource types
+    "insider_offhours_data": 0.35,  # High data volume during off-hours
+    "insider_rapid_access": 0.30,  # Rapid access to many distinct resources
+    "insider_sensitive_access": 0.40,  # Access to sensitive/unusual resource types
 }
 
 _ANOMALY_THRESHOLD = 0.50

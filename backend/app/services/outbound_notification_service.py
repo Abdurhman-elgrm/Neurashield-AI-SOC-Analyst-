@@ -4,6 +4,7 @@ channels (Slack, Microsoft Teams, generic webhook, PagerDuty, email).
 
 Never raises — channel delivery failure must never block the detection pipeline.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +12,7 @@ import hmac
 import ipaddress
 import json
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -43,10 +44,11 @@ def _validate_webhook_url(url: str) -> None:
         # Not an IP address — check for explicit localhost variants
         hostname_lower = hostname.lower()
         if hostname_lower in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
-            raise ValueError(f"Webhook URL targets localhost: {hostname}")
+            raise ValueError(f"Webhook URL targets localhost: {hostname}") from None
         # Re-raise only if raised inside the try block (i.e., it IS an IP but invalid)
         if "Webhook URL targets" in str(exc):
             raise
+
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 _PAGERDUTY_SEVERITY_MAP = {
@@ -57,9 +59,9 @@ _PAGERDUTY_SEVERITY_MAP = {
 }
 _SEV_COLORS = {
     "critical": "#EF4444",
-    "high":     "#F97316",
-    "medium":   "#F59E0B",
-    "low":      "#3B82F6",
+    "high": "#F97316",
+    "medium": "#F59E0B",
+    "low": "#3B82F6",
 }
 
 
@@ -78,9 +80,10 @@ async def dispatch_alert_to_channels(
     Non-blocking — all failures are swallowed and logged.
     """
     try:
+        from sqlalchemy import select
+
         from app.core.database import database_manager
         from app.models.notification_channel import NotificationChannel
-        from sqlalchemy import select
 
         async with database_manager.session() as db:
             result = await db.execute(
@@ -106,7 +109,7 @@ async def dispatch_alert_to_channels(
                     severity=severity,
                     source_host=source_host,
                     mitre_techniques=mitre_techniques or [],
-                    created_at=created_at or datetime.now(tz=timezone.utc),
+                    created_at=created_at or datetime.now(tz=UTC),
                 )
             except Exception as exc:
                 log.warning(
@@ -122,6 +125,7 @@ async def dispatch_alert_to_channels(
 async def dispatch_test_notification(channel: object) -> bool:
     """Send a test message to a channel config. Returns True on success."""
     from app.models.notification_channel import NotificationChannel
+
     ch: NotificationChannel = channel  # type: ignore
     try:
         await _dispatch_to_channel(
@@ -132,7 +136,7 @@ async def dispatch_test_notification(channel: object) -> bool:
             severity="medium",
             source_host="test-host",
             mitre_techniques=["T1078"],
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
             is_test=True,
         )
         return True
@@ -157,11 +161,17 @@ async def _dispatch_to_channel(
     elif channel_type == "teams":
         await _send_teams(config, alert_id, title, severity, source_host, mitre_techniques, is_test)
     elif channel_type == "webhook":
-        await _send_webhook(config, alert_id, title, severity, source_host, mitre_techniques, created_at, is_test)
+        await _send_webhook(
+            config, alert_id, title, severity, source_host, mitre_techniques, created_at, is_test
+        )
     elif channel_type == "pagerduty":
-        await _send_pagerduty(config, alert_id, title, severity, source_host, mitre_techniques, is_test)
+        await _send_pagerduty(
+            config, alert_id, title, severity, source_host, mitre_techniques, is_test
+        )
     elif channel_type == "email":
-        await _send_email_channel(config, alert_id, title, severity, source_host, mitre_techniques, is_test)
+        await _send_email_channel(
+            config, alert_id, title, severity, source_host, mitre_techniques, is_test
+        )
 
 
 async def _send_slack(
@@ -174,6 +184,7 @@ async def _send_slack(
     is_test: bool,
 ) -> None:
     import httpx
+
     webhook_url = config["webhook_url"]
     _validate_webhook_url(webhook_url)
     sev_upper = severity.upper()
@@ -187,26 +198,30 @@ async def _send_slack(
         fields.append({"type": "mrkdwn", "text": f"*MITRE*\n{', '.join(mitre_techniques[:3])}"})
 
     payload = {
-        "attachments": [{
-            "color": color,
-            "blocks": [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*{prefix}Security Alert — {sev_upper}*\n{title}",
+        "attachments": [
+            {
+                "color": color,
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*{prefix}Security Alert — {sev_upper}*\n{title}",
+                        },
                     },
-                },
-                {
-                    "type": "section",
-                    "fields": fields,
-                },
-                {
-                    "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": f"Alert ID: `{alert_id}` · NEURASHIELD SOC"}],
-                },
-            ],
-        }]
+                    {
+                        "type": "section",
+                        "fields": fields,
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {"type": "mrkdwn", "text": f"Alert ID: `{alert_id}` · NEURASHIELD SOC"}
+                        ],
+                    },
+                ],
+            }
+        ]
     }
 
     async with httpx.AsyncClient(timeout=10) as client:
@@ -226,6 +241,7 @@ async def _send_teams(
     is_test: bool,
 ) -> None:
     import httpx
+
     webhook_url = config["webhook_url"]
     _validate_webhook_url(webhook_url)
     sev_upper = severity.upper()
@@ -244,11 +260,13 @@ async def _send_teams(
         "@context": "https://schema.org/extensions",
         "themeColor": color,
         "summary": f"{prefix}Security Alert — {sev_upper}: {title}",
-        "sections": [{
-            "activityTitle": f"{prefix}Security Alert — {sev_upper}",
-            "activityText": title,
-            "facts": facts,
-        }],
+        "sections": [
+            {
+                "activityTitle": f"{prefix}Security Alert — {sev_upper}",
+                "activityText": title,
+                "facts": facts,
+            }
+        ],
     }
 
     async with httpx.AsyncClient(timeout=10) as client:
@@ -269,6 +287,7 @@ async def _send_webhook(
     is_test: bool,
 ) -> None:
     import httpx
+
     url = config["url"]
     _validate_webhook_url(url)
     secret = config.get("secret", "")
@@ -308,6 +327,7 @@ async def _send_pagerduty(
     is_test: bool,
 ) -> None:
     import httpx
+
     integration_key = config["integration_key"]
     pd_severity = _PAGERDUTY_SEVERITY_MAP.get(severity.lower(), "error")
 
@@ -367,4 +387,9 @@ async def _send_email_channel(
             recommended_action=None,
             alert_url=alert_url,
         )
-    log.info("email_channel_notification_sent", alert_id=alert_id, recipient_count=len(recipients), is_test=is_test)
+    log.info(
+        "email_channel_notification_sent",
+        alert_id=alert_id,
+        recipient_count=len(recipients),
+        is_test=is_test,
+    )

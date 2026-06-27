@@ -1,4 +1,5 @@
 """Integration tests for detection rule CRUD."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -58,7 +59,6 @@ _THRESHOLD_RULE = {
 
 @pytest.mark.asyncio
 class TestDetectionRulesCRUD:
-
     async def test_create_pattern_rule(self, client: AsyncClient, setup: dict):
         resp = await client.post(
             f"{settings.API_PREFIX}/rules",
@@ -87,19 +87,25 @@ class TestDetectionRulesCRUD:
         assert resp.json()["data"] == []
 
     async def test_list_rules_after_creation(self, client: AsyncClient, setup: dict):
-        await client.post(f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"])
+        await client.post(
+            f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"]
+        )
         resp = await client.get(f"{settings.API_PREFIX}/rules", headers=setup["headers"])
         assert resp.json()["pagination"]["total"] == 1
 
     async def test_get_rule_by_id(self, client: AsyncClient, setup: dict):
-        create_resp = await client.post(f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"])
+        create_resp = await client.post(
+            f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"]
+        )
         rule_id = create_resp.json()["data"]["id"]
         resp = await client.get(f"{settings.API_PREFIX}/rules/{rule_id}", headers=setup["headers"])
         assert resp.status_code == 200
         assert resp.json()["data"]["id"] == rule_id
 
     async def test_update_rule_enabled_flag(self, client: AsyncClient, setup: dict):
-        create_resp = await client.post(f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"])
+        create_resp = await client.post(
+            f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"]
+        )
         rule_id = create_resp.json()["data"]["id"]
         resp = await client.patch(
             f"{settings.API_PREFIX}/rules/{rule_id}",
@@ -110,12 +116,18 @@ class TestDetectionRulesCRUD:
         assert resp.json()["data"]["enabled"] is False
 
     async def test_delete_rule_soft(self, client: AsyncClient, setup: dict):
-        create_resp = await client.post(f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"])
+        create_resp = await client.post(
+            f"{settings.API_PREFIX}/rules", json=_PATTERN_RULE, headers=setup["headers"]
+        )
         rule_id = create_resp.json()["data"]["id"]
-        del_resp = await client.delete(f"{settings.API_PREFIX}/rules/{rule_id}", headers=setup["headers"])
+        del_resp = await client.delete(
+            f"{settings.API_PREFIX}/rules/{rule_id}", headers=setup["headers"]
+        )
         assert del_resp.status_code == 200
         # After delete, should return 404
-        get_resp = await client.get(f"{settings.API_PREFIX}/rules/{rule_id}", headers=setup["headers"])
+        get_resp = await client.get(
+            f"{settings.API_PREFIX}/rules/{rule_id}", headers=setup["headers"]
+        )
         assert get_resp.status_code == 404
 
     async def test_invalid_rule_type_rejected(self, client: AsyncClient, setup: dict):

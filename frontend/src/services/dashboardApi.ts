@@ -18,7 +18,7 @@ interface TimeRangeParams {
 // ─── Backend → Frontend alert adapter ────────────────────────────────────────
 // The /alerts endpoint returns snake_case; LiveAlert expects camelCase.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function adaptLiveAlert(raw: Record<string, any>): LiveAlert {
   return {
     id:               String(raw.id ?? ""),
@@ -66,7 +66,7 @@ export interface AlertsFeedParams {
 }
 
 export async function getAlertsFeed(params: AlertsFeedParams): Promise<LiveAlert[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await apiClient.get<any>("/alerts", {
     params: {
       time_range: params.timeRange,
@@ -78,7 +78,7 @@ export async function getAlertsFeed(params: AlertsFeedParams): Promise<LiveAlert
   });
   // Backend returns PaginatedResponse: { data: [...items], pagination: {...} }
   const items: unknown[] = Array.isArray(data.data) ? data.data : [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   return items.map((raw) => adaptLiveAlert(raw as Record<string, any>));
 }
 

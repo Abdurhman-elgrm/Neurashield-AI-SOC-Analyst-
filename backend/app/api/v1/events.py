@@ -29,6 +29,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 # ─── Phase 3.6: Static-path routes MUST come before /{event_id} ──────────────
 
+
 @router.post("/search", response_model=EventSearchResponse)
 async def search_events(
     member: Annotated[object, require_permission(Permission.EVENTS_READ)],
@@ -36,6 +37,7 @@ async def search_events(
     req: EventSearchRequest = Body(...),
 ) -> EventSearchResponse:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     return await EventSearchService.search(db, m.tenant_id, req)
 
@@ -53,6 +55,7 @@ async def events_timeline(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> TimelineResponse:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     return await EventSearchService.timeline(
         db,
@@ -74,12 +77,13 @@ async def export_events(
     req: ExportRequest = Body(...),
 ) -> StreamingResponse:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     fmt = req.format.value
     media_types = {
-        "csv":    "text/csv",
-        "json":   "application/json",
+        "csv": "text/csv",
+        "json": "application/json",
         "ndjson": "application/x-ndjson",
     }
     media_type = media_types[fmt]
@@ -94,6 +98,7 @@ async def export_events(
 
 # ─── Phase 2: Original list route (preserved) ────────────────────────────────
 
+
 @router.get("", response_model=PaginatedResponse[EventResponse])
 async def list_events(
     member: Annotated[object, require_permission(Permission.EVENTS_READ)],
@@ -106,6 +111,7 @@ async def list_events(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[EventResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     params = EventFilterParams(
@@ -128,6 +134,7 @@ async def list_events(
 
 # ─── Phase 3.6: /{event_id}/context BEFORE /{event_id} ───────────────────────
 
+
 @router.get("/{event_id}/context", response_model=APIResponse[EventContextResponse])
 async def get_event_context(
     event_id: UUID,
@@ -135,6 +142,7 @@ async def get_event_context(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[EventContextResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     ctx = await EventSearchService.get_context(db, m.tenant_id, event_id)
     if ctx is None:
@@ -144,6 +152,7 @@ async def get_event_context(
 
 # ─── Phase 2: Single-event route (preserved) ─────────────────────────────────
 
+
 @router.get("/{event_id}", response_model=APIResponse[EventResponse])
 async def get_event(
     event_id: UUID,
@@ -151,6 +160,7 @@ async def get_event(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[EventResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     event = await EventService.get_by_id(db, m.tenant_id, event_id)
     if event is None:

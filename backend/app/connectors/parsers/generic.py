@@ -17,16 +17,23 @@ Expected fields (all optional):
   process_name string
   extra fields passed through to raw
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.connectors.base import ConnectorParser, ParsedEvent
 
 _SEV_STR: dict[str, int] = {
-    "low": 1, "medium": 2, "high": 3, "critical": 4,
-    "info": 1, "warning": 2, "error": 3, "fatal": 4,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+    "info": 1,
+    "warning": 2,
+    "error": 3,
+    "fatal": 4,
 }
 
 _VALID_CATEGORIES = {"process", "network", "file", "auth", "registry", "dns", "other"}
@@ -37,7 +44,7 @@ def _parse_ts(raw: Any) -> datetime:
         s = str(raw).replace("Z", "+00:00")
         return datetime.fromisoformat(s)
     except Exception:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
 
 def _parse_sev(raw: Any) -> int:
@@ -53,17 +60,18 @@ class GenericParser(ConnectorParser):
 
     def parse(self, payload: Any) -> list[ParsedEvent]:
         try:
-            items: list[dict[str, Any]] = (
-                payload if isinstance(payload, list) else [payload]
-            )
+            items: list[dict[str, Any]] = payload if isinstance(payload, list) else [payload]
             return [e for e in (self._parse_one(i) for i in items if isinstance(i, dict)) if e]
         except Exception:
             return []
 
     def _parse_one(self, data: dict[str, Any]) -> ParsedEvent | None:
         hostname = (
-            data.get("hostname") or data.get("host") or
-            data.get("computer") or data.get("device") or "unknown"
+            data.get("hostname")
+            or data.get("host")
+            or data.get("computer")
+            or data.get("device")
+            or "unknown"
         )
         ts = _parse_ts(data.get("timestamp") or data.get("time") or data.get("ts") or "")
         sev = _parse_sev(data.get("severity") or data.get("level") or data.get("priority") or 1)
@@ -77,8 +85,8 @@ class GenericParser(ConnectorParser):
         network: dict[str, Any] | None = None
         if src_ip or dst_ip:
             network = {
-                "src_ip":   src_ip,
-                "dst_ip":   dst_ip,
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
                 "dst_port": data.get("dest_port") or data.get("dst_port"),
                 "protocol": data.get("protocol"),
             }
@@ -91,13 +99,12 @@ class GenericParser(ConnectorParser):
         proc_name = data.get("process_name") or data.get("process") or data.get("process_id")
         process: dict[str, Any] | None = (
             {"name": proc_name, "command_line": data.get("command_line") or data.get("cmd")}
-            if proc_name else None
+            if proc_name
+            else None
         )
 
         return ParsedEvent(
-            event_id=self._make_event_id(
-                "generic", data.get("event_id") or data.get("id")
-            ),
+            event_id=self._make_event_id("generic", data.get("event_id") or data.get("id")),
             timestamp=ts,
             category=category,
             hostname=str(hostname),
@@ -107,5 +114,5 @@ class GenericParser(ConnectorParser):
             process=process,
             user=user,
             network=network,
-            raw={k: v for k, v in data.items()},
+            raw=dict(data),
         )

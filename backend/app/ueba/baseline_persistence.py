@@ -9,6 +9,7 @@ while the baseline re-learns.  This module bridges the gap:
   * restore():  on first UEBA startup, pre-populates Redis sets from the last
                 snapshot so the baseline is warm immediately.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,6 +46,7 @@ class BaselinePersistenceService:
         Returns the number of rows upserted.
         """
         from sqlalchemy import text
+
         rows_written = 0
 
         # Scan for all known pattern keys in the UEBA subsystem.
@@ -54,36 +56,42 @@ class BaselinePersistenceService:
                 values = await self._client.smembers(raw_key)
                 if values:
                     entries = list(values)[:_MAX_ENTRIES_PER_SET]
-                    await db.execute(text("""
+                    await db.execute(
+                        text("""
                         INSERT INTO ueba_baseline_snapshots
                             (tenant_id, key_type, entity_key, values_json, snapshot_at)
                         VALUES
                             (CAST(:tid AS uuid), 'seen_ips', :ekey, CAST(:vals AS jsonb), NOW())
                         ON CONFLICT (tenant_id, key_type, entity_key)
                         DO UPDATE SET values_json = CAST(:vals AS jsonb), snapshot_at = NOW()
-                    """), {
-                        "tid": self._tenant_id,
-                        "ekey": raw_key,
-                        "vals": json.dumps(entries),
-                    })
+                    """),
+                        {
+                            "tid": self._tenant_id,
+                            "ekey": raw_key,
+                            "vals": json.dumps(entries),
+                        },
+                    )
                     rows_written += 1
 
             async for raw_key in self._client.scan_iter("host:*:seen_procs"):
                 values = await self._client.smembers(raw_key)
                 if values:
                     entries = list(values)[:_MAX_ENTRIES_PER_SET]
-                    await db.execute(text("""
+                    await db.execute(
+                        text("""
                         INSERT INTO ueba_baseline_snapshots
                             (tenant_id, key_type, entity_key, values_json, snapshot_at)
                         VALUES
                             (CAST(:tid AS uuid), 'seen_procs', :ekey, CAST(:vals AS jsonb), NOW())
                         ON CONFLICT (tenant_id, key_type, entity_key)
                         DO UPDATE SET values_json = CAST(:vals AS jsonb), snapshot_at = NOW()
-                    """), {
-                        "tid": self._tenant_id,
-                        "ekey": raw_key,
-                        "vals": json.dumps(entries),
-                    })
+                    """),
+                        {
+                            "tid": self._tenant_id,
+                            "ekey": raw_key,
+                            "vals": json.dumps(entries),
+                        },
+                    )
                     rows_written += 1
 
             await db.commit()
@@ -106,13 +114,17 @@ class BaselinePersistenceService:
         Returns the number of Redis keys restored.
         """
         from sqlalchemy import text
+
         restored = 0
         try:
-            rows = await db.execute(text("""
+            rows = await db.execute(
+                text("""
                 SELECT key_type, entity_key, values_json
                 FROM ueba_baseline_snapshots
                 WHERE tenant_id = CAST(:tid AS uuid)
-            """), {"tid": self._tenant_id})
+            """),
+                {"tid": self._tenant_id},
+            )
 
             for row in rows.fetchall():
                 values: list[str] = row.values_json or []

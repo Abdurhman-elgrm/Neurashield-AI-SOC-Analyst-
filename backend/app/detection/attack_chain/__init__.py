@@ -1,6 +1,6 @@
-from .correlator import check_attack_chains
 from .builtin_chains import BUILTIN_CHAINS
-from .models import AttackChainRule, ChainStage, ChainMatch
+from .correlator import check_attack_chains
+from .models import AttackChainRule, ChainMatch, ChainStage
 
 __all__ = [
     "check_attack_chains",

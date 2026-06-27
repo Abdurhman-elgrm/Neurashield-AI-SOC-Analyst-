@@ -9,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Characters that must not appear in machine names or organization names
 # to prevent log injection and path traversal attacks.
-_SAFE_TEXT_RE = re.compile(r'^[^\x00-\x1f\x7f<>&|;`${}\\]+$')
+_SAFE_TEXT_RE = re.compile(r"^[^\x00-\x1f\x7f<>&|;`${}\\]+$")
 # Token format: inst_ prefix followed by URL-safe base64 characters
-_TOKEN_FORMAT_RE = re.compile(r'^inst_[A-Za-z0-9_-]{20,}$')
+_TOKEN_FORMAT_RE = re.compile(r"^inst_[A-Za-z0-9_-]{20,}$")
 
 
 class InstallerTokenGenerateRequest(BaseModel):
@@ -85,6 +85,7 @@ class InstallerTokenListResponse(BaseModel):
 
 # ─── Bootstrap enrollment (installer token → permanent agent credentials) ─────
 
+
 class MachineInfo(BaseModel):
     hostname: str = Field(..., min_length=1, max_length=255)
     os_type: str = Field(..., pattern="^(windows|linux|macos)$")
@@ -113,7 +114,10 @@ class BootstrapEnrollRequest(BaseModel):
     for permanent agent runtime credentials.  No JWT required — the raw
     installer token IS the authentication credential for this endpoint.
     """
-    token: str = Field(..., min_length=25, max_length=128, description="Raw installer token (inst_…)")
+
+    token: str = Field(
+        ..., min_length=25, max_length=128, description="Raw installer token (inst_…)"
+    )
     tenant_id: UUID
     machine_info: MachineInfo
 
@@ -133,6 +137,7 @@ class BootstrapEnrollResponse(BaseModel):
     agent_id and enrollment_token must be stored securely (DPAPI) by the
     installer — the raw enrollment_token is never stored on the server.
     """
+
     agent_id: UUID
     enrollment_token: str
     tenant_id: UUID

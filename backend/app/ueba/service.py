@@ -7,6 +7,7 @@ Pipeline for each event:
   3. Attack chain         (brute force, lateral movement, credential stuffing)
   4. Anomaly scoring      (additive weighted score → is_anomaly flag)
 """
+
 from __future__ import annotations
 
 import os
@@ -19,7 +20,7 @@ from app.normalization.models import NormalizedEvent
 from app.threat_intel.service import EnrichmentResult
 from app.ueba.anomaly import AnomalyResult, compute_anomaly
 from app.ueba.attack_chain import AttackChainDetector
-from app.ueba.baseline import BehavioralBaseline, _BIZ_START, _BIZ_END
+from app.ueba.baseline import _BIZ_END, _BIZ_START, BehavioralBaseline
 from app.ueba.impossible_travel import is_impossible_travel
 
 logger = structlog.get_logger(__name__)
@@ -28,11 +29,11 @@ UEBAResult = AnomalyResult
 
 # FP weight damping: if a flag has >= this many FP signals, its weight is halved.
 _FP_DAMPING_THRESHOLD = 5
-_FP_WEIGHT_CACHE_TTL  = 300  # 5 minutes
+_FP_WEIGHT_CACHE_TTL = 300  # 5 minutes
 
 
 async def _load_fp_adjusted_weights(
-    redis: "Redis",  # type: ignore[name-defined]
+    redis: Redis,  # type: ignore[name-defined]
     tenant_id: str,
 ) -> dict[str, float]:
     """
@@ -50,6 +51,7 @@ async def _load_fp_adjusted_weights(
         cached = await client.get(cache_key)
         if cached:
             import json
+
             return json.loads(cached)
 
         adjustments: dict[str, float] = {}
@@ -60,56 +62,86 @@ async def _load_fp_adjusted_weights(
 
         if adjustments:
             import json
+
             await client.set(cache_key, json.dumps(adjustments), ex=_FP_WEIGHT_CACHE_TTL)
 
         return adjustments
     except Exception:
         return {}
 
+
 # Built-in OS accounts that are always privileged by design.
 # Raising a privileged_user flag for these would be constant noise with zero signal value.
-_SYSTEM_ACCOUNT_WHITELIST = frozenset({
-    "system", "local service", "network service",
-    "anonymous logon", "iis apppool",
-})
+_SYSTEM_ACCOUNT_WHITELIST = frozenset(
+    {
+        "system",
+        "local service",
+        "network service",
+        "anonymous logon",
+        "iis apppool",
+    }
+)
 
 # Processes that are common Windows infrastructure — flagging them as
 # "new_process_on_host" would produce constant false positives.
 _SYSTEM_NOISE_PROCS = {
-    "svchost.exe", "ntoskrnl.exe", "lsass.exe", "csrss.exe",
-    "wininit.exe", "services.exe", "smss.exe", "winlogon.exe",
-    "explorer.exe", "taskhost.exe", "taskhostw.exe", "dwm.exe",
-    "conhost.exe", "dllhost.exe", "RuntimeBroker.exe",
-    "sihost.exe", "fontdrvhost.exe", "spoolsv.exe",
-    "WmiPrvSE.exe", "WmiApSrv.exe", "msdtc.exe",
+    "svchost.exe",
+    "ntoskrnl.exe",
+    "lsass.exe",
+    "csrss.exe",
+    "wininit.exe",
+    "services.exe",
+    "smss.exe",
+    "winlogon.exe",
+    "explorer.exe",
+    "taskhost.exe",
+    "taskhostw.exe",
+    "dwm.exe",
+    "conhost.exe",
+    "dllhost.exe",
+    "RuntimeBroker.exe",
+    "sihost.exe",
+    "fontdrvhost.exe",
+    "spoolsv.exe",
+    "WmiPrvSE.exe",
+    "WmiApSrv.exe",
+    "msdtc.exe",
 }
 
 
 # Processes / paths that signal access to sensitive resources
 _SENSITIVE_PROC_PATTERNS = {
-    "lsass.exe", "mimikatz", "ntds.dit", "sam", "security.evtx",
-    "procdump", "wce.exe", "pwdump",
+    "lsass.exe",
+    "mimikatz",
+    "ntds.dit",
+    "sam",
+    "security.evtx",
+    "procdump",
+    "wce.exe",
+    "pwdump",
 }
 _INSIDER_OFFHOURS_FILE_THRESHOLD = int(os.getenv("UEBA_INSIDER_FILE_THRESHOLD", "50"))
-_INSIDER_RAPID_ACCESS_THRESHOLD  = int(os.getenv("UEBA_INSIDER_RAPID_ACCESS",   "30"))
-_INSIDER_RAPID_ACCESS_WINDOW     = int(os.getenv("UEBA_INSIDER_RAPID_WINDOW",    "600"))  # 10 min
+_INSIDER_RAPID_ACCESS_THRESHOLD = int(os.getenv("UEBA_INSIDER_RAPID_ACCESS", "30"))
+_INSIDER_RAPID_ACCESS_WINDOW = int(os.getenv("UEBA_INSIDER_RAPID_WINDOW", "600"))  # 10 min
 
 
 async def _check_insider_threat(
-    redis: "Redis",  # type: ignore[name-defined]
+    redis: Redis,  # type: ignore[name-defined]
     tenant_id: str,
     username: str,
     category: str,
-    event: "NormalizedEvent",  # type: ignore[name-defined]
+    event: NormalizedEvent,  # type: ignore[name-defined]
     after_hours: bool,
-    ts: "datetime",  # type: ignore[name-defined]
+    ts: datetime,  # type: ignore[name-defined]
 ) -> tuple[list[str], dict[str, str]]:
     """
     Check for insider threat indicators and return (flags, reasons).
     Uses Redis counters with short TTLs to track per-user activity rates.
     """
     import time as _time
+
     from app.core.redis import TenantRedisClient
+
     client = TenantRedisClient(redis, tenant_id, "ueba")
     flags: list[str] = []
     reasons: dict[str, str] = {}
@@ -136,7 +168,8 @@ async def _check_insider_threat(
                 if category == "network" and event.network
                 else (
                     (event.file.path or event.file.name)
-                    if event.file else str(event.raw.get("file_path", ""))
+                    if event.file
+                    else str(event.raw.get("file_path", ""))
                 )
             )
             if resource:
@@ -170,7 +203,6 @@ async def _check_insider_threat(
 
 
 class UEBAService:
-
     @staticmethod
     async def analyze(
         normalized: NormalizedEvent,
@@ -200,7 +232,8 @@ class UEBAService:
         category = normalized.category
 
         import datetime as _dt
-        ts = normalized.timestamp or _dt.datetime.now(_dt.timezone.utc)
+
+        ts = normalized.timestamp or _dt.datetime.now(_dt.UTC)
         hour_utc = ts.hour
         is_privileged = normalized.user.is_privileged if normalized.user else False
 
@@ -231,8 +264,7 @@ class UEBAService:
         if bfl.new_source_ip and username and source_ip:
             bl_flags.append("new_source_ip")
             reasons["new_source_ip"] = (
-                f"Source IP {source_ip} has not been seen for user '{username}' "
-                f"in the past 30 days"
+                f"Source IP {source_ip} has not been seen for user '{username}' in the past 30 days"
             )
 
         # new_process_on_host: skip known Windows infrastructure processes to
@@ -256,8 +288,12 @@ class UEBAService:
             last = await baseline.get_last_location(username)
             curr_ts = ts.timestamp() if hasattr(ts, "timestamp") else time.time()
             if last and is_impossible_travel(
-                last["lat"], last["lon"], last["ts"],
-                enr.geo_latitude, enr.geo_longitude, curr_ts,
+                last["lat"],
+                last["lon"],
+                last["ts"],
+                enr.geo_latitude,
+                enr.geo_longitude,
+                curr_ts,
             ):
                 bl_flags.append("impossible_travel")
                 reasons["impossible_travel"] = (
@@ -281,8 +317,12 @@ class UEBAService:
         # Fall back to tag-based for Linux/non-Windows sources (no EventID)
         if not _win_eid and category == "auth":
             tags_lower = [t.lower() for t in normalized.tags]
-            is_auth_success = any(t in tags_lower for t in ("logon_success", "auth_success", "accepted"))
-            is_auth_failure = any(t in tags_lower for t in ("logon_failure", "auth_failure", "failed"))
+            is_auth_success = any(
+                t in tags_lower for t in ("logon_success", "auth_success", "accepted")
+            )
+            is_auth_failure = any(
+                t in tags_lower for t in ("logon_failure", "auth_failure", "failed")
+            )
 
         # ── 4. Insider threat heuristics ──────────────────────────────────────
         # Only run for authenticated users performing data-related actions.

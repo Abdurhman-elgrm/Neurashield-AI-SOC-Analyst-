@@ -41,11 +41,9 @@ class Heartbeat(Base):
     os_metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     # ─── Relationships ────────────────────────────────────────────────────────
-    agent: Mapped["Agent"] = relationship("Agent", back_populates="heartbeats", lazy="noload")  # type: ignore[name-defined]
+    agent: Mapped[Agent] = relationship("Agent", back_populates="heartbeats", lazy="noload")  # type: ignore[name-defined]
 
-    __table_args__ = (
-        Index("idx_heartbeat_agent_received", "agent_id", "received_at"),
-    )
+    __table_args__ = (Index("idx_heartbeat_agent_received", "agent_id", "received_at"),)
 
     def __repr__(self) -> str:
         return f"<Heartbeat agent_id={self.agent_id} received_at={self.received_at}>"

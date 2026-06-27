@@ -16,15 +16,15 @@ from dataclasses import dataclass
 
 from app.core.redis import TenantRedisClient
 
-
 # ─── Window size presets (seconds) ────────────────────────────────────────────
 
-WINDOW_SHORT  = 300    # 5 min  — burst / same-host
-WINDOW_MEDIUM = 900    # 15 min — session / chain
-WINDOW_LONG   = 3600   # 1 hr   — process-tree / user cross-host
+WINDOW_SHORT = 300  # 5 min  — burst / same-host
+WINDOW_MEDIUM = 900  # 15 min — session / chain
+WINDOW_LONG = 3600  # 1 hr   — process-tree / user cross-host
 
 
 # ─── Config ───────────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class WindowConfig:
@@ -33,13 +33,14 @@ class WindowConfig:
 
 
 _DEFAULT_CONFIGS: dict[int, WindowConfig] = {
-    WINDOW_SHORT:  WindowConfig(WINDOW_SHORT,  max_events=500),
+    WINDOW_SHORT: WindowConfig(WINDOW_SHORT, max_events=500),
     WINDOW_MEDIUM: WindowConfig(WINDOW_MEDIUM, max_events=1000),
-    WINDOW_LONG:   WindowConfig(WINDOW_LONG,   max_events=2000),
+    WINDOW_LONG: WindowConfig(WINDOW_LONG, max_events=2000),
 }
 
 
 # ─── Manager ──────────────────────────────────────────────────────────────────
+
 
 class TemporalWindowManager:
     """

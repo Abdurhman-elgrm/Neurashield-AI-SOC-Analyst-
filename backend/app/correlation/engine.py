@@ -16,7 +16,7 @@ This ensures identical results when replaying historical events.
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -46,11 +46,12 @@ _CORR_SUBSYSTEM = "corr"
 
 # ─── Result ───────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CorrelationResult:
     event_id: str
     tenant_id: str
-    investigation_id: str | None      # None when score is not significant
+    investigation_id: str | None  # None when score is not significant
     score: int
     confidence: str
     matched_rules: list[str]
@@ -73,6 +74,7 @@ class CorrelationResult:
 
 
 # ─── Engine ───────────────────────────────────────────────────────────────────
+
 
 class CorrelationEngine:
     """
@@ -150,9 +152,7 @@ class CorrelationEngine:
                 pass
         return time.time()
 
-    def _collect_window_keys(
-        self, payload: dict[str, Any]
-    ) -> list[tuple[str, int]]:
+    def _collect_window_keys(self, payload: dict[str, Any]) -> list[tuple[str, int]]:
         """
         Return (window_key, window_seconds) pairs for every index we want to
         maintain for this event. One event can appear in multiple windows.
@@ -189,7 +189,11 @@ class CorrelationEngine:
             ek_lower = ek.lower()
             if ek_lower.startswith("ip:"):
                 direction = entity.get("direction", "")
-                ws = SHARED_SOURCE_IP.window_seconds if direction == "inbound" else SHARED_DEST_IP.window_seconds
+                ws = (
+                    SHARED_SOURCE_IP.window_seconds
+                    if direction == "inbound"
+                    else SHARED_DEST_IP.window_seconds
+                )
                 pairs.append((ek, ws))
             elif ek_lower.startswith("domain:"):
                 pairs.append((ek, SHARED_DOMAIN.window_seconds))
@@ -214,9 +218,15 @@ class CorrelationEngine:
         ptid = payload.get("process_tree_id")
         sid = payload.get("session_id")
 
-        has_cid_group = bool(cid and await self._grouper.resolve_investigation_id({"correlation_id": cid}))
-        has_ptid_group = bool(ptid and await self._grouper.resolve_investigation_id({"process_tree_id": ptid}))
-        has_sid_group = bool(sid and await self._grouper.resolve_investigation_id({"session_id": sid}))
+        has_cid_group = bool(
+            cid and await self._grouper.resolve_investigation_id({"correlation_id": cid})
+        )
+        has_ptid_group = bool(
+            ptid and await self._grouper.resolve_investigation_id({"process_tree_id": ptid})
+        )
+        has_sid_group = bool(
+            sid and await self._grouper.resolve_investigation_id({"session_id": sid})
+        )
 
         return GroupContext(
             window_counts=counts,

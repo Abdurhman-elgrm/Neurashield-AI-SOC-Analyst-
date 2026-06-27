@@ -32,13 +32,13 @@ Windows Security 4624/4625 (Logon)       – SubjectUserName/Domain/LogonId,
 Linux auditd EXECVE                      – uid, auid, pid, ppid, exe, comm,
                                             proctitle
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 import structlog
 
-from app.normalization.models import NormalizedEvent
 from app.correlation.entities import (
     DomainEntity,
     HashEntity,
@@ -59,21 +59,35 @@ from app.correlation.utils import (
     parse_sysmon_hashes,
     safe_get,
 )
+from app.normalization.models import NormalizedEvent
 
 logger = structlog.get_logger(__name__)
 
 # IPs that carry no correlation value — loopback, unspecified, broadcast,
 # and the Windows Security log placeholder "-".
-_SKIP_IPS: frozenset[str] = frozenset({
-    "127.0.0.1", "::1", "0.0.0.0", "::", "255.255.255.255", "-",
-    "::ffff:127.0.0.1",
-})
+_SKIP_IPS: frozenset[str] = frozenset(
+    {
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",
+        "::",
+        "255.255.255.255",
+        "-",
+        "::ffff:127.0.0.1",
+    }
+)
 
 # Windows well-known system account names that produce noise when indexed.
-_SYSTEM_ACCOUNTS: frozenset[str] = frozenset({
-    "system", "local service", "network service", "anonymous logon",
-    "iis apppool\\defaultapppool", "-",
-})
+_SYSTEM_ACCOUNTS: frozenset[str] = frozenset(
+    {
+        "system",
+        "local service",
+        "network service",
+        "anonymous logon",
+        "iis apppool\\defaultapppool",
+        "-",
+    }
+)
 
 
 class EntityExtractor:
@@ -93,12 +107,12 @@ class EntityExtractor:
         Partial extraction is always returned — individual field failures
         produce a debug log entry and are skipped, not propagated.
         """
-        users:     dict[str, UserEntity]    = {}
-        hosts:     dict[str, HostEntity]    = {}
-        ips:       dict[str, IPEntity]      = {}
-        domains:   dict[str, DomainEntity]  = {}
+        users: dict[str, UserEntity] = {}
+        hosts: dict[str, HostEntity] = {}
+        ips: dict[str, IPEntity] = {}
+        domains: dict[str, DomainEntity] = {}
         processes: dict[str, ProcessEntity] = {}
-        hashes:    dict[str, HashEntity]    = {}
+        hashes: dict[str, HashEntity] = {}
 
         try:
             self._extract_hostname(event, hosts)
@@ -115,9 +129,9 @@ class EntityExtractor:
                 error=str(exc),
             )
 
-        logon_id    = _first_logon_id(users)
-        proc_guid   = _first_process_guid(processes)
-        ppid        = _first_ppid(processes)
+        logon_id = _first_logon_id(users)
+        proc_guid = _first_process_guid(processes)
+        ppid = _first_ppid(processes)
         parent_guid = _first_parent_guid(processes)
 
         meta = self._build_metadata(
@@ -203,8 +217,8 @@ class EntityExtractor:
         if not name:
             return
 
-        exe   = canonical_str(p.executable)
-        md5   = canonical_str(p.hash_md5)
+        exe = canonical_str(p.executable)
+        md5 = canonical_str(p.hash_md5)
         sha256 = canonical_str(p.hash_sha256)
 
         key = ProcessEntity.make_key(None, exe, name)
@@ -244,12 +258,12 @@ class EntityExtractor:
     def _extract_raw(
         self,
         raw: dict[str, Any],
-        users:     dict[str, UserEntity],
-        hosts:     dict[str, HostEntity],
-        ips:       dict[str, IPEntity],
-        domains:   dict[str, DomainEntity],
+        users: dict[str, UserEntity],
+        hosts: dict[str, HostEntity],
+        ips: dict[str, IPEntity],
+        domains: dict[str, DomainEntity],
         processes: dict[str, ProcessEntity],
-        hashes:    dict[str, HashEntity],
+        hashes: dict[str, HashEntity],
     ) -> None:
         if not isinstance(raw, dict) or not raw:
             return
@@ -266,12 +280,12 @@ class EntityExtractor:
         # ── Windows Security: SubjectUser + TargetUser pair ───────────────────
         for name_key, domain_key, logon_key in (
             ("SubjectUserName", "SubjectDomainName", "SubjectLogonId"),
-            ("TargetUserName",  "TargetDomainName",  "TargetLogonId"),
+            ("TargetUserName", "TargetDomainName", "TargetLogonId"),
         ):
             name = canonical_str(raw.get(name_key))
             if not name or name in _SYSTEM_ACCOUNTS or name.endswith("$"):
                 continue
-            domain   = canonical_str(raw.get(domain_key))
+            domain = canonical_str(raw.get(domain_key))
             logon_id = canonical_str(raw.get(logon_key))
             key = UserEntity.make_key(name, domain)
             if key not in users:
@@ -314,25 +328,25 @@ class EntityExtractor:
         self,
         raw: dict[str, Any],
         processes: dict[str, ProcessEntity],
-        hashes:    dict[str, HashEntity],
+        hashes: dict[str, HashEntity],
     ) -> None:
         # ── Sysmon process fields ─────────────────────────────────────────────
-        proc_guid   = canonical_str(raw.get("ProcessGuid"))
+        proc_guid = canonical_str(raw.get("ProcessGuid"))
         parent_guid = canonical_str(raw.get("ParentProcessGuid"))
-        image       = canonical_str(raw.get("Image"))
-        parent_img  = canonical_str(raw.get("ParentImage"))
-        cmd_line    = raw.get("CommandLine")    # preserve case
-        service_nm  = canonical_str(raw.get("ServiceName"))
+        image = canonical_str(raw.get("Image"))
+        parent_img = canonical_str(raw.get("ParentImage"))
+        cmd_line = raw.get("CommandLine")  # preserve case
+        service_nm = canonical_str(raw.get("ServiceName"))
 
         # PID / PPID — accept Sysmon (ProcessId) or generic (pid/ppid)
-        pid  = _int_or_none(raw.get("ProcessId")       or raw.get("pid"))
+        pid = _int_or_none(raw.get("ProcessId") or raw.get("pid"))
         ppid = _int_or_none(raw.get("ParentProcessId") or raw.get("ppid"))
 
         # Sysmon Hashes field + standalone hash fields — extracted unconditionally
         # so a Hashes-only event (e.g. EID 7 Image Load) still indexes them.
         sysmon_h = parse_sysmon_hashes(raw.get("Hashes"))
-        md5    = sysmon_h.get("md5")    or canonical_str(raw.get("hash_md5"))
-        sha1   = sysmon_h.get("sha1")   or canonical_str(raw.get("hash_sha1"))
+        md5 = sysmon_h.get("md5") or canonical_str(raw.get("hash_md5"))
+        sha1 = sysmon_h.get("sha1") or canonical_str(raw.get("hash_sha1"))
         sha256 = sysmon_h.get("sha256") or canonical_str(raw.get("hash_sha256"))
 
         if md5:
@@ -352,9 +366,7 @@ class EntityExtractor:
             else:
                 name = "unknown"
 
-            parent_name = (
-                parent_img.replace("\\", "/").split("/")[-1] if parent_img else None
-            )
+            parent_name = parent_img.replace("\\", "/").split("/")[-1] if parent_img else None
             key = ProcessEntity.make_key(proc_guid, image, name)
             if key not in processes:
                 processes[key] = ProcessEntity(
@@ -375,7 +387,7 @@ class EntityExtractor:
 
         # ── Linux auditd: exe + comm ──────────────────────────────────────────
         exe_raw = canonical_str(raw.get("exe"))
-        comm    = canonical_str(raw.get("comm"))
+        comm = canonical_str(raw.get("comm"))
         if exe_raw or comm:
             name = (exe_raw.split("/")[-1] if exe_raw else None) or comm or "unknown"
             key = ProcessEntity.make_key(None, exe_raw, name)
@@ -392,20 +404,20 @@ class EntityExtractor:
     def _raw_network(
         self,
         raw: dict[str, Any],
-        ips:     dict[str, IPEntity],
+        ips: dict[str, IPEntity],
         domains: dict[str, DomainEntity],
     ) -> None:
         # Windows Security logon source
         _add_ip(ips, raw.get("IpAddress"), "src")
 
         # Sysmon EID 3 Network Connect
-        _add_ip(ips, raw.get("SourceIp"),      "src")
+        _add_ip(ips, raw.get("SourceIp"), "src")
         _add_ip(ips, raw.get("DestinationIp"), "dst")
 
         # Generic raw field names (agent-normalized)
-        _add_ip(ips, raw.get("source_ip"),      "src")
+        _add_ip(ips, raw.get("source_ip"), "src")
         _add_ip(ips, raw.get("destination_ip"), "dst")
-        _add_ip(ips, raw.get("dest_ip"),        "dst")
+        _add_ip(ips, raw.get("dest_ip"), "dst")
 
         # Sysmon DestinationHostname → DomainEntity
         dest_host = canonical_str(raw.get("DestinationHostname"))
@@ -449,32 +461,31 @@ class EntityExtractor:
 
     def _build_metadata(
         self,
-        event:        NormalizedEvent,
-        logon_id:     str | None,
+        event: NormalizedEvent,
+        logon_id: str | None,
         process_guid: str | None,
-        ppid:         int | None,
-        parent_guid:  str | None,
+        ppid: int | None,
+        parent_guid: str | None,
     ) -> CorrelationMetadata:
-        tid  = event.tenant_id
+        tid = event.tenant_id
         host = canonical_str(event.hostname) or ""
 
         return CorrelationMetadata(
             correlation_id=make_correlation_id(tid, host, logon_id),
-            session_id=(
-                make_session_id(tid, host, logon_id) if logon_id else None
-            ),
+            session_id=(make_session_id(tid, host, logon_id) if logon_id else None),
             process_tree_id=make_process_tree_id(tid, host, process_guid, ppid),
             event_chain_id=make_event_chain_id(tid, host, process_guid),
-            related_entity_keys=[],   # populated by enrich_normalized_payload()
+            related_entity_keys=[],  # populated by enrich_normalized_payload()
             parent_event_id=parent_guid,
         )
 
 
 # ── Module-level helpers ───────────────────────────────────────────────────────
 
+
 def _add_ip(
-    ips:       dict[str, IPEntity],
-    value:     Any,
+    ips: dict[str, IPEntity],
+    value: Any,
     direction: str | None,
 ) -> None:
     if not value or not isinstance(value, str):
@@ -489,8 +500,8 @@ def _add_ip(
 
 def _add_hash(
     hashes: dict[str, HashEntity],
-    algo:   str,
-    value:  str,
+    algo: str,
+    value: str,
 ) -> None:
     if not value:
         return

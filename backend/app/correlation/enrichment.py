@@ -7,6 +7,7 @@ correlation fields to the Redis stream message before it is published.
 All functions mutate the payload dict in-place and return it — zero extra
 allocations beyond the data that must be added regardless.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -15,7 +16,7 @@ from app.correlation.schemas import ExtractionResult
 
 
 def enrich_normalized_payload(
-    payload:    dict[str, Any],
+    payload: dict[str, Any],
     extraction: ExtractionResult,
 ) -> dict[str, Any]:
     """
@@ -35,7 +36,7 @@ def enrich_normalized_payload(
     parent_event_id    – Sysmon ParentProcessGuid (lineage reference), or None
     """
     entity_set = extraction.entities
-    meta       = extraction.correlation_metadata
+    meta = extraction.correlation_metadata
 
     # Build the flat key list that goes into related_entity_keys.
     # We collect from all groups in one pass to avoid multiple iterations.
@@ -63,13 +64,13 @@ def enrich_normalized_payload(
     ):
         for entity in group:
             flat_entities.append(entity.model_dump())
-    payload["entities"]             = flat_entities
-    payload["correlation_id"]       = meta.correlation_id
-    payload["session_id"]           = meta.session_id
-    payload["process_tree_id"]      = meta.process_tree_id
-    payload["event_chain_id"]       = meta.event_chain_id
-    payload["related_entity_keys"]  = all_keys
-    payload["parent_event_id"]      = meta.parent_event_id
+    payload["entities"] = flat_entities
+    payload["correlation_id"] = meta.correlation_id
+    payload["session_id"] = meta.session_id
+    payload["process_tree_id"] = meta.process_tree_id
+    payload["event_chain_id"] = meta.event_chain_id
+    payload["related_entity_keys"] = all_keys
+    payload["parent_event_id"] = meta.parent_event_id
 
     return payload
 
@@ -103,10 +104,10 @@ def entity_counts(extraction: ExtractionResult) -> dict[str, int]:
     """
     e = extraction.entities
     return {
-        "users":     len(e.users),
-        "hosts":     len(e.hosts),
-        "ips":       len(e.ips),
-        "domains":   len(e.domains),
+        "users": len(e.users),
+        "hosts": len(e.hosts),
+        "ips": len(e.ips),
+        "domains": len(e.domains),
         "processes": len(e.processes),
-        "hashes":    len(e.hashes),
+        "hashes": len(e.hashes),
     }

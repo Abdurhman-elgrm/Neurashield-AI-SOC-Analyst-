@@ -4,7 +4,7 @@ import re
 import time
 from uuid import uuid4
 
-_REQUEST_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+_REQUEST_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -127,12 +127,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "X-Content-Type-Options": "nosniff",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": (
-            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-        ),
-        "Strict-Transport-Security": (
-            "max-age=63072000; includeSubDomains; preload"
-        ),
+        "Permissions-Policy": ("camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+        "Strict-Transport-Security": ("max-age=63072000; includeSubDomains; preload"),
         # 'unsafe-inline' removed from style-src. Modern SPA bundlers (Vite/Next.js)
         # can emit CSS modules or hashed <style> tags instead of blanket inline styles.
         # If specific third-party widget styles are needed, add a nonce at the framework
@@ -164,9 +160,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
     Path labels are normalized to avoid cardinality explosion from UUIDs.
     """
 
-    _UUID_RE = re.compile(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
-    )
+    _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
     _INT_RE = re.compile(r"/\d+(?=/|$)")
 
     @classmethod
@@ -197,7 +191,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             HTTP_REQUESTS_IN_FLIGHT.dec()
             raise
         duration = time.perf_counter() - start
-        HTTP_REQUESTS_TOTAL.labels(method=method, path=path, status_code=str(response.status_code)).inc()
+        HTTP_REQUESTS_TOTAL.labels(
+            method=method, path=path, status_code=str(response.status_code)
+        ).inc()
         HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path=path).observe(duration)
         HTTP_REQUESTS_IN_FLIGHT.dec()
         return response
@@ -226,6 +222,7 @@ class ContentLengthLimitMiddleware(BaseHTTPMiddleware):
             try:
                 if int(content_length) > self._max_bytes:
                     from starlette.responses import JSONResponse
+
                     return JSONResponse(
                         status_code=413,
                         content={"detail": "Request body too large"},

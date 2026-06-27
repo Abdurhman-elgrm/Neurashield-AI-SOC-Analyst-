@@ -3,7 +3,6 @@ from __future__ import annotations
 from app.core.exceptions import ValidationError
 from app.ingestion.schemas import RawEventPayload
 
-
 MAX_EVENTS_PER_BATCH = 500
 MAX_FIELD_DEPTH = 5
 

@@ -2,10 +2,10 @@
 Outbound notification channels — Slack, Microsoft Teams, custom webhook,
 PagerDuty, and email recipient lists.
 """
+
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -57,7 +57,9 @@ class ChannelUpdateRequest(BaseModel):
 
 def _validate_channel(type_: str, config: dict) -> None:
     if type_ not in _VALID_TYPES:
-        raise ValidationError(f"Invalid channel type. Must be one of: {', '.join(sorted(_VALID_TYPES))}")
+        raise ValidationError(
+            f"Invalid channel type. Must be one of: {', '.join(sorted(_VALID_TYPES))}"
+        )
 
     missing: list[str] = []
     if type_ == "slack" and not config.get("webhook_url"):
@@ -85,12 +87,15 @@ async def list_channels(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[list[ChannelResponse]]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
     result = await db.execute(
-        select(NotificationChannel).where(
+        select(NotificationChannel)
+        .where(
             NotificationChannel.tenant_id == m.tenant_id,
             NotificationChannel.deleted_at.is_(None),
-        ).order_by(NotificationChannel.created_at.desc())
+        )
+        .order_by(NotificationChannel.created_at.desc())
     )
     channels = list(result.scalars().all())
     return APIResponse.ok([ChannelResponse.model_validate(c) for c in channels])
@@ -108,13 +113,16 @@ async def create_channel(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[ChannelResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     _validate_channel(payload.type, payload.config)
 
     min_sev = payload.min_severity.lower()
     if min_sev not in _VALID_SEVERITIES:
-        raise ValidationError(f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}")
+        raise ValidationError(
+            f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}"
+        )
 
     channel = NotificationChannel(
         tenant_id=m.tenant_id,
@@ -144,6 +152,7 @@ async def update_channel(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[ChannelResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     result = await db.execute(
@@ -165,12 +174,14 @@ async def update_channel(
     if payload.min_severity is not None:
         min_sev = payload.min_severity.lower()
         if min_sev not in _VALID_SEVERITIES:
-            raise ValidationError(f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}")
+            raise ValidationError(
+                f"Invalid min_severity. Must be one of: {', '.join(_VALID_SEVERITIES)}"
+            )
         channel.min_severity = min_sev
     if payload.enabled is not None:
         channel.enabled = payload.enabled
 
-    channel.updated_at = datetime.now(tz=timezone.utc)
+    channel.updated_at = datetime.now(tz=UTC)
     await db.flush([channel])
     await db.commit()
     await db.refresh(channel)
@@ -188,6 +199,7 @@ async def delete_channel(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[EmptyResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     result = await db.execute(
@@ -201,7 +213,7 @@ async def delete_channel(
     if channel is None:
         raise NotFoundError("Notification channel not found")
 
-    channel.deleted_at = datetime.now(tz=timezone.utc)
+    channel.deleted_at = datetime.now(tz=UTC)
     await db.flush([channel])
     await db.commit()
     return APIResponse.ok(EmptyResponse())
@@ -218,6 +230,7 @@ async def test_channel(
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[dict]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore
 
     result = await db.execute(
@@ -232,5 +245,6 @@ async def test_channel(
         raise NotFoundError("Notification channel not found")
 
     from app.services.outbound_notification_service import dispatch_test_notification
+
     success = await dispatch_test_notification(channel)
     return APIResponse.ok({"success": success, "channel_type": channel.type})

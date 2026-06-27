@@ -17,18 +17,19 @@ Category mapping via rule.groups:
   process*        → process
   default         → other
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.connectors.base import ConnectorParser, ParsedEvent
 
 _LEVEL_TO_SEV: list[tuple[int, int]] = [
     (12, 4),
-    (8,  3),
-    (4,  2),
-    (1,  1),
+    (8, 3),
+    (4, 2),
+    (1, 1),
 ]
 
 
@@ -59,7 +60,7 @@ def _parse_ts(raw: str) -> datetime:
         s = raw.replace("+0000", "+00:00")
         return datetime.fromisoformat(s)
     except Exception:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)
 
 
 class WazuhParser(ConnectorParser):
@@ -67,9 +68,7 @@ class WazuhParser(ConnectorParser):
 
     def parse(self, payload: Any) -> list[ParsedEvent]:
         try:
-            alerts: list[dict[str, Any]] = (
-                payload if isinstance(payload, list) else [payload]
-            )
+            alerts: list[dict[str, Any]] = payload if isinstance(payload, list) else [payload]
             return [self._parse_one(a) for a in alerts if isinstance(a, dict)]
         except Exception:
             return []
@@ -91,8 +90,8 @@ class WazuhParser(ConnectorParser):
         dst_ip = data.get("dstip") or data.get("dst_ip")
         if src_ip or dst_ip:
             network = {
-                "src_ip":  src_ip,
-                "dst_ip":  dst_ip,
+                "src_ip": src_ip,
+                "dst_ip": dst_ip,
                 "dst_port": data.get("dstport") or data.get("dst_port"),
                 "protocol": data.get("protocol"),
             }
@@ -114,12 +113,12 @@ class WazuhParser(ConnectorParser):
             network=network,
             user=user,
             raw={
-                "wazuh_id":    alert.get("id"),
-                "rule_id":     rule.get("id"),
-                "rule_level":  level,
+                "wazuh_id": alert.get("id"),
+                "rule_id": rule.get("id"),
+                "rule_level": level,
                 "description": rule.get("description"),
-                "full_log":    alert.get("full_log"),
-                "groups":      groups,
-                "data":        data,
+                "full_log": alert.get("full_log"),
+                "groups": groups,
+                "data": data,
             },
         )

@@ -51,6 +51,4 @@ class ResponseAction(Base):
         DateTime(timezone=True), default=utcnow, server_default="NOW()", nullable=False
     )
 
-    __table_args__ = (
-        Index("idx_ra_tenant_type", "tenant_id", "action_type"),
-    )
+    __table_args__ = (Index("idx_ra_tenant_type", "tenant_id", "action_type"),)

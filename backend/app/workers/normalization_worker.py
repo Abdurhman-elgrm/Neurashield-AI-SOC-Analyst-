@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 import structlog
 
 from app.core.database import database_manager
 from app.core.redis import TenantRedisClient, redis_manager
-from app.correlation.extractor import extract_entities
 from app.correlation.enrichment import enrich_normalized_payload, entity_counts
+from app.correlation.extractor import extract_entities
 from app.normalization.mapper import compute_security_severity
 from app.normalization.service import NormalizationService
 from app.pipeline import stream_names
@@ -22,7 +21,7 @@ from app.ueba.service import UEBAService
 logger = structlog.get_logger(__name__)
 
 # Reject events timestamped more than this far into the future (clock skew tolerance).
-_MAX_FUTURE_SECS = 3600          # 1 hour
+_MAX_FUTURE_SECS = 3600  # 1 hour
 # Warn (but do NOT reject) on events older than this — old events are still
 # valid for re-ingestion and historical analysis.
 _WARN_PAST_DAYS = 7
@@ -61,7 +60,7 @@ class NormalizationWorker:
                 normalized = NormalizationService.normalize(payload)
 
                 # ── Timestamp validation ──────────────────────────────────────
-                now = datetime.now(tz=timezone.utc)
+                now = datetime.now(tz=UTC)
                 if normalized.timestamp:
                     future_delta = (normalized.timestamp - now).total_seconds()
                     if future_delta > _MAX_FUTURE_SECS:
@@ -140,13 +139,17 @@ class NormalizationWorker:
                 normalized.ueba_flags = list(ueba_result.ueba_flags)
 
                 event = await NormalizationService.persist_event(
-                    db, normalized, stream_id=msg_id,
-                    enrichment=enrichment, ueba_result=ueba_result,
+                    db,
+                    normalized,
+                    stream_id=msg_id,
+                    enrichment=enrichment,
+                    ueba_result=ueba_result,
                 )
 
                 pipeline_client = TenantRedisClient(redis, tenant_id_str, stream_names.SUBSYSTEM)
 
                 from app.pipeline.publisher import StreamPublisher
+
                 publisher = StreamPublisher(pipeline_client)
                 norm_payload: dict[str, Any] = normalized.to_dict()
                 norm_payload["event_db_id"] = str(event.id)

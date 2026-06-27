@@ -9,26 +9,26 @@ no raw SQL strings or f-string interpolation into queries.
 
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.sql import Select
 
-from app.events.filters import FilterValidationError, build_filter_groups
+from app.events.filters import build_filter_groups
 from app.events.pagination import CursorError, decode_cursor
 from app.events.schemas import EventSearchRequest, SortDirection, SortField
 from app.models.event import Event, EventCategory
-
 
 # ─── Allowed sort columns ─────────────────────────────────────────────────────
 
 _SORT_COLUMN = {
     SortField.EVENT_TIMESTAMP: Event.event_timestamp,
-    SortField.INGESTED_AT:     Event.ingested_at,
-    SortField.SEVERITY:        Event.severity,
-    SortField.HOST_NAME:       Event.host_name,
+    SortField.INGESTED_AT: Event.ingested_at,
+    SortField.SEVERITY: Event.severity,
+    SortField.HOST_NAME: Event.host_name,
 }
 
 
 # ─── Full-text search helper ──────────────────────────────────────────────────
+
 
 def _fts_clause(query_text: str):  # type: ignore[return]
     """

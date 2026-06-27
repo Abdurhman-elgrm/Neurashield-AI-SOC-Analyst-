@@ -12,19 +12,15 @@ No raw SQL string interpolation.
 """
 
 import base64
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import and_, cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB as PgJSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
-from app.models.analyst import SavedHunt
-from app.models.event import Event
-from app.models.investigation import Investigation
 from app.analyst.schemas import (
     EventHuntFilter,
     EventHuntQuery,
@@ -36,16 +32,19 @@ from app.analyst.schemas import (
     HuntResult,
     HuntResultEntry,
     SavedHuntCreate,
-    SavedHuntOut,
 )
+from app.core.exceptions import NotFoundError
+from app.models.analyst import SavedHunt
+from app.models.event import Event
+from app.models.investigation import Investigation
 
 logger = structlog.get_logger(__name__)
 
 # Fields that can be directly filtered on the investigations ORM model
 _DIRECT_FIELDS: dict[str, Any] = {
-    "status":      Investigation.status,
-    "confidence":  Investigation.confidence,
-    "verdict":     Investigation.verdict,
+    "status": Investigation.status,
+    "confidence": Investigation.confidence,
+    "verdict": Investigation.verdict,
 }
 
 # Numeric fields
@@ -55,14 +54,13 @@ _NUMERIC_FIELDS: dict[str, Any] = {
 
 # Text fields (ILIKE)
 _TEXT_FIELDS: dict[str, Any] = {
-    "title":             Investigation.title,
+    "title": Investigation.title,
     "executive_summary": Investigation.executive_summary,
     "technical_summary": Investigation.technical_summary,
 }
 
 
 class HuntEngine:
-
     @staticmethod
     async def run_query(
         db: AsyncSession,
@@ -141,9 +139,7 @@ class HuntEngine:
         has_more = len(rows) > limit
         if has_more:
             last = rows[limit - 1]
-            next_cursor = _encode_cursor(
-                last.created_at.isoformat(), str(last.id)
-            )
+            next_cursor = _encode_cursor(last.created_at.isoformat(), str(last.id))
             rows = rows[:limit]
 
         # Build match reasons per row
@@ -204,9 +200,7 @@ class HuntEngine:
         if analyst_id:
             conditions.append(SavedHunt.analyst_id == analyst_id)
         result = await db.execute(
-            select(SavedHunt)
-            .where(*conditions)
-            .order_by(SavedHunt.updated_at.desc())
+            select(SavedHunt).where(*conditions).order_by(SavedHunt.updated_at.desc())
         )
         return list(result.scalars().all())
 
@@ -245,11 +239,12 @@ class HuntEngine:
     ) -> None:
         hunt = await HuntEngine.get_saved_hunt(db, tenant_id, hunt_id)
         hunt.run_count = (hunt.run_count or 0) + 1
-        hunt.updated_at = datetime.now(tz=timezone.utc)
+        hunt.updated_at = datetime.now(tz=UTC)
         await db.flush([hunt])
 
 
 # ─── Filter building ──────────────────────────────────────────────────────────
+
 
 def _build_filter_clauses(filters: list[HuntFilter]) -> list[Any]:
     clauses: list[Any] = []
@@ -326,7 +321,8 @@ def _build_match_reasons(row: Investigation, query: HuntQuery) -> list[str]:
         behaviors: dict[str, Any] = row.behaviors_json or {}
         detected = behaviors.get("detected_behaviors") or []
         matched = [
-            b["behavior_name"] for b in detected
+            b["behavior_name"]
+            for b in detected
             if any(t in (b.get("mitre_tactics") or []) for t in query.mitre_tactics)
         ]
         if matched:
@@ -338,6 +334,7 @@ def _build_match_reasons(row: Investigation, query: HuntQuery) -> list[str]:
 
 
 # ─── Cursor helpers ───────────────────────────────────────────────────────────
+
 
 def _encode_cursor(ts: str, id_str: str) -> str:
     return base64.urlsafe_b64encode(f"{ts}|{id_str}".encode()).decode()
@@ -353,19 +350,19 @@ def _decode_cursor(cursor: str) -> tuple[str, str]:
 
 # Indexed text columns on the Event model — safe to ILIKE without full table scan
 _EVENT_TEXT_FIELDS: dict[str, Any] = {
-    "host_name":      Event.host_name,
-    "username":       Event.username,
-    "process_name":   Event.process_name,
-    "source_ip":      Event.source_ip,
-    "dest_ip":        Event.dest_ip,
+    "host_name": Event.host_name,
+    "username": Event.username,
+    "process_name": Event.process_name,
+    "source_ip": Event.source_ip,
+    "dest_ip": Event.dest_ip,
     "correlation_id": Event.correlation_id,
-    "session_id":     Event.session_id,
-    "geo_country":    Event.geo_country,
-    "geo_city":       Event.geo_city,
+    "session_id": Event.session_id,
+    "geo_country": Event.geo_country,
+    "geo_city": Event.geo_city,
 }
 
 _EVENT_NUMERIC_FIELDS: dict[str, Any] = {
-    "severity":     Event.severity,
+    "severity": Event.severity,
     "anomaly_score": Event.anomaly_score,
 }
 
@@ -464,13 +461,9 @@ class EventHuntEngine:
 
         # ── JSONB containment (GIN-indexed after migration 024) ────────────────
         for flag in query.ueba_flags:
-            conditions.append(
-                Event.ueba_flags.op("@>")(cast([flag], PgJSONB))
-            )
+            conditions.append(Event.ueba_flags.op("@>")(cast([flag], PgJSONB)))
         for tag in query.tags:
-            conditions.append(
-                Event.tags.op("@>")(cast([tag], PgJSONB))
-            )
+            conditions.append(Event.tags.op("@>")(cast([tag], PgJSONB)))
 
         # ── Field-level text / numeric filters ─────────────────────────────────
         filter_clauses = _build_event_filter_clauses(query.filters)
@@ -486,29 +479,18 @@ class EventHuntEngine:
                 ts_str, id_str = _decode_cursor(query.cursor)
                 ts = datetime.fromisoformat(ts_str)
                 if query.sort == "desc":
-                    conditions.append(
-                        and_(Event.event_timestamp <= ts, Event.id < UUID(id_str))
-                    )
+                    conditions.append(and_(Event.event_timestamp <= ts, Event.id < UUID(id_str)))
                 else:
-                    conditions.append(
-                        and_(Event.event_timestamp >= ts, Event.id > UUID(id_str))
-                    )
+                    conditions.append(and_(Event.event_timestamp >= ts, Event.id > UUID(id_str)))
             except Exception:
                 pass
 
         limit = min(query.limit, 200)
         order = (
-            Event.event_timestamp.desc()
-            if query.sort == "desc"
-            else Event.event_timestamp.asc()
+            Event.event_timestamp.desc() if query.sort == "desc" else Event.event_timestamp.asc()
         )
 
-        stmt = (
-            select(Event)
-            .where(and_(*conditions))
-            .order_by(order, Event.id)
-            .limit(limit + 1)
-        )
+        stmt = select(Event).where(and_(*conditions)).order_by(order, Event.id).limit(limit + 1)
         result = await db.execute(stmt)
         rows = list(result.scalars().all())
 
@@ -516,15 +498,13 @@ class EventHuntEngine:
         next_cursor: str | None = None
         if has_more:
             last = rows[limit - 1]
-            next_cursor = _encode_cursor(
-                last.event_timestamp.isoformat(), str(last.id)
-            )
+            next_cursor = _encode_cursor(last.event_timestamp.isoformat(), str(last.id))
             rows = rows[:limit]
 
         # ── Page-level summary stats ───────────────────────────────────────────
-        unique_hosts    = len({r.host_name    for r in rows if r.host_name})
-        unique_users    = len({r.username     for r in rows if r.username})
-        unique_ips      = len({r.source_ip    for r in rows if r.source_ip})
+        unique_hosts = len({r.host_name for r in rows if r.host_name})
+        unique_users = len({r.username for r in rows if r.username})
+        unique_ips = len({r.source_ip for r in rows if r.source_ip})
         total_anomalies = sum(1 for r in rows if r.is_anomaly)
         total_threat_ips = sum(1 for r in rows if r.is_threat_ip)
 
@@ -537,11 +517,7 @@ class EventHuntEngine:
                 source_ip=r.source_ip,
                 dest_ip=r.dest_ip,
                 process_name=r.process_name,
-                category=(
-                    r.category.value
-                    if hasattr(r.category, "value")
-                    else str(r.category)
-                ),
+                category=(r.category.value if hasattr(r.category, "value") else str(r.category)),
                 severity=r.severity,
                 is_anomaly=r.is_anomaly,
                 is_threat_ip=r.is_threat_ip,

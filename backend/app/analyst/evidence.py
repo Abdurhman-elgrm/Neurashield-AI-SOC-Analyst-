@@ -8,16 +8,15 @@ Evidence types:
   file_ref, ioc_ref, note_ref
 """
 
-from typing import Any
 from uuid import UUID
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import EvidenceCreate, EvidenceType
 from app.core.exceptions import NotFoundError
 from app.models.analyst import InvestigationEvidence
-from app.analyst.schemas import EvidenceCreate, EvidenceType
 
 logger = structlog.get_logger(__name__)
 
@@ -25,7 +24,6 @@ _VALID_TYPES: frozenset[str] = frozenset(t.value for t in EvidenceType)
 
 
 class EvidenceService:
-
     @staticmethod
     async def attach(
         db: AsyncSession,
@@ -123,7 +121,9 @@ class EvidenceService:
         investigation_id: str,
     ) -> int:
         result = await db.execute(
-            select(func.count()).select_from(InvestigationEvidence).where(
+            select(func.count())
+            .select_from(InvestigationEvidence)
+            .where(
                 InvestigationEvidence.tenant_id == tenant_id,
                 InvestigationEvidence.investigation_id == investigation_id,
             )

@@ -4,9 +4,10 @@ These tests use the in-memory SQLite database from conftest.py.
 PostgreSQL-specific features (FTS, GIN) are exercised in query-builder
 unit tests; here we verify routing, auth, tenant isolation, and response shape.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
@@ -23,8 +24,8 @@ from app.events.schemas import (
     TimelineResponse,
 )
 
-
 # ─── Fixture: authenticated tenant member ─────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def auth_member(client: AsyncClient) -> dict[str, Any]:
@@ -52,6 +53,7 @@ async def auth_member(client: AsyncClient) -> dict[str, Any]:
 
 # ─── Mocked service responses ─────────────────────────────────────────────────
 
+
 def _mock_search_response() -> EventSearchResponse:
     return EventSearchResponse(
         items=[],
@@ -75,7 +77,6 @@ def _mock_timeline_response() -> TimelineResponse:
 
 def _mock_context_response(event_id: str) -> EventContextResponse:
     from app.schemas.event import EventResponse
-    from app.models.event import EventCategory
 
     fake_event = EventResponse(
         id=UUID(event_id),
@@ -85,8 +86,8 @@ def _mock_context_response(event_id: str) -> EventContextResponse:
         raw_id=None,
         category="process",
         severity=3,
-        event_timestamp=datetime(2024, 6, 1, tzinfo=timezone.utc),
-        ingested_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        event_timestamp=datetime(2024, 6, 1, tzinfo=UTC),
+        ingested_at=datetime(2024, 6, 1, tzinfo=UTC),
         host_name="dc01",
         source_ip="1.2.3.4",
         dest_ip=None,
@@ -119,9 +120,9 @@ def _mock_entity_response(entity_type: str, entity_value: str) -> EntityEventsRe
 
 # ─── /events/search ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestEventsSearch:
-
     async def test_search_requires_auth(self, client: AsyncClient):
         resp = await client.post(f"{settings.API_PREFIX}/events/search", json={})
         assert resp.status_code in (401, 403)
@@ -224,9 +225,9 @@ class TestEventsSearch:
 
 # ─── /events/timeline ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestEventsTimeline:
-
     async def test_timeline_requires_auth(self, client: AsyncClient):
         resp = await client.get(f"{settings.API_PREFIX}/events/timeline")
         assert resp.status_code in (401, 403)
@@ -272,6 +273,7 @@ class TestEventsTimeline:
 
 
 # ─── /events/{event_id}/context ───────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestEventContext:
@@ -321,9 +323,9 @@ class TestEventContext:
 
 # ─── /events/export ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestEventsExport:
-
     async def test_export_requires_auth(self, client: AsyncClient):
         resp = await client.post(f"{settings.API_PREFIX}/events/export", json={})
         assert resp.status_code in (401, 403)
@@ -365,9 +367,9 @@ class TestEventsExport:
 
     async def test_export_json(self, client: AsyncClient, auth_member: dict):
         async def mock_stream(*args, **kwargs):
-            yield '['
+            yield "["
             yield '{"id":"event-001"}'
-            yield ']'
+            yield "]"
 
         with patch(
             "app.events.search.EventSearchService.export_stream",
@@ -412,9 +414,9 @@ class TestEventsExport:
 
 # ─── /entities/{entity_key}/events ───────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestEntityEvents:
-
     async def test_entity_requires_auth(self, client: AsyncClient):
         resp = await client.get(f"{settings.API_PREFIX}/entities/host:dc01/events")
         assert resp.status_code in (401, 403)
@@ -513,9 +515,9 @@ class TestEntityEvents:
 
 # ─── Tenant isolation ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestTenantIsolation:
-
     async def test_search_tenant_id_passed_to_service(self, client: AsyncClient, auth_member: dict):
         """Verifies that the service receives the authenticated member's tenant_id, not a user-supplied one."""
         captured: list[UUID] = []
@@ -541,7 +543,9 @@ class TestTenantIsolation:
             captured.append(tenant_id)
             return _mock_entity_response("host", "dc01")
 
-        with patch("app.events.search.EventSearchService.entity_events", side_effect=capture_entity):
+        with patch(
+            "app.events.search.EventSearchService.entity_events", side_effect=capture_entity
+        ):
             await client.get(
                 f"{settings.API_PREFIX}/entities/host:dc01/events",
                 headers=auth_member["headers"],

@@ -20,7 +20,7 @@ export function ProcessTreeTab({ id, isActive }: Props) {
     queryFn: () =>
       apiClient
         .get<{ data: ProcessTreeResponse }>(`/investigations/${id}/process-tree`)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .then((r) => (r.data as any).data ?? r.data)
         .catch(() => ({ roots: [] as ProcessNode[] })),
     enabled: isActive,

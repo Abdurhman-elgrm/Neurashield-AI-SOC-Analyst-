@@ -38,10 +38,10 @@ class InvestigationWorker:
     async def run(self, stop_event: asyncio.Event) -> None:
         redis = redis_manager.get_client()
         pipeline_client = TenantRedisClient(redis, self._tenant_id, stream_names.SUBSYSTEM)
-        corr_client     = TenantRedisClient(redis, self._tenant_id, _CORR_SUBSYSTEM)
+        corr_client = TenantRedisClient(redis, self._tenant_id, _CORR_SUBSYSTEM)
 
-        self._engine         = InvestigationEngine(self._tenant_id)
-        self._grouper        = CorrelationGrouper(client=corr_client, tenant_id=self._tenant_id)
+        self._engine = InvestigationEngine(self._tenant_id)
+        self._grouper = CorrelationGrouper(client=corr_client, tenant_id=self._tenant_id)
         self._pipeline_client = pipeline_client
 
         consumer = StreamConsumer(
@@ -79,10 +79,10 @@ class InvestigationWorker:
         group_meta: dict[str, Any] = {}
         if group_meta_obj:
             group_meta = {
-                "score":         group_meta_obj.score,
-                "confidence":    group_meta_obj.confidence,
+                "score": group_meta_obj.score,
+                "confidence": group_meta_obj.confidence,
                 "matched_rules": group_meta_obj.matched_rules,
-                "entity_keys":   group_meta_obj.entity_keys,
+                "entity_keys": group_meta_obj.entity_keys,
             }
 
         # Run the full investigation pipeline.
@@ -98,6 +98,7 @@ class InvestigationWorker:
             async with database_manager.session() as db:
                 # Determine if this is a brand-new investigation before upserting
                 from sqlalchemy import text as _text
+
                 _check = await db.execute(
                     _text("SELECT 1 FROM investigations WHERE id = CAST(:id AS uuid)"),
                     {"id": investigation_id},
@@ -119,13 +120,19 @@ class InvestigationWorker:
         if is_new_investigation:
             try:
                 from app.services.notification_service import notify_investigation_email
-                create_task_safe(notify_investigation_email(
-                    investigation_id=investigation_id,
-                    tenant_id=self._tenant_id,
-                    title=result.summary.executive_summary[:100] if result.summary else "New Investigation",
-                    threat_score=result.score.threat_score,
-                    verdict_suggestion=None,  # AI analysis runs later
-                ), name=f"notify_investigation_{investigation_id}")
+
+                create_task_safe(
+                    notify_investigation_email(
+                        investigation_id=investigation_id,
+                        tenant_id=self._tenant_id,
+                        title=result.summary.executive_summary[:100]
+                        if result.summary
+                        else "New Investigation",
+                        threat_score=result.score.threat_score,
+                        verdict_suggestion=None,  # AI analysis runs later
+                    ),
+                    name=f"notify_investigation_{investigation_id}",
+                )
             except Exception:
                 logger.warning("investigation_email_notify_failed", exc_info=True)
 
@@ -140,23 +147,21 @@ class InvestigationWorker:
             )
 
         # AI Analysis — only for high-confidence or high-severity investigations
-        should_analyze = (
-            result.score.threat_score >= 60
-            or result.score.confidence == "high"
-        )
+        should_analyze = result.score.threat_score >= 60 or result.score.confidence == "high"
         if should_analyze:
             try:
                 from app.ai.investigation_analyzer import get_investigation_analyzer
+
                 analyzer = get_investigation_analyzer()
                 investigation_data = {
-                    "id":             result.investigation_id,
-                    "title":          (result.summary.executive_summary or "")[:200],
-                    "threat_score":   result.score.threat_score,
-                    "confidence":     result.score.confidence,
+                    "id": result.investigation_id,
+                    "title": (result.summary.executive_summary or "")[:200],
+                    "threat_score": result.score.threat_score,
+                    "confidence": result.score.confidence,
                     "behaviors_json": result.behaviors.model_dump(),
-                    "timeline_json":  result.timeline.model_dump(),
-                    "context_json":   result.context.model_dump(),
-                    "graph_json":     result.graph.model_dump(),
+                    "timeline_json": result.timeline.model_dump(),
+                    "context_json": result.context.model_dump(),
+                    "graph_json": result.graph.model_dump(),
                 }
                 async with database_manager.session() as ai_db:
                     analysis = await analyzer.analyze(ai_db, investigation_data)
@@ -201,7 +206,9 @@ class InvestigationWorker:
     ) -> None:
         """Write alert IDs linked to these events into investigations.triggering_alert_ids."""
         import json
+
         from sqlalchemy import text
+
         try:
             raw_event_ids = [s.get("event_id") for s in snapshots if s.get("event_id")]
             if not raw_event_ids:
@@ -211,6 +218,7 @@ class InvestigationWorker:
             for eid in raw_event_ids:
                 try:
                     from uuid import UUID as _UUID
+
                     _UUID(str(eid))
                     valid_ids.append(str(eid))
                 except (ValueError, AttributeError):
@@ -242,12 +250,12 @@ class InvestigationWorker:
         except Exception as exc:
             logger.warning("triggering_alerts_populate_failed", error=str(exc))
 
-    async def _persist_ai_analysis(
-        self, investigation_id: str, ai_analysis: dict, db: Any
-    ) -> None:
+    async def _persist_ai_analysis(self, investigation_id: str, ai_analysis: dict, db: Any) -> None:
         """Write ai_analysis_json to the investigations row — best-effort."""
         import json
+
         from sqlalchemy import text
+
         try:
             await db.execute(
                 text(
@@ -260,8 +268,8 @@ class InvestigationWorker:
                     """
                 ),
                 {
-                    "inv_id":  investigation_id,
-                    "tid":     self._tenant_id,
+                    "inv_id": investigation_id,
+                    "tid": self._tenant_id,
                     "ai_json": json.dumps(ai_analysis),
                 },
             )
@@ -271,7 +279,9 @@ class InvestigationWorker:
     async def _persist_full_result(self, result: Any, db: Any) -> None:
         """Persist timeline/graph/behaviors/context JSONB columns — best-effort."""
         import json
+
         from sqlalchemy import text
+
         try:
             await db.execute(
                 text(
@@ -287,11 +297,11 @@ class InvestigationWorker:
                 ),
                 {
                     "inv_id": result.investigation_id,
-                    "tid":    result.tenant_id,
-                    "tl":     json.dumps(result.timeline.model_dump()),
-                    "gr":     json.dumps(result.graph.model_dump()),
-                    "bh":     json.dumps(result.behaviors.model_dump()),
-                    "ctx":    json.dumps(result.context.model_dump()),
+                    "tid": result.tenant_id,
+                    "tl": json.dumps(result.timeline.model_dump()),
+                    "gr": json.dumps(result.graph.model_dump()),
+                    "bh": json.dumps(result.behaviors.model_dump()),
+                    "ctx": json.dumps(result.context.model_dump()),
                 },
             )
         except Exception as exc:
@@ -299,6 +309,7 @@ class InvestigationWorker:
 
 
 # ── Module-level background task: auto-generate playbook for investigation ────
+
 
 async def _auto_generate_investigation_playbook(
     investigation_id: str,
@@ -311,7 +322,9 @@ async def _auto_generate_investigation_playbook(
     """
     import asyncio as _asyncio
     from uuid import UUID as _UUID
-    from sqlalchemy import text as _text, select as _select
+
+    from sqlalchemy import select as _select
+    from sqlalchemy import text as _text
 
     # Small delay so triggering_alert_ids commit propagates
     await _asyncio.sleep(3)
@@ -335,6 +348,7 @@ async def _auto_generate_investigation_playbook(
 
             # Load investigation to get triggering_alert_ids
             from app.models.investigation import Investigation as _Investigation
+
             inv_result = await db.execute(
                 _select(_Investigation).where(
                     _Investigation.id == _UUID(investigation_id),
@@ -365,23 +379,31 @@ async def _auto_generate_investigation_playbook(
 
             if alert_ids:
                 from app.models.alert import Alert as _Alert
+
                 alert_result = await db.execute(
-                    _select(_Alert).where(
+                    _select(_Alert)
+                    .where(
                         _Alert.id.in_([_UUID(aid) for aid in alert_ids[:5]]),
                         _Alert.tenant_id == _UUID(tenant_id),
-                    ).order_by(_Alert.severity.desc())
+                    )
+                    .order_by(_Alert.severity.desc())
                 )
                 alerts_list = list(alert_result.scalars().all())
                 if alerts_list:
                     primary = alerts_list[0]
                     alert_title = primary.title
-                    severity = primary.severity.value if hasattr(primary.severity, "value") else str(primary.severity)
+                    severity = (
+                        primary.severity.value
+                        if hasattr(primary.severity, "value")
+                        else str(primary.severity)
+                    )
                     source_host = primary.source_host
                     mitre_techniques = list(primary.mitre_techniques or [])
                     mitre_tactics = list(primary.mitre_tactics or [])
                     evidence = dict(primary.evidence or {})
 
             from app.services.playbook_service import PlaybookGeneratorService
+
             playbook = await PlaybookGeneratorService.generate(
                 db=db,
                 tenant_id=_UUID(tenant_id),

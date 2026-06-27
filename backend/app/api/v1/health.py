@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
@@ -54,6 +54,7 @@ async def readiness() -> JSONResponse:
     if redis_ok:
         try:
             from app.workers.main import WORKER_LIVENESS_KEY
+
             worker_ok = bool(await redis_manager.get_client().exists(WORKER_LIVENESS_KEY))
         except Exception:
             pass
@@ -65,7 +66,7 @@ async def readiness() -> JSONResponse:
         content={
             "status": "ready" if all_healthy else "unavailable",
             "checks": checks,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "timestamp": datetime.now(tz=UTC).isoformat(),
         },
     )
 
@@ -78,7 +79,7 @@ async def prometheus_metrics(request: Request) -> Response:
       - Bearer token matching METRICS_SECRET_TOKEN env var (for Prometheus scraper), OR
       - Authenticated user session (admin convenience)
     """
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     # Bearer token check for Prometheus scraper (no user session needed)
     metrics_token = settings.METRICS_SECRET_TOKEN
@@ -86,6 +87,7 @@ async def prometheus_metrics(request: Request) -> Response:
     if metrics_token and auth_header.startswith("Bearer "):
         provided = auth_header[7:]
         import hmac
+
         if hmac.compare_digest(provided, metrics_token):
             return PlainTextResponse(generate_latest().decode(), media_type=CONTENT_TYPE_LATEST)
 
@@ -94,7 +96,9 @@ async def prometheus_metrics(request: Request) -> Response:
         return PlainTextResponse(generate_latest().decode(), media_type=CONTENT_TYPE_LATEST)
 
     # In production without a matching bearer token, refuse
-    raise UnauthorizedError("Metrics endpoint requires Authorization: Bearer <METRICS_SECRET_TOKEN>")
+    raise UnauthorizedError(
+        "Metrics endpoint requires Authorization: Bearer <METRICS_SECRET_TOKEN>"
+    )
 
 
 @router.get("/health/metrics-info", include_in_schema=False)
@@ -105,6 +109,7 @@ async def metrics_info(current_user: CurrentUser) -> JSONResponse:
     """
     import platform
     import sys
+
     return JSONResponse(
         status_code=200,
         content={
@@ -130,10 +135,13 @@ async def db_schema_check(
 
     try:
         from sqlalchemy import text
-        result = await db.execute(text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'public' ORDER BY table_name"
-        ))
+
+        result = await db.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public' ORDER BY table_name"
+            )
+        )
         tables = [row[0] for row in result.fetchall()]
         return JSONResponse(
             status_code=200,

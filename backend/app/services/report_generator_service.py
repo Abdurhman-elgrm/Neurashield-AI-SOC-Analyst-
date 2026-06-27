@@ -4,11 +4,12 @@ AI-powered security report generation service.
 Collects tenant metrics for a given period, calls the LLM to write
 professional narrative sections, and persists the result as a GeneratedReport.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -24,18 +25,23 @@ log = structlog.get_logger(__name__)
 _SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 REPORT_TYPE_LABELS = {
-    "executive_summary":   "Executive Security Summary",
-    "threat_report":       "Threat Intelligence Report",
-    "compliance_summary":  "Compliance & Audit Summary",
+    "executive_summary": "Executive Security Summary",
+    "threat_report": "Threat Intelligence Report",
+    "compliance_summary": "Compliance & Audit Summary",
 }
 
 
 # ─── Metrics collection ───────────────────────────────────────────────────────
 
-async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: datetime, period_end: datetime) -> dict:
+
+async def _collect_metrics(
+    db: AsyncSession, tenant_id: UUID, period_start: datetime, period_end: datetime
+) -> dict:
     tid = str(tenant_id)
 
-    alert_row = (await db.execute(text("""
+    alert_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*)                                                        AS total,
             COUNT(*) FILTER (WHERE status = 'open')                         AS open,
@@ -54,9 +60,14 @@ async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: date
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at BETWEEN :start AND :end
           AND deleted_at IS NULL
-    """), {"tid": tid, "start": period_start, "end": period_end})).fetchone()
+    """),
+            {"tid": tid, "start": period_start, "end": period_end},
+        )
+    ).fetchone()
 
-    inv_row = (await db.execute(text("""
+    inv_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*)                                                        AS total,
             COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved','false_positive')) AS open,
@@ -65,19 +76,29 @@ async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: date
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at BETWEEN :start AND :end
-    """), {"tid": tid, "start": period_start, "end": period_end})).fetchone()
+    """),
+            {"tid": tid, "start": period_start, "end": period_end},
+        )
+    ).fetchone()
 
-    agent_row = (await db.execute(text("""
+    agent_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*)                                      AS total,
             COUNT(*) FILTER (WHERE status = 'online')     AS online
         FROM agents
         WHERE tenant_id = CAST(:tid AS uuid)
           AND deleted_at IS NULL
-    """), {"tid": tid})).fetchone()
+    """),
+            {"tid": tid},
+        )
+    ).fetchone()
 
     # Top MITRE techniques from alerts
-    mitre_rows = (await db.execute(text("""
+    mitre_rows = (
+        await db.execute(
+            text("""
         SELECT jsonb_array_elements_text(mitre_techniques) AS technique, COUNT(*) AS cnt
         FROM alerts
         WHERE tenant_id = CAST(:tid AS uuid)
@@ -87,10 +108,15 @@ async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: date
         GROUP BY technique
         ORDER BY cnt DESC
         LIMIT 5
-    """), {"tid": tid, "start": period_start, "end": period_end})).fetchall()
+    """),
+            {"tid": tid, "start": period_start, "end": period_end},
+        )
+    ).fetchall()
 
     # Top affected hosts
-    host_rows = (await db.execute(text("""
+    host_rows = (
+        await db.execute(
+            text("""
         SELECT source_host, COUNT(*) AS cnt
         FROM alerts
         WHERE tenant_id = CAST(:tid AS uuid)
@@ -100,7 +126,10 @@ async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: date
         GROUP BY source_host
         ORDER BY cnt DESC
         LIMIT 5
-    """), {"tid": tid, "start": period_start, "end": period_end})).fetchall()
+    """),
+            {"tid": tid, "start": period_start, "end": period_end},
+        )
+    ).fetchall()
 
     total_agents = agent_row.total or 0
     online_agents = agent_row.online or 0
@@ -139,6 +168,7 @@ async def _collect_metrics(db: AsyncSession, tenant_id: UUID, period_start: date
 
 # ─── LLM prompt builders ─────────────────────────────────────────────────────
 
+
 def _metrics_summary(m: dict) -> str:
     a = m["alerts"]
     inv = m["investigations"]
@@ -146,9 +176,11 @@ def _metrics_summary(m: dict) -> str:
     lines = [
         f"- Total alerts: {a['total']} (critical: {a['by_severity']['critical']}, high: {a['by_severity']['high']}, medium: {a['by_severity']['medium']}, low: {a['by_severity']['low']})",
         f"- Open alerts: {a['open']} | Closed: {a['closed']} | False positives: {a['false_positive']}",
-        f"- MTTA: {a['mtta_hours']}h | MTTC: {a['mttc_hours']}h" if a['mtta_hours'] else "- No acknowledged/closed alerts in period",
+        f"- MTTA: {a['mtta_hours']}h | MTTC: {a['mttc_hours']}h"
+        if a["mtta_hours"]
+        else "- No acknowledged/closed alerts in period",
         f"- Investigations: {inv['total']} total, {inv['open']} open, {inv['high_confidence']} high-confidence",
-        f"- Avg threat score: {inv['avg_threat_score']}/100" if inv['avg_threat_score'] else "",
+        f"- Avg threat score: {inv['avg_threat_score']}/100" if inv["avg_threat_score"] else "",
         f"- Agent coverage: {ag['online']}/{ag['total']} agents online ({ag['coverage_pct']}%)",
     ]
     if m["top_techniques"]:
@@ -157,10 +189,12 @@ def _metrics_summary(m: dict) -> str:
     if m["top_hosts"]:
         hosts = ", ".join(f"{h['host']} ({h['count']} alerts)" for h in m["top_hosts"])
         lines.append(f"- Most targeted hosts: {hosts}")
-    return "\n".join(l for l in lines if l)
+    return "\n".join(line for line in lines if line)
 
 
-def _build_prompt(report_type: str, company_name: str, period_days: int, metrics_text: str) -> tuple[str, str]:
+def _build_prompt(
+    report_type: str, company_name: str, period_days: int, metrics_text: str
+) -> tuple[str, str]:
     system = (
         "You are a senior cybersecurity analyst writing professional enterprise security reports. "
         "Write in clear, concise business English. Be specific — use the numbers provided. "
@@ -228,7 +262,9 @@ def _parse_sections(raw: str) -> list[dict]:
     try:
         sections = json.loads(raw)
         if isinstance(sections, list):
-            return [{"title": s.get("title", ""), "content": s.get("content", "")} for s in sections]
+            return [
+                {"title": s.get("title", ""), "content": s.get("content", "")} for s in sections
+            ]
     except Exception:
         pass
     # Fallback: return raw as single section
@@ -237,15 +273,18 @@ def _parse_sections(raw: str) -> list[dict]:
 
 # ─── Background task ──────────────────────────────────────────────────────────
 
-async def _generate_in_background(report_id: UUID, tenant_id: UUID, report_type: str,
-                                   period_days: int, company_name: str) -> None:
+
+async def _generate_in_background(
+    report_id: UUID, tenant_id: UUID, report_type: str, period_days: int, company_name: str
+) -> None:
     await asyncio.sleep(1)  # let the creating transaction commit
-    from app.core.database import database_manager
     from app.ai.llm_manager import get_llm_manager
+    from app.core.database import database_manager
 
     async with database_manager.session() as db:
         try:
             from sqlalchemy import select
+
             result = await db.execute(
                 select(GeneratedReport).where(GeneratedReport.id == report_id)
             )
@@ -253,13 +292,15 @@ async def _generate_in_background(report_id: UUID, tenant_id: UUID, report_type:
             if report is None:
                 return
 
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
             period_start = now - timedelta(days=period_days)
 
             metrics = await _collect_metrics(db, tenant_id, period_start, now)
             metrics_text = _metrics_summary(metrics)
 
-            system_prompt, user_prompt = _build_prompt(report_type, company_name, period_days, metrics_text)
+            system_prompt, user_prompt = _build_prompt(
+                report_type, company_name, period_days, metrics_text
+            )
 
             llm = get_llm_manager()
             raw = await llm.generate(
@@ -279,6 +320,7 @@ async def _generate_in_background(report_id: UUID, tenant_id: UUID, report_type:
             log.error("report_generation_failed", report_id=str(report_id), error=str(exc)[:300])
             try:
                 from sqlalchemy import select, update
+
                 await db.execute(
                     update(GeneratedReport)
                     .where(GeneratedReport.id == report_id)
@@ -291,8 +333,8 @@ async def _generate_in_background(report_id: UUID, tenant_id: UUID, report_type:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-class ReportGeneratorService:
 
+class ReportGeneratorService:
     @staticmethod
     async def generate(
         db: AsyncSession,
@@ -302,7 +344,7 @@ class ReportGeneratorService:
         company_name: str,
         created_by_id: UUID,
     ) -> GeneratedReport:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         period_start = now - timedelta(days=period_days)
         label = REPORT_TYPE_LABELS.get(report_type, "Security Report")
         title = f"{label} — {now.strftime('%b %d, %Y')}"
@@ -321,6 +363,7 @@ class ReportGeneratorService:
         await db.flush()
 
         from app.core.utils import create_task_safe
+
         create_task_safe(
             _generate_in_background(report.id, tenant_id, report_type, period_days, company_name),
             name=f"report_generate_{report.id}",

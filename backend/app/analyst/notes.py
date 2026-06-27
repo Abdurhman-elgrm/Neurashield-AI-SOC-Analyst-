@@ -12,17 +12,16 @@ Rules:
 """
 
 import re as _re
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import NoteCreate, NoteUpdate
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.analyst import InvestigationNote
-from app.analyst.schemas import NoteCreate, NoteUpdate
 
 logger = structlog.get_logger(__name__)
 
@@ -31,19 +30,18 @@ def _sanitize_note_content(content: str) -> str:
     """Strip HTML and script injection from note text. Prevents stored XSS."""
     # Remove <script>...</script> blocks and their content entirely
     content = _re.sub(
-        r'<script[^>]*>.*?</script>',
-        '',
+        r"<script[^>]*>.*?</script>",
+        "",
         content,
         flags=_re.IGNORECASE | _re.DOTALL,
     )
     # Remove all remaining HTML tags (keep text content)
-    content = _re.sub(r'<[^>]+>', '', content)
+    content = _re.sub(r"<[^>]+>", "", content)
     # Normalize whitespace
     return content.strip()
 
 
 class NoteService:
-
     @staticmethod
     async def create(
         db: AsyncSession,
@@ -114,7 +112,7 @@ class NoteService:
         if payload.pinned is not None:
             note.pinned = payload.pinned
 
-        note.updated_at = datetime.now(tz=timezone.utc)
+        note.updated_at = datetime.now(tz=UTC)
         await db.flush([note])
         return note
 
@@ -149,7 +147,7 @@ class NoteService:
     ) -> InvestigationNote:
         note = await NoteService.require_by_id(db, tenant_id, note_id)
         note.pinned = pinned
-        note.updated_at = datetime.now(tz=timezone.utc)
+        note.updated_at = datetime.now(tz=UTC)
         await db.flush([note])
         return note
 
@@ -195,7 +193,9 @@ class NoteService:
         investigation_id: str,
     ) -> int:
         result = await db.execute(
-            select(func.count()).select_from(InvestigationNote).where(
+            select(func.count())
+            .select_from(InvestigationNote)
+            .where(
                 InvestigationNote.tenant_id == tenant_id,
                 InvestigationNote.investigation_id == investigation_id,
                 InvestigationNote.deleted_at.is_(None),

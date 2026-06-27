@@ -1,11 +1,9 @@
 """Unit tests for the Events Explorer query builder."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
-
-import pytest
-from sqlalchemy import inspect, select
 
 from app.events.query_builder import build_search_query
 from app.events.schemas import (
@@ -15,7 +13,6 @@ from app.events.schemas import (
     SortDirection,
     SortField,
 )
-from app.models.event import Event
 
 TENANT_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 
@@ -74,8 +71,8 @@ class TestBuildSearchQuery:
 
     def test_time_range_filter(self):
         req = EventSearchRequest(
-            from_ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_ts=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_ts=datetime(2024, 1, 1, tzinfo=UTC),
+            to_ts=datetime(2024, 12, 31, tzinfo=UTC),
         )
         stmt = build_search_query(TENANT_ID, req)
         compiled = str(stmt.compile())
@@ -145,7 +142,8 @@ class TestBuildSearchQuery:
 
     def test_valid_cursor_adds_seek_condition(self):
         from app.events.pagination import encode_cursor
-        ts = datetime(2024, 6, 1, tzinfo=timezone.utc)
+
+        ts = datetime(2024, 6, 1, tzinfo=UTC)
         eid = uuid4()
         cursor = encode_cursor(ts, eid, "event_timestamp", "desc")
         req = EventSearchRequest(cursor=cursor)

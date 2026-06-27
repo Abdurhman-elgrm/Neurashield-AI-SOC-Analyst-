@@ -53,8 +53,11 @@ class InstallerToken(Base, TimestampMixin):
     organization: Mapped[str] = mapped_column(String(255), nullable=False)
     machine_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     status: Mapped[InstallerTokenStatus] = mapped_column(
-        Enum(InstallerTokenStatus, name="installer_token_status_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            InstallerTokenStatus,
+            name="installer_token_status_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=InstallerTokenStatus.PENDING,
         index=True,
@@ -66,9 +69,7 @@ class InstallerToken(Base, TimestampMixin):
     installed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     device_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    token_metadata: Mapped[dict] = mapped_column(
-        "metadata", JSONB, nullable=False, default=dict
-    )
+    token_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_by_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -93,8 +94,8 @@ class InstallerToken(Base, TimestampMixin):
 
     @property
     def is_expired(self) -> bool:
-        from datetime import timezone
         from app.models.base import utcnow
+
         return self.expires_at < utcnow()
 
     @property

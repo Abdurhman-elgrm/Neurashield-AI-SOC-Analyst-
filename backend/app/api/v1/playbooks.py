@@ -9,9 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError
 from app.models.alert import Alert
-from app.models.playbook import Playbook, PlaybookAutoConfig, PlaybookRun, PlaybookStep, PlaybookTemplate, PlaybookTemplateStep
+from app.models.playbook import (
+    Playbook,
+    PlaybookAutoConfig,
+    PlaybookStep,
+    PlaybookTemplate,
+    PlaybookTemplateStep,
+)
 from app.models.tenant_member import TenantMember
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
@@ -32,6 +38,7 @@ router = APIRouter(prefix="/playbooks", tags=["playbooks"])
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/templates", response_model=PaginatedResponse[PlaybookTemplateResponse])
 async def list_templates(
@@ -70,9 +77,9 @@ async def list_templates(
         )
         steps = list(steps_result.scalars().all())
         t_dict = PlaybookTemplateResponse.model_validate(t)
-        t_dict = t_dict.model_copy(update={"steps": [
-            PlaybookTemplateStepResponse.model_validate(s) for s in steps
-        ]})
+        t_dict = t_dict.model_copy(
+            update={"steps": [PlaybookTemplateStepResponse.model_validate(s) for s in steps]}
+        )
         template_responses.append(t_dict)
 
     return PaginatedResponse[PlaybookTemplateResponse].offset(
@@ -122,8 +129,13 @@ async def create_template(
 
     await db.flush()
     await AuditService.log(
-        db, action="playbook_template.created", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="playbook_template", resource_id=template.id,
+        db,
+        action="playbook_template.created",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="playbook_template",
+        resource_id=template.id,
     )
     await db.commit()
 
@@ -141,6 +153,7 @@ async def create_template(
 
 # ── Playbooks ─────────────────────────────────────────────────────────────────
 
+
 @router.post("/generate", response_model=APIResponse[PlaybookResponse], status_code=201)
 async def generate_playbook(
     payload: GeneratePlaybookRequest,
@@ -150,9 +163,8 @@ async def generate_playbook(
     m: TenantMember = member  # type: ignore[assignment]
 
     from app.models.tenant import Tenant
-    tenant_result = await db.execute(
-        select(Tenant.name).where(Tenant.id == m.tenant_id)
-    )
+
+    tenant_result = await db.execute(select(Tenant.name).where(Tenant.id == m.tenant_id))
     company_name = tenant_result.scalar_one_or_none() or "Your Organization"
 
     if payload.alert_id is not None:
@@ -168,18 +180,20 @@ async def generate_playbook(
         if alert is None:
             raise NotFoundError(f"Alert {payload.alert_id} not found")
 
-        alert_title   = alert.title
-        severity      = alert.severity.value
-        source_host   = alert.source_host
+        alert_title = alert.title
+        severity = alert.severity.value
+        source_host = alert.source_host
         mitre_techniques = list(alert.mitre_techniques or [])
-        mitre_tactics    = list(alert.mitre_tactics or [])
-        evidence         = dict(alert.evidence or {})
+        mitre_tactics = list(alert.mitre_tactics or [])
+        evidence = dict(alert.evidence or {})
     else:
         # Manual generation: use the fields supplied in the request
-        from app.services.playbook_service import _technique_name as _tname, _TACTIC_NAMES as _tnames
+        from app.services.playbook_service import _TACTIC_NAMES as _tnames
+        from app.services.playbook_service import _technique_name as _tname
+
         technique = (payload.technique or "").strip().upper()
-        tactic    = (payload.tactic or "").strip().upper()
-        tech_label  = _tname(technique) if technique else ""
+        tactic = (payload.tactic or "").strip().upper()
+        tech_label = _tname(technique) if technique else ""
         tactic_label = _tnames.get(tactic, tactic)
         if tech_label and tech_label != "Unknown Technique":
             alert_title = f"{tech_label} ({technique})"
@@ -189,11 +203,11 @@ async def generate_playbook(
             alert_title = payload.source_host or "Manual Playbook"
         if payload.source_host:
             alert_title = f"{alert_title} — {payload.source_host}"
-        severity         = payload.severity
-        source_host      = payload.source_host
+        severity = payload.severity
+        source_host = payload.source_host
         mitre_techniques = [technique] if technique else []
-        mitre_tactics    = [tactic]    if tactic    else []
-        evidence         = {}
+        mitre_tactics = [tactic] if tactic else []
+        evidence = {}
 
     playbook = await PlaybookGeneratorService.generate(
         db=db,
@@ -280,8 +294,13 @@ async def execute_playbook(
         mode="manual",
     )
     await AuditService.log(
-        db, action="playbook.executed", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="playbook", resource_id=playbook_id,
+        db,
+        action="playbook.executed",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="playbook",
+        resource_id=playbook_id,
     )
     await db.commit()
     return APIResponse.ok(PlaybookRunResponse.model_validate(run))
@@ -328,14 +347,20 @@ async def delete_playbook(
         raise NotFoundError(f"Playbook {playbook_id} not found")
     playbook.soft_delete()
     await AuditService.log(
-        db, action="playbook.deleted", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="playbook", resource_id=playbook_id,
+        db,
+        action="playbook.deleted",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="playbook",
+        resource_id=playbook_id,
     )
     await db.commit()
     return APIResponse.ok(EmptyResponse())
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _require_playbook_response(
     db: AsyncSession, tenant_id: UUID, playbook_id: UUID
@@ -387,7 +412,9 @@ async def _load_playbook_response(
     )
     steps = list(steps_result.scalars().all())
     resp = PlaybookResponse.model_validate(playbook)
-    resp = resp.model_copy(update={"steps": [PlaybookStepResponse.model_validate(s) for s in steps]})
+    resp = resp.model_copy(
+        update={"steps": [PlaybookStepResponse.model_validate(s) for s in steps]}
+    )
     return resp
 
 
@@ -395,9 +422,11 @@ async def _load_playbook_response(
 
 from pydantic import BaseModel as _BaseModel
 
+
 class AutoConfigResponse(_BaseModel):
     enabled: bool
     min_severity: str
+
 
 class AutoConfigUpdateRequest(_BaseModel):
     enabled: bool
@@ -430,6 +459,7 @@ async def update_auto_config(
     valid_severities = {"critical", "high", "medium", "low"}
     if payload.min_severity not in valid_severities:
         from app.core.exceptions import ValidationError
+
         raise ValidationError(f"min_severity must be one of {sorted(valid_severities)}")
 
     result = await db.execute(
@@ -450,8 +480,12 @@ async def update_auto_config(
         cfg.updated_by_id = m.user_id
 
     await AuditService.log(
-        db, action="playbook_auto_config.updated", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="playbook_auto_config",
+        db,
+        action="playbook_auto_config.updated",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="playbook_auto_config",
         resource_id=cfg.id if cfg.id else None,
     )
     await db.commit()

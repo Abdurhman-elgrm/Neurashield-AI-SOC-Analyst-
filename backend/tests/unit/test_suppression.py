@@ -1,4 +1,5 @@
 """Unit tests for alert suppression."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -16,7 +17,6 @@ def _make_client(set_nx_result=True) -> MagicMock:
 
 
 class TestBuildSuppressionKey:
-
     def test_same_inputs_same_key(self):
         k1 = build_suppression_key("rule-1", "HOST1")
         k2 = build_suppression_key("rule-1", "HOST1")
@@ -40,7 +40,6 @@ class TestBuildSuppressionKey:
 
 @pytest.mark.asyncio
 class TestSuppressionStore:
-
     async def test_check_and_suppress_first_time_returns_not_suppressed(self):
         client = MagicMock()
         # SET NX returns a truthy value (True) on first call = key was set

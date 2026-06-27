@@ -45,6 +45,6 @@ export function useTenantInit() {
         running.current = false
         setTimeout(() => setRetryKey((k) => k + 1), 3000)
       })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [accessToken, activeTenant, retryKey, location.pathname])
 }

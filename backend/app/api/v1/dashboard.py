@@ -12,16 +12,16 @@ Endpoints:
   GET /dashboard/correlation-activity — active investigations + recent correlations
   GET /dashboard/ai-operations       — AI analysis queue + verdict statistics
 """
+
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -48,7 +48,7 @@ def _kpi_key(tenant_id: str, slug: str, time_range: str) -> str:
     return f"tenant:{tenant_id}:{_KPI_SUBSYSTEM}:kpi:{slug}:{tr_hash}"
 
 
-async def _kpi_get(redis: "Redis[str] | None", key: str) -> str | None:
+async def _kpi_get(redis: Redis[str] | None, key: str) -> str | None:
     if redis is None:
         return None
     try:
@@ -57,7 +57,7 @@ async def _kpi_get(redis: "Redis[str] | None", key: str) -> str | None:
         return None
 
 
-async def _kpi_set(redis: "Redis[str] | None", key: str, value: str) -> None:
+async def _kpi_set(redis: Redis[str] | None, key: str, value: str) -> None:
     if redis is None:
         return
     try:
@@ -70,6 +70,7 @@ async def _invalidate_dashboard_cache(tenant_id: str) -> None:
     """Delete all cached dashboard KPIs for a tenant. Called on alert/event write."""
     try:
         from app.core.redis import redis_manager
+
         redis = redis_manager.get_client()
         # Pattern matches all dashboard KPI keys under the tenant namespace.
         pattern = f"tenant:{tenant_id}:{_KPI_SUBSYSTEM}:*"
@@ -81,26 +82,27 @@ async def _invalidate_dashboard_cache(tenant_id: str) -> None:
     except Exception:
         pass
 
+
 # ─── Time-range helpers ───────────────────────────────────────────────────────
 
 DashboardTimeRange = Literal["last_15m", "last_1h", "last_6h", "last_24h", "last_7d"]
 
 _TR_MINUTES: dict[str, int] = {
     "last_15m": 15,
-    "last_1h":  60,
-    "last_6h":  360,
+    "last_1h": 60,
+    "last_6h": 360,
     "last_24h": 1440,
-    "last_7d":  10080,
+    "last_7d": 10080,
 }
 
 # Bucket size (seconds) for ingestion-rate time-series.
 # Chosen so each range produces ~15–50 data points.
 _TR_BUCKET_SECS: dict[str, int] = {
-    "last_15m": 60,     # 15 x 1-min buckets
-    "last_1h":  120,    # 30 x 2-min buckets
-    "last_6h":  600,    # 36 x 10-min buckets
-    "last_24h": 1800,   # 48 x 30-min buckets
-    "last_7d":  14400,  # 42 x 4-hour buckets
+    "last_15m": 60,  # 15 x 1-min buckets
+    "last_1h": 120,  # 30 x 2-min buckets
+    "last_6h": 600,  # 36 x 10-min buckets
+    "last_24h": 1800,  # 48 x 30-min buckets
+    "last_7d": 14400,  # 42 x 4-hour buckets
 }
 
 # A rule is "noisy" if it fires more than this many times per 24 h.
@@ -109,7 +111,7 @@ _NOISY_RULE_THRESHOLD = 50
 
 def _window(time_range: str) -> tuple[datetime, datetime, int]:
     """Return (period_start, now, bucket_secs) for a time-range string."""
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     minutes = _TR_MINUTES.get(time_range, 1440)
     bucket = _TR_BUCKET_SECS.get(time_range, 1800)
     return now - timedelta(minutes=minutes), now, bucket
@@ -117,20 +119,21 @@ def _window(time_range: str) -> tuple[datetime, datetime, int]:
 
 # ─── Response schemas (mirror frontend TypeScript interfaces exactly) ─────────
 
+
 class AlertKPI(BaseModel):
     total: int = 0
     open: int = 0
     critical: int = 0
     high: int = 0
-    delta24h: float = 0.0           # % change vs equal-length previous period
-    criticalDelta24h: float = 0.0   # % change vs equal-length previous period
+    delta24h: float = 0.0  # % change vs equal-length previous period
+    criticalDelta24h: float = 0.0  # % change vs equal-length previous period
 
 
 class InvestigationKPI(BaseModel):
     active: int = 0
     correlated: int = 0
     aiPending: int = 0
-    delta24h: float = 0.0           # % change vs equal-length previous period
+    delta24h: float = 0.0  # % change vs equal-length previous period
 
 
 class IngestionKPI(BaseModel):
@@ -150,7 +153,7 @@ class DetectionKPI(BaseModel):
     rulesTriggered: int = 0
     activeRules: int = 0
     noisyRules: int = 0
-    delta24h: float = 0.0           # % change vs equal-length previous period
+    delta24h: float = 0.0  # % change vs equal-length previous period
 
 
 class DashboardSummary(BaseModel):
@@ -251,6 +254,7 @@ class AIOperationsData(BaseModel):
 
 # ─── Score → severity helper ──────────────────────────────────────────────────
 
+
 def _score_to_severity(score: int) -> str:
     if score >= 76:
         return "critical"
@@ -272,14 +276,16 @@ def _pct_delta(current: int, prev: int) -> float:
 
 # ─── /dashboard/summary ───────────────────────────────────────────────────────
 
+
 @router.get("/summary", response_model=APIResponse[DashboardSummary])
 async def get_dashboard_summary(
     member: Annotated[object, require_permission(Permission.EVENTS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[DashboardSummary]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -291,7 +297,9 @@ async def get_dashboard_summary(
     prev_start = period_start - (now - period_start)  # equal-length previous period
 
     # ── Alerts: current + previous period ────────────────────────────────────
-    alert_row = (await db.execute(text("""
+    alert_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (WHERE created_at >= :ps)                       AS total,
             COUNT(*) FILTER (WHERE created_at >= :ps AND status = 'open')   AS open,
@@ -302,11 +310,14 @@ async def get_dashboard_summary(
         FROM alerts
         WHERE tenant_id = CAST(:tid AS uuid)
           AND deleted_at IS NULL
-    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start, "prev_ps": prev_start},
+        )
+    ).fetchone()
 
-    curr_total    = alert_row.total    or 0
+    curr_total = alert_row.total or 0
     curr_critical = alert_row.critical or 0
-    prev_total    = alert_row.prev_total    or 0
+    prev_total = alert_row.prev_total or 0
     prev_critical = alert_row.prev_critical or 0
 
     alerts = AlertKPI(
@@ -319,7 +330,9 @@ async def get_dashboard_summary(
     )
 
     # ── Investigations ────────────────────────────────────────────────────────
-    inv_row = (await db.execute(text("""
+    inv_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (WHERE status NOT IN ('closed','resolved','false_positive') AND created_at >= :ps) AS active,
             COUNT(*) FILTER (WHERE confidence IN ('high','confirmed') AND created_at >= :ps)                   AS correlated,
@@ -327,7 +340,10 @@ async def get_dashboard_summary(
             COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps AND status NOT IN ('closed','resolved','false_positive')) AS prev_active
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
-    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start, "prev_ps": prev_start},
+        )
+    ).fetchone()
 
     inv_active = inv_row.active or 0
     prev_active = inv_row.prev_active or 0
@@ -342,20 +358,27 @@ async def get_dashboard_summary(
     # ── Events / ingestion ────────────────────────────────────────────────────
     # Compute total + previous-period total, plus the peak EPS across
     # fixed 5-minute buckets within the current period.
-    ev_row = (await db.execute(text("""
+    ev_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (WHERE event_timestamp >= :ps)                AS total,
             COUNT(*) FILTER (WHERE event_timestamp >= :prev_ps AND event_timestamp < :ps) AS prev_total
         FROM events
         WHERE tenant_id = CAST(:tid AS uuid)
-    """), {"tid": tid, "ps": period_start, "prev_ps": prev_start})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start, "prev_ps": prev_start},
+        )
+    ).fetchone()
 
     # Peak EPS: max events in any single 5-minute bucket within the period.
     # Using a 300-second bucket gives a stable, comparable peak regardless of
     # the time_range chosen (unlike the ingestion-rate endpoint whose bucket
     # size varies per range).
     _PEAK_BUCKET_SECS = 300
-    peak_row = (await db.execute(text("""
+    peak_row = (
+        await db.execute(
+            text("""
         SELECT COALESCE(MAX(bucket_count), 0) AS peak_count
         FROM (
             SELECT COUNT(*) AS bucket_count
@@ -364,14 +387,17 @@ async def get_dashboard_summary(
               AND event_timestamp >= :ps
             GROUP BY (EXTRACT(EPOCH FROM event_timestamp)::bigint / :bsecs)
         ) sub
-    """), {"tid": tid, "ps": period_start, "bsecs": _PEAK_BUCKET_SECS})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start, "bsecs": _PEAK_BUCKET_SECS},
+        )
+    ).fetchone()
 
     total_events = ev_row.total or 0
-    prev_events  = ev_row.prev_total or 0
-    period_secs  = max((now - period_start).total_seconds(), 1)
-    eps_now      = round(total_events / period_secs, 3)
-    eps_peak     = round((peak_row.peak_count or 0) / _PEAK_BUCKET_SECS, 3)
-    delta_pct    = _pct_delta(total_events, prev_events)
+    prev_events = ev_row.prev_total or 0
+    period_secs = max((now - period_start).total_seconds(), 1)
+    eps_now = round(total_events / period_secs, 3)
+    eps_peak = round((peak_row.peak_count or 0) / _PEAK_BUCKET_SECS, 3)
+    delta_pct = _pct_delta(total_events, prev_events)
 
     ingestion = IngestionKPI(
         epsNow=eps_now,
@@ -381,14 +407,19 @@ async def get_dashboard_summary(
     )
 
     # ── Agents ────────────────────────────────────────────────────────────────
-    ag_row = (await db.execute(text("""
+    ag_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) AS total,
             COUNT(*) FILTER (WHERE status = 'online')  AS online,
             COUNT(*) FILTER (WHERE status = 'offline') AS offline
         FROM agents
         WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
-    """), {"tid": tid})).fetchone()
+    """),
+            {"tid": tid},
+        )
+    ).fetchone()
 
     agents = AgentKPI(
         total=ag_row.total or 0,
@@ -397,7 +428,9 @@ async def get_dashboard_summary(
     )
 
     # ── Detection rules — current + previous period in one CTE ───────────────
-    det_row = (await db.execute(text("""
+    det_row = (
+        await db.execute(
+            text("""
         WITH per_rule AS (
             SELECT
                 rule_id,
@@ -415,22 +448,30 @@ async def get_dashboard_summary(
             COUNT(*) FILTER (WHERE cnt_curr > 0)           AS triggered_rules,
             COUNT(*) FILTER (WHERE cnt_prev > 0)           AS prev_triggered_rules
         FROM per_rule
-    """), {
-        "tid": tid,
-        "ps": period_start,
-        "prev_ps": prev_start,
-        "threshold": _NOISY_RULE_THRESHOLD,
-    })).fetchone()
+    """),
+            {
+                "tid": tid,
+                "ps": period_start,
+                "prev_ps": prev_start,
+                "threshold": _NOISY_RULE_THRESHOLD,
+            },
+        )
+    ).fetchone()
 
-    rule_base = (await db.execute(text("""
+    rule_base = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (WHERE enabled)     AS active,
             COUNT(*) FILTER (WHERE NOT enabled) AS disabled
         FROM detection_rules
         WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
-    """), {"tid": tid})).fetchone()
+    """),
+            {"tid": tid},
+        )
+    ).fetchone()
 
-    curr_triggered = det_row.triggered_rules      or 0
+    curr_triggered = det_row.triggered_rules or 0
     prev_triggered = det_row.prev_triggered_rules or 0
 
     detection = DetectionKPI(
@@ -440,28 +481,32 @@ async def get_dashboard_summary(
         delta24h=_pct_delta(curr_triggered, prev_triggered),
     )
 
-    result = APIResponse.ok(DashboardSummary(
-        alerts=alerts,
-        investigations=investigations,
-        ingestion=ingestion,
-        agents=agents,
-        detection=detection,
-        generatedAt=now.isoformat(),
-    ))
+    result = APIResponse.ok(
+        DashboardSummary(
+            alerts=alerts,
+            investigations=investigations,
+            ingestion=ingestion,
+            agents=agents,
+            detection=detection,
+            generatedAt=now.isoformat(),
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/ingestion-rate ────────────────────────────────────────────────
 
+
 @router.get("/ingestion-rate", response_model=APIResponse[IngestionRateSeries])
 async def get_ingestion_rate(
     member: Annotated[object, require_permission(Permission.EVENTS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[IngestionRateSeries]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -472,7 +517,9 @@ async def get_ingestion_rate(
     period_start, now, bucket_secs = _window(time_range)
 
     # Events bucketed by custom interval via epoch arithmetic
-    ev_rows = (await db.execute(text("""
+    ev_rows = (
+        await db.execute(
+            text("""
         SELECT
             to_timestamp(
                 (EXTRACT(EPOCH FROM event_timestamp)::bigint / :bsecs) * :bsecs
@@ -484,10 +531,15 @@ async def get_ingestion_rate(
           AND event_timestamp <= :now
         GROUP BY 1
         ORDER BY 1
-    """), {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs},
+        )
+    ).fetchall()
 
     # Alerts bucketed the same way
-    al_rows = (await db.execute(text("""
+    al_rows = (
+        await db.execute(
+            text("""
         SELECT
             to_timestamp(
                 (EXTRACT(EPOCH FROM created_at)::bigint / :bsecs) * :bsecs
@@ -500,22 +552,25 @@ async def get_ingestion_rate(
           AND deleted_at IS NULL
         GROUP BY 1
         ORDER BY 1
-    """), {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start, "now": now, "bsecs": bucket_secs},
+        )
+    ).fetchall()
 
-    alert_map: dict[str, int] = {
-        str(r.bucket_ts): (r.alert_count or 0) for r in al_rows
-    }
+    alert_map: dict[str, int] = {str(r.bucket_ts): (r.alert_count or 0) for r in al_rows}
 
     points: list[IngestionRatePoint] = []
     for r in ev_rows:
         eps = round((r.event_count or 0) / bucket_secs, 4)
         ts = r.bucket_ts.isoformat() if r.bucket_ts else ""
-        points.append(IngestionRatePoint(
-            timestamp=ts,
-            eps=eps,
-            normalizedEps=eps,
-            alertsCreated=alert_map.get(str(r.bucket_ts), 0),
-        ))
+        points.append(
+            IngestionRatePoint(
+                timestamp=ts,
+                eps=eps,
+                normalizedEps=eps,
+                alertsCreated=alert_map.get(str(r.bucket_ts), 0),
+            )
+        )
 
     eps_values = [p.eps for p in points]
     peak_eps = max(eps_values) if eps_values else 0.0
@@ -526,25 +581,29 @@ async def get_ingestion_rate(
         for p in points:
             p.normalizedEps = round(p.eps / peak_eps * 100, 1)
 
-    result = APIResponse.ok(IngestionRateSeries(
-        points=points,
-        averageEps=avg_eps,
-        peakEps=peak_eps,
-    ))
+    result = APIResponse.ok(
+        IngestionRateSeries(
+            points=points,
+            averageEps=avg_eps,
+            peakEps=peak_eps,
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/detection-health ─────────────────────────────────────────────
 
+
 @router.get("/detection-health", response_model=APIResponse[DetectionHealthData])
 async def get_detection_health(
     member: Annotated[object, require_permission(Permission.RULES_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[DetectionHealthData]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -555,16 +614,23 @@ async def get_detection_health(
     period_start, now, _ = _window(time_range)
 
     # Rule counts
-    counts_row = (await db.execute(text("""
+    counts_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (WHERE enabled)     AS active,
             COUNT(*) FILTER (WHERE NOT enabled) AS disabled
         FROM detection_rules
         WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL
-    """), {"tid": tid})).fetchone()
+    """),
+            {"tid": tid},
+        )
+    ).fetchone()
 
     # Per-rule alert stats in period
-    rule_rows = (await db.execute(text("""
+    rule_rows = (
+        await db.execute(
+            text("""
         SELECT
             r.id        AS rule_id,
             r.name      AS rule_name,
@@ -587,7 +653,10 @@ async def get_detection_health(
         GROUP BY r.id, r.name, r.enabled
         ORDER BY alert_count DESC
         LIMIT 20
-    """), {"tid": tid, "ps": period_start})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start},
+        )
+    ).fetchall()
 
     noisy_count = 0
     top_rules: list[DetectionRuleHealth] = []
@@ -608,42 +677,48 @@ async def get_detection_health(
             status = "active"
 
         last_at = r.last_triggered_at.isoformat() if r.last_triggered_at else None
-        top_rules.append(DetectionRuleHealth(
-            ruleId=str(r.rule_id),
-            ruleName=r.rule_name,
-            triggeredCount=cnt,
-            alertsCreated=cnt,
-            suppressedCount=0,
-            lastTriggeredAt=last_at,
-            avgLatencyMs=latency,
-            status=status,  # type: ignore[arg-type]
-        ))
+        top_rules.append(
+            DetectionRuleHealth(
+                ruleId=str(r.rule_id),
+                ruleName=r.rule_name,
+                triggeredCount=cnt,
+                alertsCreated=cnt,
+                suppressedCount=0,
+                lastTriggeredAt=last_at,
+                avgLatencyMs=latency,
+                status=status,  # type: ignore[arg-type]
+            )
+        )
 
     avg_latency = round(sum(all_latencies) / len(all_latencies), 1) if all_latencies else 0.0
 
-    result = APIResponse.ok(DetectionHealthData(
-        activeRules=counts_row.active or 0,
-        disabledRules=counts_row.disabled or 0,
-        noisyRules=noisy_count,
-        errorRules=0,
-        avgLatencyMs=avg_latency,
-        ingestionToDetectionMs=avg_latency,
-        topRules=top_rules[:10],
-    ))
+    result = APIResponse.ok(
+        DetectionHealthData(
+            activeRules=counts_row.active or 0,
+            disabledRules=counts_row.disabled or 0,
+            noisyRules=noisy_count,
+            errorRules=0,
+            avgLatencyMs=avg_latency,
+            ingestionToDetectionMs=avg_latency,
+            topRules=top_rules[:10],
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/mitre-coverage ────────────────────────────────────────────────
 
+
 @router.get("/mitre-coverage", response_model=APIResponse[MitreCoverageData])
 async def get_mitre_coverage(
     member: Annotated[object, require_permission(Permission.EVENTS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[MitreCoverageData]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -654,7 +729,9 @@ async def get_mitre_coverage(
     period_start, now, _ = _window(time_range)
 
     # Expand JSONB array of technique IDs per alert and aggregate counts per technique
-    rows = (await db.execute(text("""
+    rows = (
+        await db.execute(
+            text("""
         SELECT
             technique,
             COUNT(*)                                            AS total,
@@ -679,16 +756,24 @@ async def get_mitre_coverage(
         GROUP BY technique
         ORDER BY total DESC
         LIMIT 100
-    """), {"tid": tid, "ps": period_start})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start},
+        )
+    ).fetchall()
 
     # Total alerts with any MITRE data in period
-    total_row = (await db.execute(text("""
+    total_row = (
+        await db.execute(
+            text("""
         SELECT COUNT(*) AS total
         FROM alerts
         WHERE tenant_id = CAST(:tid AS uuid)
           AND created_at >= :ps
           AND deleted_at IS NULL
-    """), {"tid": tid, "ps": period_start})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start},
+        )
+    ).fetchone()
 
     technique_counts: dict[str, TechniqueStat] = {}
     top_technique: str | None = None
@@ -709,27 +794,31 @@ async def get_mitre_coverage(
             top_count = cnt
             top_technique = tid_str
 
-    result = APIResponse.ok(MitreCoverageData(
-        techniqueCounts=technique_counts,
-        totalAlerts=total_row.total or 0,
-        coveredTechniques=len(technique_counts),
-        topTechnique=top_technique,
-        generatedAt=now.isoformat(),
-    ))
+    result = APIResponse.ok(
+        MitreCoverageData(
+            techniqueCounts=technique_counts,
+            totalAlerts=total_row.total or 0,
+            coveredTechniques=len(technique_counts),
+            topTechnique=top_technique,
+            generatedAt=now.isoformat(),
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/correlation-activity ─────────────────────────────────────────
 
+
 @router.get("/correlation-activity", response_model=APIResponse[CorrelationActivityData])
 async def get_correlation_activity(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[CorrelationActivityData]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -741,7 +830,9 @@ async def get_correlation_activity(
     _TERMINAL = ("closed", "resolved", "false_positive")
 
     # Aggregate counts for active investigations
-    agg_row = (await db.execute(text("""
+    agg_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*)                                                         AS active,
             COALESCE(SUM(jsonb_array_length(triggering_alert_ids)), 0)       AS grouped_alerts,
@@ -758,10 +849,15 @@ async def get_correlation_activity(
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
           AND status NOT IN ('closed', 'resolved', 'false_positive')
-    """), {"tid": tid})).fetchone()
+    """),
+            {"tid": tid},
+        )
+    ).fetchone()
 
     # Recent investigations as correlation events (up to 10)
-    inv_rows = (await db.execute(text("""
+    inv_rows = (
+        await db.execute(
+            text("""
         SELECT
             id,
             title,
@@ -776,7 +872,10 @@ async def get_correlation_activity(
           AND created_at >= :ps
         ORDER BY created_at DESC
         LIMIT 10
-    """), {"tid": tid, "ps": period_start})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start},
+        )
+    ).fetchall()
 
     recent: list[CorrelationEvent] = []
     for r in inv_rows:
@@ -804,37 +903,43 @@ async def get_correlation_activity(
                 if name:
                     behaviors.append(name)
 
-        recent.append(CorrelationEvent(
-            id=str(r.id),
-            investigationId=str(r.id),
-            investigationTitle=title,
-            alertCount=alert_count,
-            entityCount=entity_count,
-            behaviorMatches=behaviors[:5],
-            severity=_score_to_severity(r.threat_score or 0),
-            correlatedAt=r.created_at.isoformat() if r.created_at else now.isoformat(),
-        ))
+        recent.append(
+            CorrelationEvent(
+                id=str(r.id),
+                investigationId=str(r.id),
+                investigationTitle=title,
+                alertCount=alert_count,
+                entityCount=entity_count,
+                behaviorMatches=behaviors[:5],
+                severity=_score_to_severity(r.threat_score or 0),
+                correlatedAt=r.created_at.isoformat() if r.created_at else now.isoformat(),
+            )
+        )
 
-    result = APIResponse.ok(CorrelationActivityData(
-        activeInvestigations=agg_row.active or 0,
-        totalGroupedAlerts=int(agg_row.grouped_alerts or 0),
-        totalEntities=int(agg_row.total_entities or 0),
-        recentCorrelations=recent,
-    ))
+    result = APIResponse.ok(
+        CorrelationActivityData(
+            activeInvestigations=agg_row.active or 0,
+            totalGroupedAlerts=int(agg_row.grouped_alerts or 0),
+            totalEntities=int(agg_row.total_entities or 0),
+            recentCorrelations=recent,
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/ai-operations ────────────────────────────────────────────────
 
+
 @router.get("/ai-operations", response_model=APIResponse[AIOperationsData])
 async def get_ai_operations(
     member: Annotated[object, require_permission(Permission.INVESTIGATIONS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    redis: Annotated["Redis[str] | None", Depends(get_redis_optional)],
+    redis: Annotated[Redis[str] | None, Depends(get_redis_optional)],
     time_range: DashboardTimeRange = Query(default="last_24h"),
 ) -> APIResponse[AIOperationsData]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tid = str(m.tenant_id)
 
@@ -846,7 +951,9 @@ async def get_ai_operations(
     cutoff_24h = now - timedelta(hours=24)
 
     # Aggregate AI stats
-    stats_row = (await db.execute(text("""
+    stats_row = (
+        await db.execute(
+            text("""
         SELECT
             COUNT(*) FILTER (
                 WHERE ai_analysis_json IS NOT NULL
@@ -875,10 +982,15 @@ async def get_ai_operations(
             )                                                   AS avg_confidence
         FROM investigations
         WHERE tenant_id = CAST(:tid AS uuid)
-    """), {"tid": tid, "ps": period_start, "cutoff24": cutoff_24h})).fetchone()
+    """),
+            {"tid": tid, "ps": period_start, "cutoff24": cutoff_24h},
+        )
+    ).fetchone()
 
     # Recent verdicts from investigations with AI analysis
-    verdict_rows = (await db.execute(text("""
+    verdict_rows = (
+        await db.execute(
+            text("""
         SELECT
             id,
             title,
@@ -894,7 +1006,10 @@ async def get_ai_operations(
           AND (verdict IS NOT NULL OR ai_analysis_json IS NOT NULL)
         ORDER BY created_at DESC
         LIMIT 10
-    """), {"tid": tid, "ps": period_start})).fetchall()
+    """),
+            {"tid": tid, "ps": period_start},
+        )
+    ).fetchall()
 
     pending = stats_row.pending or 0
     recent_verdicts: list[AIVerdict] = []
@@ -929,30 +1044,35 @@ async def get_ai_operations(
 
         analyzed_at = r.created_at.isoformat() if r.ai_analysis_json and r.created_at else None
 
-        recent_verdicts.append(AIVerdict(
-            verdict=verdict_str,
-            confidence=confidence,
-            investigationId=str(r.id),
-            title=title,
-            analyzedAt=analyzed_at,
-        ))
+        recent_verdicts.append(
+            AIVerdict(
+                verdict=verdict_str,
+                confidence=confidence,
+                investigationId=str(r.id),
+                title=title,
+                analyzedAt=analyzed_at,
+            )
+        )
 
     avg_conf = round(float(stats_row.avg_confidence), 1) if stats_row.avg_confidence else 0.0
 
-    result = APIResponse.ok(AIOperationsData(
-        queueDepth=pending,
-        analyzedLast24h=stats_row.analyzed_24h or 0,
-        truePositiveCount=stats_row.true_positive or 0,
-        falsePositiveCount=stats_row.false_positive or 0,
-        pendingCount=pending,
-        avgConfidence=avg_conf,
-        recentVerdicts=recent_verdicts,
-    ))
+    result = APIResponse.ok(
+        AIOperationsData(
+            queueDepth=pending,
+            analyzedLast24h=stats_row.analyzed_24h or 0,
+            truePositiveCount=stats_row.true_positive or 0,
+            falsePositiveCount=stats_row.false_positive or 0,
+            pendingCount=pending,
+            avgConfidence=avg_conf,
+            recentVerdicts=recent_verdicts,
+        )
+    )
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
 
 
 # ─── /dashboard/geo-threats ──────────────────────────────────────────────────
+
 
 @router.get("/geo-threats", response_model=APIResponse[list])
 async def get_geo_threats(
@@ -961,14 +1081,16 @@ async def get_geo_threats(
     time_range: str = Query(default="24h"),
 ) -> APIResponse[list]:
     """Return geo-located threat sources from alert network evidence."""
-    from app.models.tenant_member import TenantMember
+    from datetime import datetime, timedelta
+
     from app.models.alert import Alert
-    from datetime import datetime, timezone, timedelta
+    from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     mapping = {"24h": 24, "last_24h": 24, "48h": 48, "7d": 168, "last_7d": 168}
     hours = mapping.get(time_range, 24)
-    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    since = datetime.now(tz=UTC) - timedelta(hours=hours)
 
     result = await db.execute(
         select(Alert.evidence, Alert.severity).where(
@@ -993,9 +1115,19 @@ async def get_geo_threats(
             continue
         sev_str = sev.value if hasattr(sev, "value") else str(sev)
         if country not in country_map:
-            country_map[country] = {"lat": lat, "lng": lng, "count": 0, "severity": "low", "country": country}
+            country_map[country] = {
+                "lat": lat,
+                "lng": lng,
+                "count": 0,
+                "severity": "low",
+                "country": country,
+            }
         country_map[country]["count"] += 1
-        existing_idx = sev_order.index(country_map[country]["severity"]) if country_map[country]["severity"] in sev_order else 0
+        existing_idx = (
+            sev_order.index(country_map[country]["severity"])
+            if country_map[country]["severity"] in sev_order
+            else 0
+        )
         curr_idx = sev_order.index(sev_str) if sev_str in sev_order else 0
         if curr_idx > existing_idx:
             country_map[country]["severity"] = sev_str
@@ -1005,6 +1137,7 @@ async def get_geo_threats(
 
 # ─── /dashboard/alert-heatmap ────────────────────────────────────────────────
 
+
 @router.get("/alert-heatmap", response_model=APIResponse[list])
 async def get_alert_heatmap(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
@@ -1012,18 +1145,23 @@ async def get_alert_heatmap(
     timeRange: str = Query(default="last_7d"),
 ) -> APIResponse[list]:
     """Alert volume grouped by day-of-week × hour-of-day for a heatmap view."""
-    from app.models.tenant_member import TenantMember
     from app.models.alert import Alert
+    from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     mapping = {
-        "last_24h": 1, "24h": 1,
-        "last_7d": 7, "7d": 7,
-        "last_6h": 1, "last_15m": 1, "last_1h": 1,
+        "last_24h": 1,
+        "24h": 1,
+        "last_7d": 7,
+        "7d": 7,
+        "last_6h": 1,
+        "last_15m": 1,
+        "last_1h": 1,
         "30d": 30,
     }
     days = mapping.get(timeRange, 7)
-    since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    since = datetime.now(tz=UTC) - timedelta(days=days)
 
     result = await db.execute(
         select(Alert.created_at).where(
@@ -1036,15 +1174,18 @@ async def get_alert_heatmap(
     counts: dict[tuple[int, int], int] = {}
     for ts in timestamps:
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         key = (ts.weekday() + 1) % 7, ts.hour  # Mon=0 in Python, convert to Sun=0
         counts[key] = counts.get(key, 0) + 1
 
-    cells = [{"day": d, "hour": h, "count": counts.get((d, h), 0)} for d in range(7) for h in range(24)]
+    cells = [
+        {"day": d, "hour": h, "count": counts.get((d, h), 0)} for d in range(7) for h in range(24)
+    ]
     return APIResponse.ok(cells)
 
 
 # ─── /dashboard/mttr-trend ───────────────────────────────────────────────────
+
 
 @router.get("/mttr-trend", response_model=APIResponse[list])
 async def get_mttr_trend(
@@ -1052,31 +1193,36 @@ async def get_mttr_trend(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[list]:
     """Weekly MTTR trend for the past 8 weeks."""
-    from app.models.tenant_member import TenantMember
     from app.models.alert import Alert
+    from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
-    since = datetime.now(tz=timezone.utc) - timedelta(weeks=8)
+    since = datetime.now(tz=UTC) - timedelta(weeks=8)
     result = await db.execute(
-        select(Alert).where(
+        select(Alert)
+        .where(
             Alert.tenant_id == m.tenant_id,
             Alert.created_at >= since,
-        ).order_by(Alert.created_at)
+        )
+        .order_by(Alert.created_at)
     )
     alerts = result.scalars().all()
 
     # Group by ISO week + severity
     from collections import defaultdict
+
     week_sev: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for a in alerts:
         ts = a.created_at
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         status_str = a.status.value if hasattr(a.status, "value") else str(a.status)
         if status_str not in ("closed", "false_positive", "resolved"):
             continue
-        elapsed = max(0.0, (a.updated_at - a.created_at).total_seconds() / 60.0) if a.updated_at else 0
-        iso_week = ts.strftime("%Y-%m-%d")  # Use Monday of the week
+        elapsed = (
+            max(0.0, (a.updated_at - a.created_at).total_seconds() / 60.0) if a.updated_at else 0
+        )
         # Round to Monday
         monday = ts - timedelta(days=ts.weekday())
         week_key = monday.strftime("%Y-%m-%d")
@@ -1087,16 +1233,21 @@ async def get_mttr_trend(
     out = []
     for week in sorted(week_sev.keys()):
         d = week_sev[week]
-        out.append({
-            "week":             week,
-            "critical_minutes": round(sum(d["critical"]) / len(d["critical"])) if d["critical"] else 0,
-            "high_minutes":     round(sum(d["high"])     / len(d["high"]))     if d["high"]     else 0,
-            "medium_minutes":   round(sum(d["medium"])   / len(d["medium"]))   if d["medium"]   else 0,
-        })
+        out.append(
+            {
+                "week": week,
+                "critical_minutes": round(sum(d["critical"]) / len(d["critical"]))
+                if d["critical"]
+                else 0,
+                "high_minutes": round(sum(d["high"]) / len(d["high"])) if d["high"] else 0,
+                "medium_minutes": round(sum(d["medium"]) / len(d["medium"])) if d["medium"] else 0,
+            }
+        )
     return APIResponse.ok(out)
 
 
 # ─── /dashboard/top-entities ─────────────────────────────────────────────────
+
 
 @router.get("/top-entities", response_model=APIResponse[dict])
 async def get_top_entities(
@@ -1105,21 +1256,22 @@ async def get_top_entities(
     timeRange: str = Query(default="last_24h"),
 ) -> APIResponse[dict]:
     """Top 5 hosts, users, and IPs by alert count."""
-    from app.models.tenant_member import TenantMember
     from app.models.alert import Alert
+    from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     mapping = {
         "last_15m": timedelta(minutes=15),
-        "last_1h":  timedelta(hours=1),
-        "last_6h":  timedelta(hours=6),
+        "last_1h": timedelta(hours=1),
+        "last_6h": timedelta(hours=6),
         "last_24h": timedelta(hours=24),
-        "last_7d":  timedelta(days=7),
+        "last_7d": timedelta(days=7),
         "24h": timedelta(hours=24),
-        "7d":  timedelta(days=7),
+        "7d": timedelta(days=7),
     }
     delta = mapping.get(timeRange, timedelta(hours=24))
-    since = datetime.now(tz=timezone.utc) - delta
+    since = datetime.now(tz=UTC) - delta
 
     result = await db.execute(
         select(Alert).where(
@@ -1146,8 +1298,10 @@ async def get_top_entities(
                 counts[key]["severity_max"] = sev
         return sorted(counts.values(), key=lambda x: -x["count"])[:5]
 
-    return APIResponse.ok({
-        "hosts": _aggregate(lambda a: a.hostname),
-        "users": _aggregate(lambda a: a.username),
-        "ips":   _aggregate(lambda a: a.source_ip),
-    })
+    return APIResponse.ok(
+        {
+            "hosts": _aggregate(lambda a: a.hostname),
+            "users": _aggregate(lambda a: a.username),
+            "ips": _aggregate(lambda a: a.source_ip),
+        }
+    )

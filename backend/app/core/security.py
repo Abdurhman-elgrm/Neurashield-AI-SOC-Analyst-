@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 import structlog
 from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerifyMismatchError, VerificationError
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.core.config import settings
@@ -82,6 +82,7 @@ def verify_agent_token(raw_token: str, stored_hash: str) -> bool:
 
 # ─── JWT ─────────────────────────────────────────────────────────────────────
 
+
 def _get_encode_key_access() -> str:
     """Return the signing key for access tokens (private key for RS256, secret for HS256)."""
     if settings.JWT_ALGORITHM == "RS256":
@@ -107,6 +108,7 @@ def _get_decode_key_refresh() -> str:
         return settings.JWT_PUBLIC_KEY
     return settings.JWT_REFRESH_SECRET
 
+
 class TokenPayload:
     def __init__(
         self,
@@ -126,14 +128,12 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
     Creates a short-lived JWT access token.
     subject: user UUID as string.
     """
-    expire = datetime.now(tz=timezone.utc) + timedelta(
-        minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    expire = datetime.now(tz=UTC) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     payload: dict[str, Any] = {
         "sub": subject,
         "type": "access",
         "exp": expire,
-        "iat": datetime.now(tz=timezone.utc),
+        "iat": datetime.now(tz=UTC),
     }
     if extra:
         payload.update(extra)
@@ -146,13 +146,13 @@ def create_refresh_token(subject: str) -> tuple[str, str]:
     Returns (encoded_token, jti).
     """
     jti = str(uuid4())
-    expire = datetime.now(tz=timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(tz=UTC) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
     payload: dict[str, Any] = {
         "sub": subject,
         "type": "refresh",
         "jti": jti,
         "exp": expire,
-        "iat": datetime.now(tz=timezone.utc),
+        "iat": datetime.now(tz=UTC),
     }
     token = jwt.encode(payload, _get_encode_key_refresh(), algorithm=settings.JWT_ALGORITHM)
     return token, jti
@@ -181,10 +181,10 @@ def decode_access_token(token: str) -> TokenPayload:
         email_verified: bool = payload.get("email_verified", True)
         return TokenPayload(sub=sub, token_type="access", email_verified=email_verified)
     except ExpiredSignatureError:
-        raise UnauthorizedError("Token has expired")
+        raise UnauthorizedError("Token has expired") from None
     except JWTError as exc:
         logger.debug("jwt_decode_failed", error=str(exc))
-        raise UnauthorizedError("Invalid token")
+        raise UnauthorizedError("Invalid token") from None
 
 
 def decode_refresh_token(token: str) -> TokenPayload:
@@ -205,7 +205,7 @@ def decode_refresh_token(token: str) -> TokenPayload:
             raise UnauthorizedError("Token missing required claims")
         return TokenPayload(sub=sub, token_type="refresh", jti=jti)
     except ExpiredSignatureError:
-        raise UnauthorizedError("Refresh token has expired")
+        raise UnauthorizedError("Refresh token has expired") from None
     except JWTError as exc:
         logger.debug("refresh_token_decode_failed", error=str(exc))
-        raise UnauthorizedError("Invalid refresh token")
+        raise UnauthorizedError("Invalid refresh token") from None

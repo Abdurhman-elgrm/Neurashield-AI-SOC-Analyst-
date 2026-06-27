@@ -7,6 +7,7 @@ Strategy:
   - Only SHA-256 supported (most reliable hash in MalwareBazaar)
   - result.to_flags() returns strings ready for threat_intel_flags list
 """
+
 from __future__ import annotations
 
 import json
@@ -23,19 +24,20 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-_MB_API_URL      = "https://mb-api.abuse.ch/api/v1/"
-_POSITIVE_TTL    = int(os.getenv("HASH_IOC_POSITIVE_TTL_SECS", str(86_400)))   # 24 h
-_NEGATIVE_TTL    = int(os.getenv("HASH_IOC_NEGATIVE_TTL_SECS", str(3_600)))    # 1 h
+_MB_API_URL = "https://mb-api.abuse.ch/api/v1/"
+_POSITIVE_TTL = int(os.getenv("HASH_IOC_POSITIVE_TTL_SECS", str(86_400)))  # 24 h
+_NEGATIVE_TTL = int(os.getenv("HASH_IOC_NEGATIVE_TTL_SECS", str(3_600)))  # 1 h
 _REQUEST_TIMEOUT = float(os.getenv("HASH_IOC_TIMEOUT_SECS", "4.0"))
 
 # Circuit breaker state (process-local; resets on worker restart — acceptable)
 _CB_MAX_FAILURES = 3
-_CB_RESET_SECS   = 300
-_cb_failures: int  = 0
+_CB_RESET_SECS = 300
+_cb_failures: int = 0
 _cb_open_until: float = 0.0
 
 
 # ─── Result ───────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class HashIOCResult:
@@ -64,14 +66,15 @@ class HashIOCResult:
 
 # ─── Circuit breaker ──────────────────────────────────────────────────────────
 
+
 def _cb_is_open() -> bool:
     return _cb_open_until > time.time()
 
 
 def _cb_success() -> None:
     global _cb_failures, _cb_open_until
-    _cb_failures    = 0
-    _cb_open_until  = 0.0
+    _cb_failures = 0
+    _cb_open_until = 0.0
 
 
 def _cb_failure() -> None:
@@ -88,11 +91,12 @@ def _cb_failure() -> None:
 
 # ─── Cache helpers ────────────────────────────────────────────────────────────
 
+
 def _cache_key(sha256: str) -> str:
     return f"hash_ioc:{sha256}"
 
 
-async def _read_cache(sha256: str, redis: "Redis") -> HashIOCResult | None:
+async def _read_cache(sha256: str, redis: Redis) -> HashIOCResult | None:
     try:
         raw = await redis.get(_cache_key(sha256))
         if raw is not None:
@@ -102,7 +106,7 @@ async def _read_cache(sha256: str, redis: "Redis") -> HashIOCResult | None:
     return None
 
 
-async def _write_cache(result: HashIOCResult, ttl: int, redis: "Redis") -> None:
+async def _write_cache(result: HashIOCResult, ttl: int, redis: Redis) -> None:
     try:
         await redis.setex(_cache_key(result.sha256), ttl, json.dumps(asdict(result)))
     except Exception as exc:
@@ -111,7 +115,8 @@ async def _write_cache(result: HashIOCResult, ttl: int, redis: "Redis") -> None:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-async def check_file_hash(sha256: str | None, redis: "Redis") -> HashIOCResult:
+
+async def check_file_hash(sha256: str | None, redis: Redis) -> HashIOCResult:
     """
     Check a SHA-256 hash against MalwareBazaar.
 

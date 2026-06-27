@@ -9,14 +9,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.event import EventResponse
 
-
 # ─── Filter primitives ────────────────────────────────────────────────────────
 
 FilterOperator = Literal[
-    "eq", "ne", "gt", "gte", "lt", "lte",
-    "in", "not_in",
-    "contains", "icontains", "starts_with",
-    "is_null", "is_not_null",
+    "eq",
+    "ne",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "in",
+    "not_in",
+    "contains",
+    "icontains",
+    "starts_with",
+    "is_null",
+    "is_not_null",
 ]
 
 FilterLogic = Literal["AND", "OR", "NOT"]
@@ -24,6 +32,7 @@ FilterLogic = Literal["AND", "OR", "NOT"]
 
 class FilterCondition(BaseModel):
     """Atomic filter condition: <field> <op> <value>."""
+
     field: str
     op: FilterOperator
     value: Any = None  # None is valid for is_null / is_not_null
@@ -38,15 +47,17 @@ class FilterGroup(BaseModel):
       OR [source_ip eq "1.2.3.4", dest_ip eq "1.2.3.4"]
       NOT [category eq "process"]
     """
+
     logic: FilterLogic = "AND"
     conditions: list[FilterCondition] = Field(default_factory=list)
-    groups: list["FilterGroup"] = Field(default_factory=list)
+    groups: list[FilterGroup] = Field(default_factory=list)
 
 
 FilterGroup.model_rebuild()
 
 
 # ─── Sort ─────────────────────────────────────────────────────────────────────
+
 
 class SortDirection(str, enum.Enum):
     ASC = "asc"
@@ -61,6 +72,7 @@ class SortField(str, enum.Enum):
 
 
 # ─── Search request ───────────────────────────────────────────────────────────
+
 
 class EventSearchRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -102,6 +114,7 @@ class EventSearchRequest(BaseModel):
 
 # ─── Search response ──────────────────────────────────────────────────────────
 
+
 class EventSearchResponse(BaseModel):
     items: list[EventResponse]
     next_cursor: str | None
@@ -111,6 +124,7 @@ class EventSearchResponse(BaseModel):
 
 
 # ─── Timeline ─────────────────────────────────────────────────────────────────
+
 
 class TimelineBucket(BaseModel):
     bucket_start: datetime
@@ -131,6 +145,7 @@ class TimelineResponse(BaseModel):
 
 # ─── Entity-centric ───────────────────────────────────────────────────────────
 
+
 class EntityType(str, enum.Enum):
     HOST = "host"
     USER = "user"
@@ -150,6 +165,7 @@ class EntityEventsResponse(BaseModel):
 
 # ─── Context ──────────────────────────────────────────────────────────────────
 
+
 class EventContextResponse(BaseModel):
     event: EventResponse
     prev_event: EventResponse | None = None
@@ -163,6 +179,7 @@ class EventContextResponse(BaseModel):
 
 
 # ─── Export ───────────────────────────────────────────────────────────────────
+
 
 class ExportFormat(str, enum.Enum):
     CSV = "csv"

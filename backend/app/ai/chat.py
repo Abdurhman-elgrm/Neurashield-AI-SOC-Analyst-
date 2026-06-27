@@ -32,9 +32,9 @@ async def build_soc_context(
     investigation_id: UUID | None = None,
 ) -> dict:
     """Query live SOC state for context injection. Never raises — returns partial on error."""
+    from app.models.agent import Agent, AgentStatus
     from app.models.alert import Alert, AlertSeverity, AlertStatus
     from app.models.investigation import Investigation
-    from app.models.agent import Agent, AgentStatus
 
     context: dict = {}
 
@@ -97,7 +97,9 @@ async def build_soc_context(
         )
         rows = result.all()
         online = sum(r.count for r in rows if str(r.status) in ("online", AgentStatus.ONLINE.value))
-        offline = sum(r.count for r in rows if str(r.status) not in ("online", AgentStatus.ONLINE.value))
+        offline = sum(
+            r.count for r in rows if str(r.status) not in ("online", AgentStatus.ONLINE.value)
+        )
         context["agents"] = {"online": online, "offline": offline}
     except Exception:
         log.warning("soc_context_agents_failed", exc_info=True)
@@ -138,7 +140,7 @@ def build_system_prompt(mode: str, soc_context: dict, history_text: str = "") ->
         {
             **a,
             "title": _sanitize_field(a.get("title", ""), max_len=100) or "(untitled)",
-            "host":  _sanitize_field(a.get("host",  ""), max_len=50)  or "unknown",
+            "host": _sanitize_field(a.get("host", ""), max_len=50) or "unknown",
         }
         for a in soc_context.get("alerts", [])
     ]
@@ -150,15 +152,17 @@ def build_system_prompt(mode: str, soc_context: dict, history_text: str = "") ->
         for i in soc_context.get("investigations", [])
     ]
 
-    alerts_text = "\n".join(
-        f"  - [{a['severity'].upper()}] {a['title']} on {a.get('host', 'unknown')}"
-        for a in sanitized_alerts
-    ) or "  None"
+    alerts_text = (
+        "\n".join(
+            f"  - [{a['severity'].upper()}] {a['title']} on {a.get('host', 'unknown')}"
+            for a in sanitized_alerts
+        )
+        or "  None"
+    )
 
-    investigations_text = "\n".join(
-        f"  - {i['title']} ({i['status']})"
-        for i in sanitized_investigations
-    ) or "  None"
+    investigations_text = (
+        "\n".join(f"  - {i['title']} ({i['status']})" for i in sanitized_investigations) or "  None"
+    )
 
     agents = soc_context.get("agents", {})
 
@@ -182,12 +186,12 @@ Open Critical/High Alerts:
 Active Investigations:
 {investigations_text}
 
-Agents: {agents.get('online', 0)} online, {agents.get('offline', 0)} offline
+Agents: {agents.get("online", 0)} online, {agents.get("offline", 0)} offline
 {current_inv}
 
 ## Your Task
-Mode: {mode_config['label']}
-{mode_config['instruction']}
+Mode: {mode_config["label"]}
+{mode_config["instruction"]}
 
 Be concise, technical, and actionable. Use markdown for formatting when helpful.
 Reference specific alerts or investigations from context when relevant.{history_section}"""

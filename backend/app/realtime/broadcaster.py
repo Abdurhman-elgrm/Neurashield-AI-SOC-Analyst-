@@ -6,7 +6,6 @@ import structlog
 from redis.asyncio import Redis
 
 from app.core.redis import TenantRedisClient
-from app.pipeline import stream_names
 from app.realtime.manager import connection_manager
 
 logger = structlog.get_logger(__name__)
@@ -22,7 +21,7 @@ class RedisBroadcaster:
     to their local clients — enabling horizontal scaling without sticky sessions.
     """
 
-    def __init__(self, redis: "Redis[str]") -> None:  # type: ignore[type-arg]
+    def __init__(self, redis: Redis[str]) -> None:  # type: ignore[type-arg]
         self._redis = redis
         self._stop_event = asyncio.Event()
 
@@ -37,8 +36,10 @@ class RedisBroadcaster:
 
             while not self._stop_event.is_set():
                 try:
-                    message = await asyncio.wait_for(pubsub.get_message(ignore_subscribe_messages=True), timeout=1.0)
-                except asyncio.TimeoutError:
+                    message = await asyncio.wait_for(
+                        pubsub.get_message(ignore_subscribe_messages=True), timeout=1.0
+                    )
+                except TimeoutError:
                     continue
                 except asyncio.CancelledError:
                     break

@@ -8,23 +8,22 @@ The current assignment is the row where is_active=True.
 The investigations.assigned_to denormalised column is kept in sync.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import AssignmentCreate
 from app.core.exceptions import NotFoundError
 from app.models.analyst import InvestigationAssignment
 from app.models.investigation import Investigation
-from app.analyst.schemas import AssignmentCreate
 
 logger = structlog.get_logger(__name__)
 
 
 class AssignmentService:
-
     @staticmethod
     async def _require_investigation(
         db: AsyncSession,
@@ -49,7 +48,7 @@ class AssignmentService:
         investigation_id: str,
     ) -> None:
         """Mark the current active assignment inactive."""
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         await db.execute(
             update(InvestigationAssignment)
             .where(
@@ -121,15 +120,17 @@ class AssignmentService:
         new_assignee: UUID | None = None,
     ) -> InvestigationAssignment:
         current = await AssignmentService.get_current(db, tenant_id, investigation_id)
-        target = new_assignee if new_assignee else (
-            current.assigned_to if current else escalated_by
+        target = (
+            new_assignee if new_assignee else (current.assigned_to if current else escalated_by)
         )
         payload = AssignmentCreate(
             assigned_to=target,
             escalated=True,
             escalation_reason=escalation_reason,
         )
-        return await AssignmentService.assign(db, tenant_id, investigation_id, escalated_by, payload)
+        return await AssignmentService.assign(
+            db, tenant_id, investigation_id, escalated_by, payload
+        )
 
     @staticmethod
     async def transfer(
@@ -140,7 +141,9 @@ class AssignmentService:
         transferred_by: UUID,
     ) -> InvestigationAssignment:
         payload = AssignmentCreate(assigned_to=new_owner)
-        return await AssignmentService.assign(db, tenant_id, investigation_id, transferred_by, payload)
+        return await AssignmentService.assign(
+            db, tenant_id, investigation_id, transferred_by, payload
+        )
 
     @staticmethod
     async def get_current(

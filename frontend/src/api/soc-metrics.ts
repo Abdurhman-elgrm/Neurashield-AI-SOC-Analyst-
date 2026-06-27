@@ -142,7 +142,7 @@ export interface NetworkFlowData {
 }
 
 // All backend endpoints return APIResponse envelope {status, data}. Unwrap with .data.data
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const unwrap = (r: { data: any }) => r.data?.data ?? r.data;
 
 export const socMetricsApi = {

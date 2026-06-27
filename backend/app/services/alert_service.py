@@ -25,9 +25,8 @@ async def _enrich_assignee_names(db: AsyncSession, alerts: list[Alert]) -> None:
     if not ids:
         return
     from app.models.user import User
-    result = await db.execute(
-        select(User.id, User.full_name, User.email).where(User.id.in_(ids))
-    )
+
+    result = await db.execute(select(User.id, User.full_name, User.email).where(User.id.in_(ids)))
     name_map = {row.id: row.full_name or row.email for row in result.all()}
     for alert in alerts:
         if alert.assignee_id and alert.assignee_id in name_map:
@@ -38,6 +37,7 @@ async def _invalidate_dashboard_cache_async(tenant_id: str) -> None:
     """Delete cached dashboard KPIs for this tenant after an alert write."""
     try:
         from app.api.v1.dashboard import _invalidate_dashboard_cache
+
         await _invalidate_dashboard_cache(tenant_id)
     except Exception:
         pass
@@ -47,6 +47,7 @@ async def _record_fp_signal_async(tenant_id: str, evidence: dict) -> None:
     """Increment Redis FP counters for each UEBA flag present in a false-positive alert."""
     try:
         from app.core.redis import TenantRedisClient, redis_manager
+
         redis = redis_manager.get_client()
         client = TenantRedisClient(redis, tenant_id, "ueba")
         ueba_flags: list[str] = evidence.get("ueba_flags", [])
@@ -61,7 +62,6 @@ async def _record_fp_signal_async(tenant_id: str, evidence: dict) -> None:
 
 
 class AlertService:
-
     @staticmethod
     async def get_by_id(
         db: AsyncSession,
@@ -183,7 +183,7 @@ class AlertService:
                 raise ValidationError(
                     f"Invalid status: {payload.status}",
                     details={"allowed": [s.value for s in AlertStatus]},
-                )
+                ) from None
 
             if new_status == AlertStatus.ACKNOWLEDGED and alert.acknowledged_at is None:
                 alert.acknowledged_at = now
@@ -210,12 +210,15 @@ class AlertService:
             from sqlalchemy import exists as _exists
 
             from app.models.tenant_member import TenantMember
+
             is_member = await db.scalar(
-                select(_exists().where(
-                    TenantMember.user_id == payload.assignee_id,
-                    TenantMember.tenant_id == tenant_id,
-                    TenantMember.deleted_at.is_(None),
-                ))
+                select(
+                    _exists().where(
+                        TenantMember.user_id == payload.assignee_id,
+                        TenantMember.tenant_id == tenant_id,
+                        TenantMember.deleted_at.is_(None),
+                    )
+                )
             )
             if not is_member:
                 raise ValidationError("Assignee is not a member of this tenant")

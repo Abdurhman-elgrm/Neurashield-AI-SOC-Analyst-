@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 import structlog
@@ -15,7 +14,6 @@ logger = structlog.get_logger(__name__)
 
 
 class AgentService:
-
     @staticmethod
     async def get_by_id(
         db: AsyncSession,

@@ -20,16 +20,16 @@ ALERT_EVENTS = "stream:alert_events"
 
 # ─── Stream suffixes (continued) ─────────────────────────────────────────────
 
-CORRELATED_EVENTS      = "stream:correlated_events"
-INVESTIGATION_RESULTS  = "stream:investigation_results"
+CORRELATED_EVENTS = "stream:correlated_events"
+INVESTIGATION_RESULTS = "stream:investigation_results"
 
 # ─── Consumer group names ─────────────────────────────────────────────────────
 
-GROUP_NORMALIZE   = "normalize_workers"
-GROUP_DETECT      = "detect_workers"
-GROUP_CORRELATE   = "correlate_workers"
+GROUP_NORMALIZE = "normalize_workers"
+GROUP_DETECT = "detect_workers"
+GROUP_CORRELATE = "correlate_workers"
 GROUP_INVESTIGATE = "investigate_workers"
-GROUP_ALERT_FAN   = "alert_fanout"
+GROUP_ALERT_FAN = "alert_fanout"
 
 # ─── Subsystem label used by TenantRedisClient ───────────────────────────────
 
@@ -45,9 +45,9 @@ EVENTS_PUBSUB_CHANNEL = "ws:events"
 # raw + normalized events are trimmed most aggressively — they are transient
 # buffers; once consumed they are no longer needed in the stream.
 
-RAW_STREAM_MAX_LEN        = 10_000   # ~5 MB per tenant at ~500 B/msg
-NORMALIZED_STREAM_MAX_LEN = 10_000   # ~8 MB per tenant at ~800 B/msg
-ALERT_STREAM_MAX_LEN      =  5_000   # alerts are small; 5k is plenty
-CORRELATED_STREAM_MAX_LEN =  2_000   # correlation results are larger JSON
-INVESTIGATION_STREAM_MAX_LEN = 500   # investigation payloads are large (~5–50 KB each)
-REALTIME_STREAM_MAX_LEN   =  5_000   # ws notifications are tiny (~200 B)
+RAW_STREAM_MAX_LEN = 10_000  # ~5 MB per tenant at ~500 B/msg
+NORMALIZED_STREAM_MAX_LEN = 10_000  # ~8 MB per tenant at ~800 B/msg
+ALERT_STREAM_MAX_LEN = 5_000  # alerts are small; 5k is plenty
+CORRELATED_STREAM_MAX_LEN = 2_000  # correlation results are larger JSON
+INVESTIGATION_STREAM_MAX_LEN = 500  # investigation payloads are large (~5–50 KB each)
+REALTIME_STREAM_MAX_LEN = 5_000  # ws notifications are tiny (~200 B)

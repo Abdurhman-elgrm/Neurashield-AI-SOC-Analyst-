@@ -6,12 +6,13 @@ ParsedEvent objects.  The ConnectorService then serialises each ParsedEvent
 into the standard raw_events Redis stream format so the existing normalisation
 pipeline can process it without modification.
 """
+
 from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -21,12 +22,12 @@ class ParsedEvent:
 
     event_id: str
     timestamp: datetime
-    category: str       # process | network | file | auth | registry | dns | other
+    category: str  # process | network | file | auth | registry | dns | other
     hostname: str
-    os_type: str        # windows | linux | other
-    severity: int = 1   # 1-4
+    os_type: str  # windows | linux | other
+    severity: int = 1  # 1-4
 
-    source_type: str = "unknown"   # wazuh | suricata | defender | syslog | generic
+    source_type: str = "unknown"  # wazuh | suricata | defender | syslog | generic
 
     process: dict[str, Any] | None = None
     user: dict[str, Any] | None = None
@@ -37,7 +38,7 @@ class ParsedEvent:
     def to_stream_message(self, tenant_id: str) -> dict[str, Any]:
         """Produce the dict written to the raw_events Redis stream."""
         return {
-            "agent_id": "",          # no agent for connector events
+            "agent_id": "",  # no agent for connector events
             "tenant_id": tenant_id,
             "hostname": self.hostname,
             "os_type": self.os_type,
@@ -75,4 +76,4 @@ class ConnectorParser(ABC):
 
     @staticmethod
     def _now() -> datetime:
-        return datetime.now(tz=timezone.utc)
+        return datetime.now(tz=UTC)

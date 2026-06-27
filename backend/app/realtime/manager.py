@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any
-from uuid import UUID
 
 import structlog
 from fastapi import WebSocket

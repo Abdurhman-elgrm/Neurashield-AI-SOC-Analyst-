@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -21,14 +22,16 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 # ─── Summary (status counts) ──────────────────────────────────────────────────
 
+
 @router.get("/summary", response_model=APIResponse[dict])
 async def get_alerts_summary(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[dict]:
+    from sqlalchemy import func, select
+
     from app.models.alert import Alert
     from app.models.tenant_member import TenantMember
-    from sqlalchemy import func, select
 
     m: TenantMember = member  # type: ignore[assignment]
     result = await db.execute(
@@ -36,13 +39,17 @@ async def get_alerts_summary(
         .where(Alert.tenant_id == m.tenant_id, Alert.deleted_at.is_(None))
         .group_by(Alert.status)
     )
-    counts = {str(row[0].value if hasattr(row[0], "value") else row[0]): int(row[1]) for row in result}
-    return APIResponse.ok({
-        "open":           counts.get("open", 0),
-        "acknowledged":   counts.get("acknowledged", 0),
-        "closed":         counts.get("closed", 0),
-        "false_positive": counts.get("false_positive", 0),
-    })
+    counts = {
+        str(row[0].value if hasattr(row[0], "value") else row[0]): int(row[1]) for row in result
+    }
+    return APIResponse.ok(
+        {
+            "open": counts.get("open", 0),
+            "acknowledged": counts.get("acknowledged", 0),
+            "closed": counts.get("closed", 0),
+            "false_positive": counts.get("false_positive", 0),
+        }
+    )
 
 
 class BulkAlertUpdateRequest(BaseModel):
@@ -64,6 +71,7 @@ async def list_alerts(
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[AlertResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
 
     params = AlertFilterParams(
@@ -91,6 +99,7 @@ async def get_alert(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[AlertResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     alert = await AlertService.require_by_id(db, m.tenant_id, alert_id)
     return APIResponse.ok(AlertResponse.model_validate(alert))
@@ -104,11 +113,17 @@ async def update_alert(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[AlertResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     alert = await AlertService.update_alert(db, m.tenant_id, alert_id, payload, m.user_id)
     await AuditService.log(
-        db, action="alert.updated", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="alert", resource_id=alert_id,
+        db,
+        action="alert.updated",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="alert",
+        resource_id=alert_id,
         changes={"status": payload.status} if payload.status else {},
     )
     await db.commit()
@@ -122,17 +137,24 @@ async def delete_alert(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[EmptyResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     await AlertService.delete_alert(db, m.tenant_id, alert_id, m.user_id)
     await AuditService.log(
-        db, action="alert.deleted", actor_id=m.user_id, actor_role=m.role,
-        tenant_id=m.tenant_id, resource_type="alert", resource_id=alert_id,
+        db,
+        action="alert.deleted",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="alert",
+        resource_id=alert_id,
     )
     await db.commit()
     return APIResponse.ok(EmptyResponse())
 
 
 # ─── Bulk update ─────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/bulk",
@@ -144,9 +166,11 @@ async def bulk_update_alerts(
     member: Annotated[object, require_permission(Permission.ALERTS_UPDATE)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[dict]:
-    from app.models.alert import Alert
+    from datetime import datetime
+
     from sqlalchemy import update
-    from datetime import datetime, timezone
+
+    from app.models.alert import Alert
 
     m = member  # type: ignore
 
@@ -154,9 +178,9 @@ async def bulk_update_alerts(
     if payload.status is not None:
         updates["status"] = payload.status
         if payload.status == "acknowledged":
-            updates["acknowledged_at"] = datetime.now(tz=timezone.utc)
+            updates["acknowledged_at"] = datetime.now(tz=UTC)
         elif payload.status in ("closed", "false_positive"):
-            updates["closed_at"] = datetime.now(tz=timezone.utc)
+            updates["closed_at"] = datetime.now(tz=UTC)
     if payload.notes is not None:
         updates["notes"] = payload.notes
     if payload.assignee_id is not None:
@@ -183,6 +207,7 @@ async def bulk_update_alerts(
 
 # ─── Alert timeline (synthesized from alert state transitions) ───────────────
 
+
 @router.get("/{alert_id}/timeline", response_model=APIResponse[list])
 async def get_alert_timeline(
     alert_id: UUID,
@@ -197,52 +222,68 @@ async def get_alert_timeline(
     events = []
 
     # Alert created
-    events.append({
-        "id": f"{alert.id}-created",
-        "alertId": str(alert.id),
-        "eventType": "alert_created",
-        "actorName": "Detection Engine",
-        "details": {
-            "severity": alert.severity.value if hasattr(alert.severity, "value") else alert.severity,
-            "rule": alert.rule_name or alert.title,
-        },
-        "createdAt": alert.created_at.isoformat(),
-    })
+    events.append(
+        {
+            "id": f"{alert.id}-created",
+            "alertId": str(alert.id),
+            "eventType": "alert_created",
+            "actorName": "Detection Engine",
+            "details": {
+                "severity": alert.severity.value
+                if hasattr(alert.severity, "value")
+                else alert.severity,
+                "rule": alert.rule_name or alert.title,
+            },
+            "createdAt": alert.created_at.isoformat(),
+        }
+    )
 
     if alert.acknowledged_at:
-        events.append({
-            "id": f"{alert.id}-acknowledged",
-            "alertId": str(alert.id),
-            "eventType": "status_changed",
-            "actorName": None,
-            "details": {"from": "open", "to": "acknowledged"},
-            "createdAt": alert.acknowledged_at.isoformat(),
-        })
+        events.append(
+            {
+                "id": f"{alert.id}-acknowledged",
+                "alertId": str(alert.id),
+                "eventType": "status_changed",
+                "actorName": None,
+                "details": {"from": "open", "to": "acknowledged"},
+                "createdAt": alert.acknowledged_at.isoformat(),
+            }
+        )
 
     if alert.closed_at:
-        events.append({
-            "id": f"{alert.id}-closed",
-            "alertId": str(alert.id),
-            "eventType": "status_changed",
-            "actorName": None,
-            "details": {"from": "acknowledged", "to": alert.status.value if hasattr(alert.status, "value") else str(alert.status)},
-            "createdAt": alert.closed_at.isoformat(),
-        })
+        events.append(
+            {
+                "id": f"{alert.id}-closed",
+                "alertId": str(alert.id),
+                "eventType": "status_changed",
+                "actorName": None,
+                "details": {
+                    "from": "acknowledged",
+                    "to": alert.status.value
+                    if hasattr(alert.status, "value")
+                    else str(alert.status),
+                },
+                "createdAt": alert.closed_at.isoformat(),
+            }
+        )
 
     if alert.notes:
-        events.append({
-            "id": f"{alert.id}-note",
-            "alertId": str(alert.id),
-            "eventType": "note_added",
-            "actorName": "Analyst",
-            "details": {"note": alert.notes},
-            "createdAt": alert.updated_at.isoformat(),
-        })
+        events.append(
+            {
+                "id": f"{alert.id}-note",
+                "alertId": str(alert.id),
+                "eventType": "note_added",
+                "actorName": "Analyst",
+                "details": {"note": alert.notes},
+                "createdAt": alert.updated_at.isoformat(),
+            }
+        )
 
     return APIResponse.ok(events)
 
 
 # ─── Alert investigation context (related alerts on same host) ────────────────
+
 
 @router.get("/{alert_id}/context", response_model=APIResponse[dict])
 async def get_alert_context(
@@ -250,10 +291,12 @@ async def get_alert_context(
     member: Annotated[object, require_permission(Permission.ALERTS_READ)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[dict]:
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
     from app.models.alert import Alert
     from app.models.tenant_member import TenantMember
-    from datetime import timedelta, timezone
-    from sqlalchemy import select
 
     m: TenantMember = member  # type: ignore[assignment]
     alert = await AlertService.require_by_id(db, m.tenant_id, alert_id)
@@ -273,7 +316,6 @@ async def get_alert_context(
             .limit(10)
         )
         if cutoff:
-            from sqlalchemy import and_
             q = q.where(Alert.created_at >= cutoff)
         result = await db.execute(q)
         related = list(result.scalars().all())
@@ -282,7 +324,7 @@ async def get_alert_context(
     investigation = None
     try:
         from app.models.investigation import Investigation
-        from sqlalchemy import text
+
         res = await db.execute(
             select(Investigation)
             .where(
@@ -306,14 +348,19 @@ async def get_alert_context(
     except Exception:
         pass  # Investigation model may not have alert_ids array
 
-    return APIResponse.ok({
-        "alertId": str(alert_id),
-        "relatedAlerts": [AlertResponse.model_validate(a).model_dump(mode="json") for a in related],
-        "investigation": investigation,
-    })
+    return APIResponse.ok(
+        {
+            "alertId": str(alert_id),
+            "relatedAlerts": [
+                AlertResponse.model_validate(a).model_dump(mode="json") for a in related
+            ],
+            "investigation": investigation,
+        }
+    )
 
 
 # ─── Promote alert to investigation ──────────────────────────────────────────
+
 
 @router.post("/{alert_id}/promote", response_model=APIResponse[dict])
 async def promote_to_investigation(
@@ -322,9 +369,10 @@ async def promote_to_investigation(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[dict]:
     """Promote an alert into a new manual investigation."""
-    from app.models.tenant_member import TenantMember
-    from app.analyst.cases import CaseService
     from fastapi import HTTPException
+
+    from app.analyst.cases import CaseService
+    from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
 

@@ -1,13 +1,12 @@
 from __future__ import annotations
+
 from typing import Any
 
 # ─── Standard Sigma YAML rules ────────────────────────────────────────────────
 # Parsed by the Sigma parser and stored as DetectionRules.
 
 BUILTIN_SIGMA_YAML: list[str] = [
-
     # ── Windows: Credential Access ────────────────────────────────────────────
-
     """
 title: Mimikatz Credential Dumping
 description: Detects Mimikatz usage via known executable names or command-line credential access patterns
@@ -34,7 +33,6 @@ tags:
   - attack.credential_access
   - attack.t1003
 """,
-
     """
 title: Suspicious LSASS Memory Access
 description: Detects suspicious access to LSASS process — common credential dumping technique
@@ -55,9 +53,7 @@ tags:
   - attack.credential_access
   - attack.t1003.001
 """,
-
     # ── Windows: Execution / LOLBins ──────────────────────────────────────────
-
     """
 title: PowerShell Encoded Command Execution
 description: Detects PowerShell with an encoded command parameter — common malware obfuscation technique
@@ -82,7 +78,6 @@ tags:
   - attack.execution
   - attack.t1059.001
 """,
-
     """
 title: Certutil Suspicious Usage
 description: Certutil used to download, encode, or decode files — common malware dropper and evasion technique
@@ -106,7 +101,6 @@ tags:
   - attack.defense_evasion
   - attack.t1140
 """,
-
     """
 title: Suspicious MSHTA Remote Execution
 description: MSHTA executing remote scripts or URLs — common initial access and execution vector
@@ -129,7 +123,6 @@ tags:
   - attack.execution
   - attack.t1218.005
 """,
-
     """
 title: Suspicious Rundll32 Execution
 description: Rundll32 executing scripts or non-standard DLL patterns — common LOLBin abuse
@@ -152,7 +145,6 @@ tags:
   - attack.defense_evasion
   - attack.t1218.011
 """,
-
     """
 title: Regsvr32 COM Scriptlet Execution
 description: Regsvr32 used to execute COM scriptlets — common AppLocker bypass
@@ -175,9 +167,7 @@ tags:
   - attack.defense_evasion
   - attack.t1218.010
 """,
-
     # ── Windows: Lateral Movement ─────────────────────────────────────────────
-
     """
 title: PsExec Lateral Movement
 description: PsExec or compatible tool used for remote execution — lateral movement indicator
@@ -199,7 +189,6 @@ tags:
   - attack.lateral_movement
   - attack.t1021.002
 """,
-
     """
 title: WMI Remote Execution
 description: WMIC used with /node parameter indicating remote execution
@@ -218,9 +207,7 @@ tags:
   - attack.lateral_movement
   - attack.t1047
 """,
-
     # ── Windows: Discovery ────────────────────────────────────────────────────
-
     """
 title: Net.exe Domain Reconnaissance
 description: Net.exe used for domain user/group enumeration — common discovery technique
@@ -245,9 +232,7 @@ tags:
   - attack.discovery
   - attack.t1087
 """,
-
     # ── Windows: Persistence ──────────────────────────────────────────────────
-
     """
 title: Suspicious Scheduled Task Creation
 description: Scheduled task created that executes a script or shell — common persistence mechanism
@@ -273,7 +258,6 @@ tags:
   - attack.persistence
   - attack.t1053.005
 """,
-
     """
 title: Registry Run Key Persistence
 description: Executable or script added to registry Run/RunOnce key for persistence
@@ -301,9 +285,7 @@ tags:
   - attack.persistence
   - attack.t1547.001
 """,
-
     # ── Linux: Execution ──────────────────────────────────────────────────────
-
     """
 title: Linux Reverse Shell Indicators
 description: Common reverse shell patterns detected on Linux — execution via bash TCP, netcat, or python socket
@@ -336,7 +318,6 @@ tags:
   - attack.execution
   - attack.t1059.004
 """,
-
     """
 title: Suspicious Linux Execution from Temp Directory
 description: Process executed from /tmp or /dev/shm — common malware drop-and-execute location
@@ -356,9 +337,7 @@ tags:
   - attack.execution
   - attack.t1059
 """,
-
     # ── Linux: Persistence ────────────────────────────────────────────────────
-
     """
 title: Linux Crontab Persistence
 description: Crontab file modified — common Linux persistence technique
@@ -377,9 +356,7 @@ tags:
   - attack.persistence
   - attack.t1053.003
 """,
-
     # ── DNS: C2 Detection ─────────────────────────────────────────────────────
-
     """
 title: Suspicious Long DNS Hostname (DNS Tunneling)
 description: Unusually long subdomain query often indicates DNS tunneling for C2 data exfiltration
@@ -395,9 +372,7 @@ tags:
   - attack.command_and_control
   - attack.t1071.004
 """,
-
     # ── Windows: AMSI Bypass ──────────────────────────────────────────────────
-
     """
 title: AMSI Bypass Attempt via Reflection
 description: Detects PowerShell commands using .NET reflection to patch or disable AMSI — allows malicious scripts to run without antivirus scanning
@@ -423,9 +398,7 @@ tags:
   - attack.defense_evasion
   - attack.t1562.001
 """,
-
     # ── Windows: BITS Abuse ───────────────────────────────────────────────────
-
     """
 title: BITS Transfer Job Used for Payload Download
 description: BITSAdmin or PowerShell Start-BitsTransfer used to download a file — abuses Background Intelligent Transfer Service to blend download traffic
@@ -454,9 +427,7 @@ tags:
   - attack.command_and_control
   - attack.t1197
 """,
-
     # ── Windows: Suspicious Parent-Child Process ──────────────────────────────
-
     """
 title: Office Application Spawning Script Interpreter
 description: Microsoft Office application spawning a script interpreter or command shell — primary indicator of macro-based malware execution
@@ -489,9 +460,7 @@ tags:
   - attack.t1566.001
   - attack.t1059
 """,
-
     # ── Windows: Browser Spawning Shell ──────────────────────────────────────
-
     """
 title: Browser Spawning Command Shell (Drive-By Download Indicator)
 description: Web browser spawning a command-line interpreter — strong indicator of drive-by download or browser exploit delivering a payload
@@ -522,9 +491,7 @@ tags:
   - attack.t1189
   - attack.t1059
 """,
-
     # ── Windows: Cobalt Strike Indicators ────────────────────────────────────
-
     """
 title: Cobalt Strike Beacon Named Pipe Pattern
 description: Process created a named pipe matching common Cobalt Strike beacon patterns — strong indicator of active C2 implant
@@ -549,9 +516,7 @@ tags:
   - attack.t1071
   - attack.t1090
 """,
-
     # ── Windows: Living-Off-the-Land Execution Chain ──────────────────────────
-
     """
 title: Suspicious Script Execution via WScript or CScript from Temp
 description: WScript or CScript executing a script from a temporary directory — common malware delivery pattern to avoid detection by path-based rules
@@ -577,9 +542,7 @@ tags:
   - attack.defense_evasion
   - attack.t1059.005
 """,
-
     # ── Linux: Privilege Escalation via SUID Binary ───────────────────────────
-
     """
 title: SUID Binary Execution for Privilege Escalation
 description: Execution of known SUID binaries used for privilege escalation (GTFOBins) — attackers use these to obtain root shell from a low-privileged user
@@ -603,9 +566,7 @@ tags:
   - attack.privilege_escalation
   - attack.t1548.001
 """,
-
     # ── Windows: Ransomware Staging ───────────────────────────────────────────
-
     """
 title: Ransomware Staging - Mass Rename or Extension Change
 description: Process modifying or renaming large numbers of files with suspicious extensions appended — characteristic first stage of ransomware file encryption
@@ -635,7 +596,6 @@ tags:
   - attack.impact
   - attack.t1486
 """,
-
 ]
 
 
@@ -695,7 +655,11 @@ BUILTIN_UEBA_RULES: list[dict[str, Any]] = [
                 "op": "any_of",
                 "conditions": [
                     {"field": "ueba_flags", "op": "list_contains", "value": "lateral_movement"},
-                    {"field": "ueba_flags", "op": "list_contains", "value": "lateral_movement_xdomain"},
+                    {
+                        "field": "ueba_flags",
+                        "op": "list_contains",
+                        "value": "lateral_movement_xdomain",
+                    },
                 ],
             },
         ],

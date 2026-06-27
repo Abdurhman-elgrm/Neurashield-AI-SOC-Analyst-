@@ -11,8 +11,6 @@ by the engine before calling match().
 from dataclasses import dataclass, field
 
 from app.correlation.rules import (
-    ALL_RULES,
-    CorrelationRule,
     HIGH_FREQUENCY_SOURCE,
     SAME_EVENT_CHAIN,
     SAME_HOST_BURST,
@@ -23,6 +21,7 @@ from app.correlation.rules import (
     SHARED_DOMAIN,
     SHARED_FILE_HASH,
     SHARED_SOURCE_IP,
+    CorrelationRule,
 )
 
 # Minimum event count in window for burst / high-frequency rules to fire.
@@ -32,11 +31,12 @@ _HIGH_FREQ_THRESHOLD = 10
 
 # ─── Data types ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class RuleMatch:
     rule: CorrelationRule
-    window_key: str       # The entity/session key that triggered the match
-    event_count: int      # Events in the relevant window at match time
+    window_key: str  # The entity/session key that triggered the match
+    event_count: int  # Events in the relevant window at match time
 
 
 @dataclass
@@ -45,6 +45,7 @@ class GroupContext:
     Pre-fetched data passed from the engine to the matcher.
     All window counts are already scoped to the correct window_seconds.
     """
+
     # Window counts keyed by (window_key, window_seconds)
     window_counts: dict[tuple[str, int], int] = field(default_factory=dict)
 
@@ -67,6 +68,7 @@ class MatchResult:
 
 # ─── Matcher ──────────────────────────────────────────────────────────────────
 
+
 class EventMatcher:
     """
     Pure function object: match(event_payload, ctx) -> MatchResult.
@@ -76,15 +78,17 @@ class EventMatcher:
     def match(self, payload: dict, ctx: GroupContext) -> MatchResult:
         result = MatchResult()
 
-        correlation_id  = payload.get("correlation_id")
-        session_id      = payload.get("session_id")
+        correlation_id = payload.get("correlation_id")
+        session_id = payload.get("session_id")
         process_tree_id = payload.get("process_tree_id")
-        event_chain_id  = payload.get("event_chain_id")
+        event_chain_id = payload.get("event_chain_id")
 
         entities = payload.get("entities", [])
         if isinstance(entities, dict):
             entities = [e for group in entities.values() if isinstance(group, list) for e in group]
-        entity_keys: list[str] = [e.get("key", "") for e in entities if isinstance(e, dict) and e.get("key")]
+        entity_keys: list[str] = [
+            e.get("key", "") for e in entities if isinstance(e, dict) and e.get("key")
+        ]
 
         # ── same_host_burst ──────────────────────────────────────────────────
         if correlation_id:

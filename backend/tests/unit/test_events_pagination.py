@@ -1,7 +1,8 @@
 """Unit tests for cursor-based pagination utilities."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,8 +15,7 @@ from app.events.pagination import (
     encode_simple_cursor,
 )
 
-
-TS = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+TS = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
 EID = UUID("12345678-1234-1234-1234-123456789abc")
 
 
@@ -68,7 +68,7 @@ class TestSimpleCursor:
         assert eid == EID
 
     def test_simple_cursor_with_microseconds(self):
-        ts_with_us = datetime(2024, 6, 1, 12, 0, 0, 123456, tzinfo=timezone.utc)
+        ts_with_us = datetime(2024, 6, 1, 12, 0, 0, 123456, tzinfo=UTC)
         cursor = encode_simple_cursor(ts_with_us, EID)
         ts, eid = decode_simple_cursor(cursor)
         assert ts == ts_with_us
@@ -87,7 +87,7 @@ class TestSimpleCursor:
 
 class TestCursorOrdering:
     def test_later_timestamp_produces_different_cursor(self):
-        ts2 = datetime(2024, 6, 2, 12, 0, 0, tzinfo=timezone.utc)
+        ts2 = datetime(2024, 6, 2, 12, 0, 0, tzinfo=UTC)
         c1 = encode_cursor(TS, EID, "event_timestamp", "desc")
         c2 = encode_cursor(ts2, EID, "event_timestamp", "desc")
         assert c1 != c2

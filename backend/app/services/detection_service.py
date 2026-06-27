@@ -14,7 +14,6 @@ logger = structlog.get_logger(__name__)
 
 
 class DetectionService:
-
     @staticmethod
     async def get_by_id(
         db: AsyncSession,

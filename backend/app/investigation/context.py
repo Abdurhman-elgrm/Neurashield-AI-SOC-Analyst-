@@ -13,40 +13,68 @@ from app.investigation.schemas import (
     AttackGraph,
     AttackTimeline,
     BehaviorAnalysis,
-    GraphEdgeType,
     InvestigationContext,
 )
 
 # ─── Suspicious classification ────────────────────────────────────────────────
 
-_SUSPICIOUS_PROC_NAMES: frozenset[str] = frozenset({
-    # credential access
-    "mimikatz.exe", "mimikatz", "procdump.exe", "procdump", "wce.exe",
-    "pwdump7.exe", "fgdump",
-    # lolbas
-    "mshta.exe", "regsvr32.exe", "rundll32.exe", "certutil.exe",
-    "bitsadmin.exe", "installutil.exe",
-    # lateral movement
-    "psexec.exe", "psexesvc.exe",
-    # C2 / RAT
-    "nc.exe", "ncat.exe",
-    # impact
-    "xmrig.exe",
-})
+_SUSPICIOUS_PROC_NAMES: frozenset[str] = frozenset(
+    {
+        # credential access
+        "mimikatz.exe",
+        "mimikatz",
+        "procdump.exe",
+        "procdump",
+        "wce.exe",
+        "pwdump7.exe",
+        "fgdump",
+        # lolbas
+        "mshta.exe",
+        "regsvr32.exe",
+        "rundll32.exe",
+        "certutil.exe",
+        "bitsadmin.exe",
+        "installutil.exe",
+        # lateral movement
+        "psexec.exe",
+        "psexesvc.exe",
+        # C2 / RAT
+        "nc.exe",
+        "ncat.exe",
+        # impact
+        "xmrig.exe",
+    }
+)
 
 _SUSPICIOUS_DOMAIN_PATTERNS: list[str] = [
-    ".onion", ".xyz", ".top", ".club", ".icu",
-    "pastebin.com", "ngrok.io", "serveo.net",
+    ".onion",
+    ".xyz",
+    ".top",
+    ".club",
+    ".icu",
+    "pastebin.com",
+    "ngrok.io",
+    "serveo.net",
 ]
 
 _SUSPICIOUS_CMD_PATTERNS: list[str] = [
-    "-enc", "-encodedcommand", "invoke-expression", "iex(",
-    "downloadstring", "frombase64string", "sekurlsa", "lsadump",
-    "vssadmin delete", "wevtutil cl", "net user /add", "schtasks /create",
+    "-enc",
+    "-encodedcommand",
+    "invoke-expression",
+    "iex(",
+    "downloadstring",
+    "frombase64string",
+    "sekurlsa",
+    "lsadump",
+    "vssadmin delete",
+    "wevtutil cl",
+    "net user /add",
+    "schtasks /create",
 ]
 
 
 # ─── Context builder ──────────────────────────────────────────────────────────
+
 
 def build_context(
     investigation_id: str,
@@ -83,7 +111,7 @@ def build_context(
             related_events.append(eid)
 
         # entity keys
-        for ek in (snap.get("related_entity_keys") or []):
+        for ek in snap.get("related_entity_keys") or []:
             entity_frequency[ek] = entity_frequency.get(ek, 0) + 1
             lower = ek.lower()
             if lower.startswith("user:") and ek[5:] not in seen_users:
@@ -169,10 +197,11 @@ def _extract_attack_paths(graph: AttackGraph) -> list[list[str]]:
     Returns up to 5 paths, each capped at 6 hops.
     """
     from app.investigation.graph import AttackGraphBuilder
+
     paths: list[list[str]] = []
 
     user_nodes = [n.node_id for n in graph.nodes if n.node_id.startswith("user:")]
-    ip_nodes   = [n.node_id for n in graph.nodes if n.node_id.startswith("ip:")]
+    ip_nodes = [n.node_id for n in graph.nodes if n.node_id.startswith("ip:")]
 
     for u in user_nodes[:3]:
         for ip in ip_nodes[:3]:

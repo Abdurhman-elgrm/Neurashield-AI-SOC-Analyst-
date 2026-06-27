@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -19,7 +19,7 @@ class ModelState:
     def is_available(self) -> bool:
         if self.cooldown_until is None:
             return True
-        if datetime.now(tz=timezone.utc) >= self.cooldown_until:
+        if datetime.now(tz=UTC) >= self.cooldown_until:
             self.cooldown_until = None
             self.error_count = 0
             return True
@@ -28,7 +28,7 @@ class ModelState:
     def record_error(self) -> None:
         self.error_count += 1
         if self.error_count >= 3:
-            self.cooldown_until = datetime.now(tz=timezone.utc) + timedelta(minutes=10)
+            self.cooldown_until = datetime.now(tz=UTC) + timedelta(minutes=10)
             log.warning("llm_model_cooldown", model=self.name, until=str(self.cooldown_until))
 
     def record_success(self) -> None:
@@ -53,9 +53,11 @@ class LLMManager:
             return
         if self._groq_key:
             from groq import AsyncGroq
+
             self._groq_client = AsyncGroq(api_key=self._groq_key)
         if self._gemini_key:
             from google import genai
+
             self._gemini_client = genai.Client(api_key=self._gemini_key)
         self._initialized = True
 
@@ -88,6 +90,7 @@ class LLMManager:
         if not self._gemini_client:
             raise RuntimeError("Gemini client not initialized — GEMINI_API_KEY missing")
         from google.genai import types
+
         full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
         response = await self._gemini_client.aio.models.generate_content(
             model="gemini-2.0-flash",
@@ -165,6 +168,7 @@ def get_llm_manager() -> LLMManager:
     global _manager
     if _manager is None:
         from app.core.config import get_settings
+
         settings = get_settings()
         if not settings.GROQ_API_KEY and not settings.GEMINI_API_KEY:
             raise RuntimeError(

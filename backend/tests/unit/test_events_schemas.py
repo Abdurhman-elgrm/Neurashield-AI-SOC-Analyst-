@@ -1,8 +1,8 @@
 """Unit tests for Events Explorer Pydantic schemas."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from uuid import uuid4
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -42,8 +42,8 @@ class TestEventSearchRequest:
             tags=["malware"],
             correlation_id="corr-abc",
             session_id="sess-xyz",
-            from_ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_ts=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_ts=datetime(2024, 1, 1, tzinfo=UTC),
+            to_ts=datetime(2024, 12, 31, tzinfo=UTC),
             limit=100,
             sort_by=SortField.SEVERITY,
             sort_dir=SortDirection.ASC,
@@ -132,8 +132,8 @@ class TestExportRequest:
     def test_with_filters(self):
         req = ExportRequest(
             categories=["process"],
-            from_ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_ts=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_ts=datetime(2024, 1, 1, tzinfo=UTC),
+            to_ts=datetime(2024, 12, 31, tzinfo=UTC),
             max_rows=5000,
         )
         assert req.categories == ["process"]
@@ -146,19 +146,22 @@ class TestFilterGroup:
         assert group.logic == "AND"
 
     def test_not_logic(self):
-        group = FilterGroup(logic="NOT", conditions=[
-            FilterCondition(field="category", op="eq", value="registry")
-        ])
+        group = FilterGroup(
+            logic="NOT", conditions=[FilterCondition(field="category", op="eq", value="registry")]
+        )
         assert group.logic == "NOT"
 
     def test_nested_rebuilds_correctly(self):
         group = FilterGroup(
             logic="AND",
             groups=[
-                FilterGroup(logic="OR", conditions=[
-                    FilterCondition(field="severity", op="gt", value=2),
-                ])
-            ]
+                FilterGroup(
+                    logic="OR",
+                    conditions=[
+                        FilterCondition(field="severity", op="gt", value=2),
+                    ],
+                )
+            ],
         )
         assert len(group.groups) == 1
         assert group.groups[0].logic == "OR"

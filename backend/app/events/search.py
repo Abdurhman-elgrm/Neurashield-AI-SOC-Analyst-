@@ -14,8 +14,9 @@ Provides:
 import csv
 import io
 import json
-from datetime import datetime, timezone
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -37,7 +38,6 @@ from app.events.schemas import (
     EventSearchResponse,
     ExportFormat,
     ExportRequest,
-    FilterGroup,
     SortDirection,
     SortField,
     TimelineBucket,
@@ -48,12 +48,11 @@ from app.schemas.event import EventResponse
 
 logger = structlog.get_logger(__name__)
 
-_CONTEXT_LIMIT = 10   # events returned per context section
+_CONTEXT_LIMIT = 10  # events returned per context section
 _TIMELINE_BUCKET_COUNT = 50  # histogram buckets in timeline view
 
 
 class EventSearchService:
-
     # ─── Search ───────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -80,7 +79,9 @@ class EventSearchService:
                 next_cursor = encode_cursor(ts_val, last.id, req.sort_by.value, req.sort_dir.value)
             else:
                 # For non-datetime sort fields, fall back to timestamp for cursor
-                next_cursor = encode_cursor(last.event_timestamp, last.id, req.sort_by.value, req.sort_dir.value)
+                next_cursor = encode_cursor(
+                    last.event_timestamp, last.id, req.sort_by.value, req.sort_dir.value
+                )
 
         items = [EventResponse.model_validate(e) for e in events]
         return EventSearchResponse(
@@ -117,7 +118,9 @@ class EventSearchService:
             conditions.append(Event.event_timestamp <= effective_to)
 
         if categories:
-            valid_cats = [EventCategory(c) for c in categories if c in EventCategory._value2member_map_]
+            valid_cats = [
+                EventCategory(c) for c in categories if c in EventCategory._value2member_map_
+            ]
             if valid_cats:
                 conditions.append(Event.category.in_(valid_cats))
 
@@ -159,7 +162,11 @@ class EventSearchService:
 
         # Build histogram buckets
         buckets = await EventSearchService._build_timeline_buckets(
-            db, tenant_id, effective_from, effective_to, conditions[1:]  # skip tenant_id (already in outer query)
+            db,
+            tenant_id,
+            effective_from,
+            effective_to,
+            conditions[1:],  # skip tenant_id (already in outer query)
         )
 
         items = [EventResponse.model_validate(e) for e in events]
@@ -224,9 +231,7 @@ class EventSearchService:
         for row in rows:
             bt: datetime = row.bucket
             if bt not in bucket_map:
-                bucket_end = datetime.fromtimestamp(
-                    bt.timestamp() + bucket_seconds, tz=timezone.utc
-                )
+                bucket_end = datetime.fromtimestamp(bt.timestamp() + bucket_seconds, tz=UTC)
                 bucket_map[bt] = {
                     "bucket_start": bt,
                     "bucket_end": bucket_end,
@@ -241,7 +246,10 @@ class EventSearchService:
             cat_key = row.category.value if hasattr(row.category, "value") else str(row.category)
             b["category_breakdown"][cat_key] = b["category_breakdown"].get(cat_key, 0) + row.cnt
 
-        return [TimelineBucket(**v) for v in sorted(bucket_map.values(), key=lambda x: x["bucket_start"])]
+        return [
+            TimelineBucket(**v)
+            for v in sorted(bucket_map.values(), key=lambda x: x["bucket_start"])
+        ]
 
     # ─── Event context ────────────────────────────────────────────────────────
 
@@ -259,32 +267,48 @@ class EventSearchService:
 
         prev_event, next_event = await EventSearchService._get_adjacent(db, tenant_id, event)
         same_host = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             Event.host_name == event.host_name if event.host_name else None,
         )
         same_user = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             Event.username == event.username if event.username else None,
         )
         same_ip = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             or_(Event.source_ip == event.source_ip, Event.dest_ip == event.source_ip)
-            if event.source_ip else None,
+            if event.source_ip
+            else None,
         )
         same_session = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             Event.session_id == event.session_id  # type: ignore[attr-defined]
-            if getattr(event, "session_id", None) else None,
+            if getattr(event, "session_id", None)
+            else None,
         )
         same_process = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             Event.process_tree_id == event.process_tree_id  # type: ignore[attr-defined]
-            if getattr(event, "process_tree_id", None) else None,
+            if getattr(event, "process_tree_id", None)
+            else None,
         )
         correlated = await EventSearchService._context_events(
-            db, tenant_id, event_id,
+            db,
+            tenant_id,
+            event_id,
             Event.correlation_id == event.correlation_id  # type: ignore[attr-defined]
-            if getattr(event, "correlation_id", None) else None,
+            if getattr(event, "correlation_id", None)
+            else None,
         )
 
         def _to_resp(e: Event | None) -> EventResponse | None:
@@ -556,11 +580,24 @@ class EventSearchService:
 # ─── Export helpers ───────────────────────────────────────────────────────────
 
 _ALL_EXPORT_FIELDS = [
-    "id", "tenant_id", "agent_id", "category", "severity",
-    "event_timestamp", "ingested_at",
-    "host_name", "source_ip", "dest_ip", "process_name", "username",
-    "correlation_id", "session_id", "process_tree_id", "event_chain_id",
-    "tags", "raw_id",
+    "id",
+    "tenant_id",
+    "agent_id",
+    "category",
+    "severity",
+    "event_timestamp",
+    "ingested_at",
+    "host_name",
+    "source_ip",
+    "dest_ip",
+    "process_name",
+    "username",
+    "correlation_id",
+    "session_id",
+    "process_tree_id",
+    "event_chain_id",
+    "tags",
+    "raw_id",
 ]
 
 

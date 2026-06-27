@@ -1,14 +1,13 @@
 """Unit tests for the normalization pipeline."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import pytest
-
+from app.normalization.linux import normalize_linux_event
 from app.normalization.mapper import map_stream_message_to_normalized
 from app.normalization.models import NormalizedEvent
 from app.normalization.windows import normalize_windows_event
-from app.normalization.linux import normalize_linux_event
 
 
 def _base_message(**kwargs) -> dict:
@@ -27,7 +26,6 @@ def _base_message(**kwargs) -> dict:
 
 
 class TestMapperBasics:
-
     def test_timestamp_parsed_from_iso(self):
         msg = _base_message(timestamp="2025-05-22T10:00:00+00:00")
         event = map_stream_message_to_normalized(msg)
@@ -40,7 +38,13 @@ class TestMapperBasics:
         assert event.timestamp is not None
 
     def test_severity_string_mapped_correctly(self):
-        for sev_str, expected in [("low", 1), ("info", 1), ("medium", 2), ("high", 3), ("critical", 4)]:
+        for sev_str, expected in [
+            ("low", 1),
+            ("info", 1),
+            ("medium", 2),
+            ("high", 3),
+            ("critical", 4),
+        ]:
             msg = _base_message(severity=sev_str)
             event = map_stream_message_to_normalized(msg)
             assert event.severity == expected
@@ -59,7 +63,6 @@ class TestMapperBasics:
 
 
 class TestWindowsNormalization:
-
     def test_sysmon_process_create(self):
         msg = _base_message(
             event_id_windows="1",
@@ -70,10 +73,9 @@ class TestWindowsNormalization:
             User="DOMAIN\\user1",
             Hashes="MD5=abc123,SHA256=def456",
         )
-        from app.normalization.models import NormalizedEvent
         base = NormalizedEvent(
             event_id="evt-001",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             category="process",
             hostname="WIN01",
             os_type="windows",
@@ -98,10 +100,9 @@ class TestWindowsNormalization:
             Protocol="udp",
             Initiated="true",
         )
-        from app.normalization.models import NormalizedEvent
         base = NormalizedEvent(
             event_id="evt-002",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             category="network",
             hostname="WIN01",
             os_type="windows",
@@ -122,10 +123,9 @@ class TestWindowsNormalization:
             TargetDomainName="CORP",
             TargetUserSid="S-1-5-21-xxx",
         )
-        from app.normalization.models import NormalizedEvent
         base = NormalizedEvent(
             event_id="evt-003",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             category="auth",
             hostname="WIN01",
             os_type="windows",
@@ -140,7 +140,6 @@ class TestWindowsNormalization:
 
 
 class TestLinuxNormalization:
-
     def test_execve_syscall(self):
         msg = _base_message(
             os_type="linux",
@@ -151,10 +150,9 @@ class TestLinuxNormalization:
             a2="id",
             pid="4567",
         )
-        from app.normalization.models import NormalizedEvent
         base = NormalizedEvent(
             event_id="evt-004",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             category="process",
             hostname="linux01",
             os_type="linux",
@@ -173,10 +171,9 @@ class TestLinuxNormalization:
             category="auth",
             res="failed",
         )
-        from app.normalization.models import NormalizedEvent
         base = NormalizedEvent(
             event_id="evt-005",
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             category="auth",
             hostname="linux01",
             os_type="linux",

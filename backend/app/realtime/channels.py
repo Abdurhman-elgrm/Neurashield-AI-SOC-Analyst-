@@ -14,24 +14,26 @@ Examples:
 
 # ─── Channel constants ────────────────────────────────────────────────────────
 
-ALERTS         = "alerts"
+ALERTS = "alerts"
 INVESTIGATIONS = "investigations"
-CASES          = "cases"
-ACTIVITY       = "activity"
-HUNTS          = "hunts"
-PRESENCE       = "presence"
-EVENTS         = "events"
+CASES = "cases"
+ACTIVITY = "activity"
+HUNTS = "hunts"
+PRESENCE = "presence"
+EVENTS = "events"
 
 # All valid channel names (used for validation)
-ALL_CHANNELS: frozenset[str] = frozenset({
-    ALERTS,
-    INVESTIGATIONS,
-    CASES,
-    ACTIVITY,
-    HUNTS,
-    PRESENCE,
-    EVENTS,
-})
+ALL_CHANNELS: frozenset[str] = frozenset(
+    {
+        ALERTS,
+        INVESTIGATIONS,
+        CASES,
+        ACTIVITY,
+        HUNTS,
+        PRESENCE,
+        EVENTS,
+    }
+)
 
 # The subsystem label used with TenantRedisClient for realtime streams/pubsub
 REALTIME_SUBSYSTEM = "realtime"
@@ -46,6 +48,7 @@ GROUP_REALTIME = "realtime_workers"
 PUBSUB_PATTERN = "tenant:*:realtime:*"
 
 # ─── Key/channel factories ────────────────────────────────────────────────────
+
 
 def pubsub_channel(tenant_id: str, channel: str) -> str:
     """Full Redis pub/sub channel name for a tenant/channel pair."""

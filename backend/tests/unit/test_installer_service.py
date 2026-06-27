@@ -1,22 +1,20 @@
 """Unit tests for the installer token service layer."""
+
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.installer_token import InstallerToken, InstallerTokenStatus
-from app.schemas.installer import InstallerTokenGenerateRequest
-from app.services.installer_service import InstallerService, _TOKEN_PREFIX, _TOKEN_TTL_MINUTES
+from app.services.installer_service import _TOKEN_PREFIX, _TOKEN_TTL_MINUTES, InstallerService
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _make_pending_token(
@@ -40,17 +38,20 @@ class TestTokenFormat:
 
     def test_prefix_present(self):
         import secrets
+
         raw = _TOKEN_PREFIX + secrets.token_urlsafe(32)
         assert raw.startswith(_TOKEN_PREFIX)
 
     def test_token_length_sufficient(self):
         import secrets
+
         raw = _TOKEN_PREFIX + secrets.token_urlsafe(32)
         # prefix(5) + 43 base64 chars = 48 chars minimum
         assert len(raw) >= 48
 
     def test_preview_is_first_8_chars(self):
         import secrets
+
         raw = _TOKEN_PREFIX + secrets.token_urlsafe(32)
         preview = raw[:8]
         assert preview == _TOKEN_PREFIX + raw[5:8]
@@ -90,6 +91,7 @@ class TestVerifyInstallerToken:
 
     async def test_valid_token_returns_token(self):
         from app.core.security import hash_password
+
         raw = _TOKEN_PREFIX + "validrandomsuffix123456789012"
         token = _make_pending_token()
         token.token_hash = hash_password(raw)
@@ -102,6 +104,7 @@ class TestVerifyInstallerToken:
 
     async def test_wrong_token_raises_not_found(self):
         from app.core.security import hash_password
+
         raw = _TOKEN_PREFIX + "validrandomsuffix123456789012"
         token = _make_pending_token()
         token.token_hash = hash_password(raw)
@@ -122,6 +125,7 @@ class TestVerifyInstallerToken:
 
     async def test_expired_token_raises_validation_error(self):
         from app.core.security import hash_password
+
         raw = _TOKEN_PREFIX + "validrandomsuffix123456789012"
         token = _make_pending_token(expires_delta=timedelta(seconds=-60))
         token.token_hash = hash_password(raw)
@@ -135,6 +139,7 @@ class TestVerifyInstallerToken:
 
     async def test_used_token_raises_validation_error(self):
         from app.core.security import hash_password
+
         raw = _TOKEN_PREFIX + "validrandomsuffix123456789012"
         token = _make_pending_token()
         token.token_hash = hash_password(raw)
@@ -147,6 +152,7 @@ class TestVerifyInstallerToken:
 
     async def test_revoked_token_raises_validation_error(self):
         from app.core.security import hash_password
+
         raw = _TOKEN_PREFIX + "validrandomsuffix123456789012"
         token = _make_pending_token(status=InstallerTokenStatus.REVOKED)
         token.token_hash = hash_password(raw)
@@ -159,7 +165,6 @@ class TestVerifyInstallerToken:
 
 @pytest.mark.asyncio
 class TestMarkInstalling:
-
     async def test_pending_transitions_to_installing(self):
         token = _make_pending_token()
 
@@ -188,7 +193,6 @@ class TestMarkInstalling:
 
 @pytest.mark.asyncio
 class TestMarkUsed:
-
     async def test_installing_transitions_to_active(self):
         token = _make_pending_token(status=InstallerTokenStatus.INSTALLING)
         device_id = "device-abc-123"
@@ -210,7 +214,6 @@ class TestMarkUsed:
 
 @pytest.mark.asyncio
 class TestRevokeToken:
-
     async def test_revoke_pending_token(self):
         token = _make_pending_token()
 
@@ -250,7 +253,6 @@ class TestRevokeToken:
 
 @pytest.mark.asyncio
 class TestExpireOldTokens:
-
     async def test_returns_count_of_expired_tokens(self):
         db = AsyncMock()
         fake_result = MagicMock()

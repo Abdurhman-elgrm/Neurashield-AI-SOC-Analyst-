@@ -24,15 +24,14 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analyst.schemas import TimelineEntryOut, TimelineFilter, TimelineResponse
 from app.core.exceptions import NotFoundError
 from app.models.investigation import Investigation
-from app.analyst.schemas import TimelineFilter, TimelineEntryOut, TimelineResponse
 
 logger = structlog.get_logger(__name__)
 
 
 class TimelineService:
-
     @staticmethod
     async def get_timeline(
         db: AsyncSession,
@@ -46,7 +45,7 @@ class TimelineService:
         all_entries: list[dict[str, Any]] = raw.get("entries") or []
         total_events: int = raw.get("total_events") or len(all_entries)
         first_seen: float = raw.get("first_seen") or 0.0
-        last_seen:  float = raw.get("last_seen")  or 0.0
+        last_seen: float = raw.get("last_seen") or 0.0
 
         # ── Apply filters ──────────────────────────────────────────────────────
         filtered = _apply_timeline_filters(all_entries, filters)
@@ -66,7 +65,7 @@ class TimelineService:
                 start_idx = 0
 
         limit = min(filters.limit, 200)
-        page_slice = filtered[start_idx: start_idx + limit]
+        page_slice = filtered[start_idx : start_idx + limit]
 
         next_cursor: str | None = None
         has_more = (start_idx + limit) < filtered_count
@@ -104,6 +103,7 @@ class TimelineService:
 
 # ─── Filter logic ─────────────────────────────────────────────────────────────
 
+
 def _apply_timeline_filters(
     entries: list[dict[str, Any]],
     f: TimelineFilter,
@@ -128,7 +128,8 @@ def _apply_timeline_filters(
     if f.entity_filter:
         ef = f.entity_filter.lower()
         result = [
-            e for e in result
+            e
+            for e in result
             if any(ef in str(k).lower() for k in (e.get("entity_keys") or []))
             or ef in e.get("hostname", "").lower()
         ]
@@ -137,6 +138,7 @@ def _apply_timeline_filters(
 
 
 # ─── Cursor helpers ───────────────────────────────────────────────────────────
+
 
 def _encode_timeline_cursor(index: int) -> str:
     return base64.urlsafe_b64encode(str(index).encode()).decode()
@@ -147,6 +149,7 @@ def _decode_timeline_cursor(cursor: str) -> int:
 
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
+
 
 async def _require_investigation(
     db: AsyncSession,

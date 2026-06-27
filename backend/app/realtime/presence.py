@@ -15,7 +15,7 @@ Flow:
   list_online() → SMEMBERS → filter by key existence
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -25,7 +25,7 @@ from app.realtime.schemas import PresenceState
 
 logger = structlog.get_logger(__name__)
 
-PRESENCE_TTL_SECS  = 30   # clients must heartbeat faster than this
+PRESENCE_TTL_SECS = 30  # clients must heartbeat faster than this
 IDLE_THRESHOLD_SECS = 120
 
 
@@ -45,15 +45,15 @@ class PresenceService:
         investigation_id: str | None = None,
     ) -> PresenceState:
         """Register an analyst as online. Idempotent — safe to call on reconnect."""
-        now = datetime.now(tz=timezone.utc).isoformat()
+        now = datetime.now(tz=UTC).isoformat()
         mapping: dict[str, str] = {
-            "analyst_id":       analyst_id,
-            "tenant_id":        tenant_id,
-            "display_name":     display_name,
-            "workspace":        workspace,
+            "analyst_id": analyst_id,
+            "tenant_id": tenant_id,
+            "display_name": display_name,
+            "workspace": workspace,
             "investigation_id": investigation_id or "",
-            "idle":             "false",
-            "last_seen":        now,
+            "idle": "false",
+            "last_seen": now,
         }
         key = ch.presence_key(analyst_id)
         await client.hset(key, mapping)
@@ -97,10 +97,10 @@ class PresenceService:
         if not await client.exists(key):
             return False
 
-        now = datetime.now(tz=timezone.utc).isoformat()
+        now = datetime.now(tz=UTC).isoformat()
         update: dict[str, str] = {
             "last_seen": now,
-            "idle":      "true" if idle else "false",
+            "idle": "true" if idle else "false",
         }
         if workspace is not None:
             update["workspace"] = workspace

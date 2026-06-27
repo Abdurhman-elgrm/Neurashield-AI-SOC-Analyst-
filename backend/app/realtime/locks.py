@@ -18,7 +18,7 @@ Lock lifecycle:
 
 
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -28,8 +28,8 @@ from app.realtime.schemas import LockInfo
 
 logger = structlog.get_logger(__name__)
 
-LOCK_TTL_SECS     = 60   # 1-minute edit lock
-LOCK_REFRESH_SECS = 45   # refresh before expiry
+LOCK_TTL_SECS = 60  # 1-minute edit lock
+LOCK_REFRESH_SECS = 45  # refresh before expiry
 
 
 class InvestigationLockService:
@@ -50,14 +50,14 @@ class InvestigationLockService:
         Attempt to acquire an exclusive edit lock.
         Returns LockInfo if acquired; None if already locked by someone else.
         """
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         expires_at = (now + timedelta(seconds=ttl)).isoformat()
         info = {
             "investigation_id": investigation_id,
-            "tenant_id":        tenant_id,
-            "owner_id":         analyst_id,
-            "locked_at":        now.isoformat(),
-            "expires_at":       expires_at,
+            "tenant_id": tenant_id,
+            "owner_id": analyst_id,
+            "locked_at": now.isoformat(),
+            "expires_at": expires_at,
         }
         key = ch.lock_key(investigation_id)
         acquired = await client.set(key, json.dumps(info), ex=ttl, nx=True)
@@ -131,14 +131,14 @@ class InvestigationLockService:
         if lock is None or lock.owner_id != analyst_id:
             return False
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         expires_at = (now + timedelta(seconds=ttl)).isoformat()
         updated = {
             "investigation_id": lock.investigation_id,
-            "tenant_id":        lock.tenant_id,
-            "owner_id":         analyst_id,
-            "locked_at":        lock.locked_at,
-            "expires_at":       expires_at,
+            "tenant_id": lock.tenant_id,
+            "owner_id": analyst_id,
+            "locked_at": lock.locked_at,
+            "expires_at": expires_at,
         }
         # XX = only update if key exists (avoids race where lock expired between get+set)
         ok = await client.set(ch.lock_key(investigation_id), json.dumps(updated), ex=ttl, xx=True)
@@ -158,9 +158,7 @@ class InvestigationLockService:
         Only succeeds if from_analyst currently holds the lock.
         Returns the new LockInfo on success, None on failure.
         """
-        released = await InvestigationLockService.release(
-            client, investigation_id, from_analyst
-        )
+        released = await InvestigationLockService.release(client, investigation_id, from_analyst)
         if not released:
             return None
         return await InvestigationLockService.acquire(

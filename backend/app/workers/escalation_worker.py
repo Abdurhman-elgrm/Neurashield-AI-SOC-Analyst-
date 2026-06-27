@@ -7,11 +7,12 @@ by appending a system note to their notes field.
 
 One global instance — all tenants are covered in a single sweep.
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import or_, select, update
@@ -23,7 +24,7 @@ logger = structlog.get_logger(__name__)
 
 # How long an unacknowledged HIGH/CRITICAL alert can stay open before escalation.
 _ESCALATION_WINDOW_SECS = int(os.getenv("ALERT_ESCALATION_WINDOW_SECS", "3600"))  # 1 hour
-_CHECK_INTERVAL_SECS    = int(os.getenv("ALERT_ESCALATION_CHECK_SECS",  "300"))   # 5 minutes
+_CHECK_INTERVAL_SECS = int(os.getenv("ALERT_ESCALATION_CHECK_SECS", "300"))  # 5 minutes
 
 _ESCALATION_SEVERITIES = {AlertSeverity.HIGH, AlertSeverity.CRITICAL}
 _ESCALATION_NOTE = (
@@ -56,21 +57,22 @@ class AlertEscalationWorker:
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=_CHECK_INTERVAL_SECS)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
         logger.info("escalation_worker_stopped")
 
     async def _sweep(self) -> int:
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=_ESCALATION_WINDOW_SECS)
+        cutoff = datetime.now(tz=UTC) - timedelta(seconds=_ESCALATION_WINDOW_SECS)
         minutes_elapsed = _ESCALATION_WINDOW_SECS // 60
         note_text = _ESCALATION_NOTE.format(minutes=minutes_elapsed)
 
         async with database_manager.session() as db:
             # Find candidates: open, high/critical, no acknowledgment, older than cutoff.
             result = await db.execute(
-                select(Alert.id, Alert.tenant_id, Alert.severity, Alert.notes, Alert.created_at)
-                .where(
+                select(
+                    Alert.id, Alert.tenant_id, Alert.severity, Alert.notes, Alert.created_at
+                ).where(
                     Alert.status == AlertStatus.OPEN,
                     Alert.severity.in_([AlertSeverity.HIGH, AlertSeverity.CRITICAL]),
                     Alert.acknowledged_at.is_(None),
@@ -94,14 +96,13 @@ class AlertEscalationWorker:
                 await db.execute(
                     update(Alert)
                     .where(Alert.id == row.id)
-                    .values(notes=new_notes, updated_at=datetime.now(tz=timezone.utc))
+                    .values(notes=new_notes, updated_at=datetime.now(tz=UTC))
                 )
                 created = row.created_at
                 if created and created.tzinfo is None:
-                    created = created.replace(tzinfo=timezone.utc)
+                    created = created.replace(tzinfo=UTC)
                 age_minutes = (
-                    (datetime.now(tz=timezone.utc) - created).seconds // 60
-                    if created else "unknown"
+                    (datetime.now(tz=UTC) - created).seconds // 60 if created else "unknown"
                 )
                 logger.warning(
                     "alert_auto_escalated",

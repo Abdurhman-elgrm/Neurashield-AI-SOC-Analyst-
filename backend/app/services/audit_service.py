@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from uuid import uuid4
 
 from app.core.logging import get_request_id
 from app.models.audit_log import AuditLog
@@ -67,9 +66,10 @@ class AuditService:
 
                 # Explicitly generate the UUID so it's available for hash computation
                 # before flush (SQLAlchemy populates default=uuid4 only at flush time).
-                from datetime import datetime, timezone
+                from datetime import datetime
+
                 entry_id = uuid4()
-                now = datetime.now(tz=timezone.utc)
+                now = datetime.now(tz=UTC)
                 entry = AuditLog(
                     id=entry_id,
                     action=action,

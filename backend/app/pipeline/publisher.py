@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import orjson
 from typing import Any
 
+import orjson
 import structlog
 
 from app.core.logging import get_request_id
@@ -72,7 +72,9 @@ class StreamPublisher:
             "investigation_result_published",
             stream_id=stream_id,
             investigation_id=payload.get("investigation_id"),
-            threat_score=payload.get("score", {}).get("threat_score") if isinstance(payload.get("score"), dict) else None,
+            threat_score=payload.get("score", {}).get("threat_score")
+            if isinstance(payload.get("score"), dict)
+            else None,
         )
         return stream_id
 
@@ -94,6 +96,7 @@ class StreamPublisher:
     async def publish_realtime_event(self, payload: dict[str, Any]) -> str:
         """Publish a pre-formed realtime event to the realtime events stream."""
         from app.realtime import channels as ch
+
         stream_id = await self._client.xadd(
             ch.REALTIME_EVENTS_STREAM,
             {"data": orjson.dumps(payload, default=str).decode()},
@@ -107,13 +110,14 @@ class StreamPublisher:
         Call once per tenant during worker startup.
         """
         from app.realtime import channels as ch
+
         pairs = [
-            (stream_names.RAW_EVENTS,            stream_names.GROUP_NORMALIZE),
-            (stream_names.NORMALIZED_EVENTS,     stream_names.GROUP_DETECT),
-            (stream_names.NORMALIZED_EVENTS,     stream_names.GROUP_CORRELATE),
-            (stream_names.CORRELATED_EVENTS,     stream_names.GROUP_INVESTIGATE),
-            (stream_names.ALERT_EVENTS,          stream_names.GROUP_ALERT_FAN),
-            (stream_names.ALERT_EVENTS,          ch.GROUP_REALTIME),
+            (stream_names.RAW_EVENTS, stream_names.GROUP_NORMALIZE),
+            (stream_names.NORMALIZED_EVENTS, stream_names.GROUP_DETECT),
+            (stream_names.NORMALIZED_EVENTS, stream_names.GROUP_CORRELATE),
+            (stream_names.CORRELATED_EVENTS, stream_names.GROUP_INVESTIGATE),
+            (stream_names.ALERT_EVENTS, stream_names.GROUP_ALERT_FAN),
+            (stream_names.ALERT_EVENTS, ch.GROUP_REALTIME),
             (stream_names.INVESTIGATION_RESULTS, ch.GROUP_REALTIME),
         ]
         for stream, group in pairs:

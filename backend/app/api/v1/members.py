@@ -37,6 +37,7 @@ async def list_members(
     limit: int = Query(default=25, ge=1, le=100),
 ) -> PaginatedResponse[MemberResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = actor  # type: ignore[assignment]
     if m.tenant_id != tenant_id:
         raise ForbiddenError("Tenant ID mismatch")
@@ -59,13 +60,12 @@ async def update_member_role(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[MemberResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = actor  # type: ignore[assignment]
     if m.tenant_id != tenant_id:
         raise ForbiddenError("Tenant ID mismatch")
 
-    updated = await TenantService.update_member_role(
-        db, tenant_id, user_id, payload.role, actor=m
-    )
+    updated = await TenantService.update_member_role(db, tenant_id, user_id, payload.role, actor=m)
     return APIResponse.ok(MemberResponse.model_validate(updated))
 
 
@@ -124,7 +124,7 @@ async def update_member_permissions(
         raise ValidationError("Cannot restrict owner permissions")
 
     member.custom_permissions = {
-        "grant":  list(set(payload.grant)),
+        "grant": list(set(payload.grant)),
         "revoke": list(set(payload.revoke)),
     }
     await db.commit()
@@ -148,6 +148,7 @@ async def remove_member(
     They can be re-invited to this or other tenants in the future.
     """
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = actor  # type: ignore[assignment]
     if m.tenant_id != tenant_id:
         raise ForbiddenError("Tenant ID mismatch")

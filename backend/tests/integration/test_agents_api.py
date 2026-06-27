@@ -1,8 +1,8 @@
 """Integration tests for agent enrollment and management."""
+
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -35,7 +35,6 @@ async def tenant_and_member(client: AsyncClient) -> dict[str, Any]:
 
 @pytest.mark.asyncio
 class TestAgentEnrollment:
-
     async def test_enroll_agent_success(self, client: AsyncClient, tenant_and_member: dict):
         resp = await client.post(
             f"{settings.API_PREFIX}/agents/enroll",
@@ -54,7 +53,9 @@ class TestAgentEnrollment:
         assert "enrollment_token" in data
         assert len(data["enrollment_token"]) > 20
 
-    async def test_enroll_requires_agents_manage_permission(self, client: AsyncClient, tenant_and_member: dict):
+    async def test_enroll_requires_agents_manage_permission(
+        self, client: AsyncClient, tenant_and_member: dict
+    ):
         # Use headers without X-Tenant-ID to trigger 403
         headers = {k: v for k, v in tenant_and_member["headers"].items() if k != "X-Tenant-ID"}
         resp = await client.post(
@@ -90,7 +91,6 @@ class TestAgentEnrollment:
 
 @pytest.mark.asyncio
 class TestAgentIngestion:
-
     async def test_ingest_requires_agent_auth_headers(self, client: AsyncClient):
         resp = await client.post(
             f"{settings.API_PREFIX}/agents/ingest",

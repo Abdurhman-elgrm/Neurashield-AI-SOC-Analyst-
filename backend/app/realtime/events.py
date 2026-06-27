@@ -10,9 +10,8 @@ Two parallel APIs live here:
 All Phase 3.5 callers should use the realtime_* helpers below.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 import orjson
 from pydantic import BaseModel, ConfigDict
@@ -20,26 +19,27 @@ from pydantic import BaseModel, ConfigDict
 from app.realtime import channels as ch
 from app.realtime.schemas import RealtimeEvent, RealtimeEventType
 
-
 # ─── Phase 2 legacy envelope (kept for /ws backward compat) ──────────────────
+
 
 class WSMessage(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    v:         int = 1
-    type:      str
+    v: int = 1
+    type: str
     tenant_id: str
-    payload:   dict[str, Any]
-    ts:        str = ""
+    payload: dict[str, Any]
+    ts: str = ""
 
     def model_post_init(self, __context: Any) -> None:
-        object.__setattr__(self, "ts", datetime.now(tz=timezone.utc).isoformat())
+        object.__setattr__(self, "ts", datetime.now(tz=UTC).isoformat())
 
     def to_json(self) -> str:
         return orjson.dumps(self.model_dump()).decode()
 
 
 # ─── Phase 2 constructors ─────────────────────────────────────────────────────
+
 
 def alert_created_msg(tenant_id: str, alert: dict[str, Any]) -> WSMessage:
     return WSMessage(type="alert.created", tenant_id=tenant_id, payload=alert)
@@ -92,6 +92,7 @@ def _rt(
 
 # ── Alerts ────────────────────────────────────────────────────────────────────
 
+
 def realtime_alert_created(
     tenant_id: str,
     actor_id: str,
@@ -122,6 +123,7 @@ def realtime_alert_updated(
 
 # ── Investigations ────────────────────────────────────────────────────────────
 
+
 def realtime_investigation_created(
     tenant_id: str,
     actor_id: str,
@@ -137,9 +139,9 @@ def realtime_investigation_created(
         actor_id,
         {
             "investigation_id": investigation_id,
-            "threat_score":     threat_score,
-            "confidence":       confidence,
-            "status":           status,
+            "threat_score": threat_score,
+            "confidence": confidence,
+            "status": status,
         },
     )
 
@@ -173,9 +175,9 @@ def realtime_investigation_assigned(
         ch.INVESTIGATIONS,
         actor_id,
         {
-            "investigation_id":  investigation_id,
-            "assigned_to":       assigned_to,
-            "escalated":         escalated,
+            "investigation_id": investigation_id,
+            "assigned_to": assigned_to,
+            "escalated": escalated,
             "escalation_reason": escalation_reason,
         },
     )
@@ -196,14 +198,15 @@ def realtime_verdict_changed(
         actor_id,
         {
             "investigation_id": investigation_id,
-            "new_verdict":      new_verdict,
+            "new_verdict": new_verdict,
             "previous_verdict": previous_verdict,
-            "reasoning":        reasoning,
+            "reasoning": reasoning,
         },
     )
 
 
 # ── Notes ─────────────────────────────────────────────────────────────────────
+
 
 def realtime_note_created(
     tenant_id: str,
@@ -220,9 +223,9 @@ def realtime_note_created(
         actor_id,
         {
             "investigation_id": investigation_id,
-            "note_id":          note_id,
-            "content_preview":  content_preview[:200],
-            "pinned":           pinned,
+            "note_id": note_id,
+            "content_preview": content_preview[:200],
+            "pinned": pinned,
         },
     )
 
@@ -244,6 +247,7 @@ def realtime_note_updated(
 
 # ── Evidence ──────────────────────────────────────────────────────────────────
 
+
 def realtime_evidence_added(
     tenant_id: str,
     actor_id: str,
@@ -259,14 +263,15 @@ def realtime_evidence_added(
         actor_id,
         {
             "investigation_id": investigation_id,
-            "evidence_id":      evidence_id,
-            "title":            title,
-            "evidence_type":    evidence_type,
+            "evidence_id": evidence_id,
+            "title": title,
+            "evidence_type": evidence_type,
         },
     )
 
 
 # ── Cases ─────────────────────────────────────────────────────────────────────
+
 
 def realtime_case_merged(
     tenant_id: str,
@@ -281,9 +286,9 @@ def realtime_case_merged(
         ch.CASES,
         actor_id,
         {
-            "primary_investigation_id":    primary_id,
+            "primary_investigation_id": primary_id,
             "secondary_investigation_ids": secondary_ids,
-            "reason":                      reason,
+            "reason": reason,
         },
     )
 
@@ -305,6 +310,7 @@ def realtime_case_closed(
 
 # ── Presence ──────────────────────────────────────────────────────────────────
 
+
 def realtime_analyst_joined(
     tenant_id: str,
     analyst_id: str,
@@ -317,9 +323,9 @@ def realtime_analyst_joined(
         ch.PRESENCE,
         analyst_id,
         {
-            "analyst_id":   analyst_id,
+            "analyst_id": analyst_id,
             "display_name": display_name,
-            "workspace":    workspace,
+            "workspace": workspace,
         },
     )
 
@@ -353,6 +359,7 @@ def realtime_analyst_typing(
 
 # ── Events (Phase 3.6) ────────────────────────────────────────────────────────
 
+
 def realtime_event_created(
     tenant_id: str,
     actor_id: str,
@@ -370,12 +377,12 @@ def realtime_event_created(
         ch.EVENTS,
         actor_id,
         {
-            "event_id":        event_id,
-            "category":        category,
-            "severity":        severity,
-            "host_name":       host_name,
-            "source_ip":       source_ip,
-            "username":        username,
+            "event_id": event_id,
+            "category": category,
+            "severity": severity,
+            "host_name": host_name,
+            "source_ip": source_ip,
+            "username": username,
             "event_timestamp": event_timestamp,
         },
     )
@@ -424,14 +431,15 @@ def realtime_events_bulk_ingested(
         ch.EVENTS,
         actor_id,
         {
-            "count":      count,
-            "agent_id":   agent_id,
+            "count": count,
+            "agent_id": agent_id,
             "categories": categories,
         },
     )
 
 
 # ── Hunt ──────────────────────────────────────────────────────────────────────
+
 
 def realtime_hunt_completed(
     tenant_id: str,
@@ -446,14 +454,15 @@ def realtime_hunt_completed(
         ch.HUNTS,
         actor_id,
         {
-            "hunt_id":       hunt_id,
-            "result_count":  result_count,
+            "hunt_id": hunt_id,
+            "result_count": result_count,
             "query_summary": query_summary,
         },
     )
 
 
 # ── System ────────────────────────────────────────────────────────────────────
+
 
 def realtime_error(tenant_id: str, code: str, message: str) -> RealtimeEvent:
     return _rt(

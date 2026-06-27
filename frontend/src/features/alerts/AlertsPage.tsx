@@ -440,7 +440,7 @@ export function AlertsPage() {
   const selectedAlertId = searchParams.get("alert");
   const setSelectedAlertId = useCallback((id: string | null) => {
     setSearchParams(
-      (p) => { id ? p.set("alert", id) : p.delete("alert"); return p; },
+      (p) => { if (id) { p.set("alert", id) } else { p.delete("alert") } return p; },
       { replace: true }
     );
   }, [setSearchParams]);

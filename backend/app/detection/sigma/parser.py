@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import yaml
 
 from .field_map import (
     SIGMA_FIELD_TO_NORMALIZED,
-    SIGMA_LOGSOURCE_TO_CATEGORY,
     SIGMA_LEVEL_TO_SEVERITY,
+    SIGMA_LOGSOURCE_TO_CATEGORY,
     SIGMA_MODIFIER_TO_OP,
 )
 
@@ -28,6 +28,7 @@ class SigmaParseResult:
 
 # ─── Field + modifier parsing ──────────────────────────────────────────────────
 
+
 def _resolve_field(sigma_field: str) -> tuple[str, list[str]]:
     """'Image|endswith' → ('process.executable', ['endswith'])"""
     parts = sigma_field.split("|")
@@ -37,9 +38,7 @@ def _resolve_field(sigma_field: str) -> tuple[str, list[str]]:
     return normalized, modifiers
 
 
-def _field_conditions(
-    field_path: str, modifiers: list[str], values: Any
-) -> list[dict[str, Any]]:
+def _field_conditions(field_path: str, modifiers: list[str], values: Any) -> list[dict[str, Any]]:
     """
     Translate one Sigma field+modifier+value(s) into our condition dicts.
 
@@ -65,13 +64,16 @@ def _field_conditions(
         return [{"field": field_path, "op": op, "value": str(values[0])}]
 
     # Multiple values for same field — OR logic
-    return [{
-        "op": "any_of",
-        "conditions": [{"field": field_path, "op": op, "value": str(v)} for v in values],
-    }]
+    return [
+        {
+            "op": "any_of",
+            "conditions": [{"field": field_path, "op": op, "value": str(v)} for v in values],
+        }
+    ]
 
 
 # ─── Selection block parsing ───────────────────────────────────────────────────
+
 
 def _parse_selection_block(block: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert a Sigma selection dict into a flat AND-list of our conditions."""
@@ -85,6 +87,7 @@ def _parse_selection_block(block: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # ─── Condition expression parser ───────────────────────────────────────────────
+
 
 def _parse_condition_expr(
     expr: str,
@@ -108,14 +111,14 @@ def _parse_condition_expr(
     # Extract trailing "and not <filter>" clauses
     not_filter_names: list[str] = []
     while True:
-        m = re.search(r'\band\s+not\s+(\w+)', expr)
+        m = re.search(r"\band\s+not\s+(\w+)", expr)
         if not m:
             break
         not_filter_names.append(m.group(1))
-        expr = (expr[:m.start()] + expr[m.end():]).strip()
+        expr = (expr[: m.start()] + expr[m.end() :]).strip()
 
     # "1 of selection*" or "1 of them"
-    m1 = re.match(r'^1\s+of\s+(\w+?)(\*?)$', expr)
+    m1 = re.match(r"^1\s+of\s+(\w+?)(\*?)$", expr)
     if m1:
         prefix = m1.group(1)
         wildcard = bool(m1.group(2))
@@ -133,7 +136,7 @@ def _parse_condition_expr(
         return _apply_not_filters(result, not_filter_names, filters)
 
     # "all of them" / "all of selection*"
-    ma = re.match(r'^all\s+of\s+(\w+?)(\*?)$', expr)
+    ma = re.match(r"^all\s+of\s+(\w+?)(\*?)$", expr)
     if ma:
         prefix = ma.group(1)
         wildcard = bool(ma.group(2))
@@ -149,16 +152,19 @@ def _parse_condition_expr(
         return _apply_not_filters(result, not_filter_names, filters)
 
     # "sel1 or sel2 or sel3" — named OR
-    or_parts = [p.strip() for p in re.split(r'\bor\b', expr)]
+    or_parts = [p.strip() for p in re.split(r"\bor\b", expr)]
     if len(or_parts) > 1:
         groups = [selections[p] for p in or_parts if p in selections]
         if groups:
-            result = [{"op": "any_of_groups", "groups": [list(g) for g in groups]}] \
-                if len(groups) > 1 else list(groups[0])
+            result = (
+                [{"op": "any_of_groups", "groups": [list(g) for g in groups]}]
+                if len(groups) > 1
+                else list(groups[0])
+            )
             return _apply_not_filters(result, not_filter_names, filters)
 
     # "sel1 and sel2" — named AND
-    and_parts = [p.strip() for p in re.split(r'\band\b', expr)]
+    and_parts = [p.strip() for p in re.split(r"\band\b", expr)]
     if len(and_parts) > 1:
         for part in and_parts:
             if part in selections:
@@ -188,21 +194,32 @@ def _apply_not_filters(
 
 # ─── Public entrypoint ─────────────────────────────────────────────────────────
 
+
 def parse_sigma_yaml(yaml_text: str) -> SigmaParseResult:
     """Parse a Sigma YAML rule into our internal detection condition format."""
     try:
         rule = yaml.safe_load(yaml_text)
     except yaml.YAMLError as exc:
         return SigmaParseResult(
-            title="", description="", severity="medium", category=None,
-            mitre_techniques=[], mitre_tactics=[], conditions=[],
+            title="",
+            description="",
+            severity="medium",
+            category=None,
+            mitre_techniques=[],
+            mitre_tactics=[],
+            conditions=[],
             error=f"YAML parse error: {exc}",
         )
 
     if not isinstance(rule, dict):
         return SigmaParseResult(
-            title="", description="", severity="medium", category=None,
-            mitre_techniques=[], mitre_tactics=[], conditions=[],
+            title="",
+            description="",
+            severity="medium",
+            category=None,
+            mitre_techniques=[],
+            mitre_tactics=[],
+            conditions=[],
             error="Rule must be a YAML mapping",
         )
 
@@ -218,15 +235,11 @@ def parse_sigma_yaml(yaml_text: str) -> SigmaParseResult:
 
     # MITRE ATT&CK tags
     tags: list[str] = list(rule.get("tags") or [])
-    techniques = [
-        t.split(".")[-1].upper()
-        for t in tags
-        if re.match(r'^attack\.t\d+', t.lower())
-    ]
+    techniques = [t.split(".")[-1].upper() for t in tags if re.match(r"^attack\.t\d+", t.lower())]
     tactics = [
-        t[len("attack."):].replace("_", "-")
+        t[len("attack.") :].replace("_", "-")
         for t in tags
-        if t.lower().startswith("attack.") and not re.match(r'^attack\.t\d+', t.lower())
+        if t.lower().startswith("attack.") and not re.match(r"^attack\.t\d+", t.lower())
     ]
 
     # Detection block

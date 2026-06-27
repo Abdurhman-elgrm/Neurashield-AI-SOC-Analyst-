@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, SoftDeleteMixin
+from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
 
 class NotificationChannel(Base, TimestampMixin, SoftDeleteMixin):

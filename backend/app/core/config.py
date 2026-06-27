@@ -92,11 +92,11 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
 
     # ─── Brevo (primary email provider — no domain verification needed) ────────
-    BREVO_API_KEY:    str = ""
-    BREVO_FROM_EMAIL: str = ""    # e.g. "ai.soc.anlaylst.team@gmail.com"
+    BREVO_API_KEY: str = ""
+    BREVO_FROM_EMAIL: str = ""  # e.g. "ai.soc.anlaylst.team@gmail.com"
 
     # ─── Resend (fallback — requires verified domain for non-owner recipients) ─
-    RESEND_API_KEY:    str = ""
+    RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = ""
 
     # ─── Observability ────────────────────────────────────────────────────────
@@ -138,13 +138,12 @@ class Settings(BaseSettings):
         # Generate a safe value with: openssl rand -hex 64
         if len(v) < 64:
             raise ValueError(
-                "JWT secret must be at least 64 characters. "
-                "Generate one with: openssl rand -hex 64"
+                "JWT secret must be at least 64 characters. Generate one with: openssl rand -hex 64"
             )
         return v
 
     @model_validator(mode="after")
-    def validate_rs256_keys(self) -> "Settings":
+    def validate_rs256_keys(self) -> Settings:
         if self.JWT_ALGORITHM == "RS256":
             if not self.JWT_PRIVATE_KEY or not self.JWT_PUBLIC_KEY:
                 raise ValueError(
@@ -155,27 +154,30 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def set_default_stream_url(self) -> "Settings":
+    def set_default_stream_url(self) -> Settings:
         """Default REDIS_STREAM_URL to REDIS_URL with DB index 1 if not set."""
         if not self.REDIS_STREAM_URL:
             base = self.REDIS_URL
             import re as _re
-            if _re.search(r'/\d+$', base):
-                stream_url = _re.sub(r'/\d+$', '/1', base)
+
+            if _re.search(r"/\d+$", base):
+                stream_url = _re.sub(r"/\d+$", "/1", base)
             else:
-                stream_url = base.rstrip('/') + '/1'
-            object.__setattr__(self, 'REDIS_STREAM_URL', stream_url)
+                stream_url = base.rstrip("/") + "/1"
+            object.__setattr__(self, "REDIS_STREAM_URL", stream_url)
         return self
 
     @model_validator(mode="after")
-    def set_cors_from_frontend_url(self) -> "Settings":
+    def set_cors_from_frontend_url(self) -> Settings:
         """Build a precise CORS regex from FRONTEND_URL when not configured explicitly."""
         if not self.CORS_ALLOW_ORIGIN_REGEX and self.FRONTEND_URL:
             import re
+
             escaped = re.escape(self.FRONTEND_URL.rstrip("/"))
             object.__setattr__(self, "CORS_ALLOW_ORIGIN_REGEX", f"^{escaped}$")
         if self.is_production and not self.CORS_ALLOW_ORIGIN_REGEX:
             import structlog
+
             structlog.get_logger(__name__).warning(
                 "cors_not_configured",
                 note="Set CORS_ALLOW_ORIGIN_REGEX or FRONTEND_URL to restrict cross-origin access",
@@ -183,9 +185,10 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_llm_keys(self) -> "Settings":
+    def validate_llm_keys(self) -> Settings:
         if self.is_production and not self.GROQ_API_KEY and not self.GEMINI_API_KEY:
             import structlog
+
             structlog.get_logger(__name__).warning(
                 "llm_api_keys_missing",
                 detail="Neither GROQ_API_KEY nor GEMINI_API_KEY is set in production — AI analysis will be disabled",
@@ -193,13 +196,13 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def validate_secrets_differ(self) -> "Settings":
+    def validate_secrets_differ(self) -> Settings:
         if self.JWT_SECRET == self.JWT_REFRESH_SECRET:
             raise ValueError("JWT_SECRET and JWT_REFRESH_SECRET must be different values")
         return self
 
     @model_validator(mode="after")
-    def validate_production_config(self) -> "Settings":
+    def validate_production_config(self) -> Settings:
         if not self.is_production:
             return self
         if "localhost" in self.REDIS_URL or "127.0.0.1" in self.REDIS_URL:
@@ -207,9 +210,7 @@ class Settings(BaseSettings):
                 "REDIS_URL cannot point to localhost in production. "
                 "Set REDIS_URL to your Redis instance URL (e.g. rediss://... on Railway)."
             )
-        all_localhost = all(
-            "localhost" in o or "127.0.0.1" in o for o in self.ALLOWED_ORIGINS
-        )
+        all_localhost = all("localhost" in o or "127.0.0.1" in o for o in self.ALLOWED_ORIGINS)
         if all_localhost and not self.CORS_ALLOW_ORIGIN_REGEX:
             raise ValueError(
                 "In production ALLOWED_ORIGINS must include your frontend URL, "

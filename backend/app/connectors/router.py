@@ -14,6 +14,7 @@ Example (Wazuh webhook):
   Content-Type: application/json
   {"id": "...", "rule": {...}, "agent": {...}}
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any
@@ -39,19 +40,21 @@ router = APIRouter(prefix="/connectors", tags=["connectors"])
 @router.get("", response_model=APIResponse[dict[str, Any]])
 async def list_connectors() -> APIResponse[dict[str, Any]]:
     """List available connector sources and their expected payload formats."""
-    return APIResponse.ok({
-        "sources": SUPPORTED_SOURCES,
-        "endpoint": "POST /api/v1/connectors/{source}/ingest",
-        "auth": "X-API-Key: <your-api-key>",
-        "formats": {
-            "wazuh":    "Wazuh JSON alert object or array of alerts",
-            "suricata": "Suricata EVE JSON object, array, or NDJSON string",
-            "defender": "Microsoft Defender ATP alert object or {value: [...]}",
-            "syslog":   "RFC 3164/5424 text, JSON {message: ...}, or array",
-            "generic":  "Any JSON object or array — fields mapped best-effort",
-            "webhook":  "Alias for generic",
-        },
-    })
+    return APIResponse.ok(
+        {
+            "sources": SUPPORTED_SOURCES,
+            "endpoint": "POST /api/v1/connectors/{source}/ingest",
+            "auth": "X-API-Key: <your-api-key>",
+            "formats": {
+                "wazuh": "Wazuh JSON alert object or array of alerts",
+                "suricata": "Suricata EVE JSON object, array, or NDJSON string",
+                "defender": "Microsoft Defender ATP alert object or {value: [...]}",
+                "syslog": "RFC 3164/5424 text, JSON {message: ...}, or array",
+                "generic": "Any JSON object or array — fields mapped best-effort",
+                "webhook": "Alias for generic",
+            },
+        }
+    )
 
 
 @router.post("/{source}/ingest", response_model=APIResponse[dict[str, Any]])
@@ -67,7 +70,7 @@ async def connector_ingest(
     try:
         tenant_id: UUID = await ConnectorService.resolve_tenant(db, x_api_key or "")
     except UnauthorizedError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     finally:
         await db.commit()
 
@@ -88,7 +91,7 @@ async def connector_ingest(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid JSON body",
-            )
+            ) from None
     else:
         raw_body = await request.body()
         payload = raw_body.decode(errors="replace")
@@ -100,6 +103,7 @@ async def connector_ingest(
 
     # ── 5. Queue to raw_events stream ─────────────────────────────────────────
     from redis.asyncio import Redis
+
     redis_typed: Redis[str] = redis  # type: ignore[assignment]
     tenant_client = TenantRedisClient(redis_typed, str(tenant_id), stream_names.SUBSYSTEM)
 

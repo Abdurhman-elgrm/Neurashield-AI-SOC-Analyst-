@@ -4,7 +4,7 @@ import asyncio
 from typing import Any
 
 import structlog
-from redis.asyncio import Redis, ConnectionPool
+from redis.asyncio import ConnectionPool, Redis
 from redis.asyncio.client import Pipeline
 from redis.exceptions import BusyLoadingError, ResponseError
 
@@ -78,7 +78,7 @@ class RedisManager:
             self._pool = None
         logger.info("redis_connection_closed")
 
-    def get_client(self) -> "Redis[str]":
+    def get_client(self) -> Redis[str]:
         if self._client is None:
             raise RuntimeError("Redis not initialized. Call initialize() first.")
         return self._client
@@ -105,11 +105,12 @@ redis_manager = RedisManager()
 
 # ─── FastAPI dependencies ────────────────────────────────────────────────────
 
-async def get_redis() -> "Redis[str]":
+
+async def get_redis() -> Redis[str]:
     return redis_manager.get_client()
 
 
-async def get_redis_optional() -> "Redis[str] | None":
+async def get_redis_optional() -> Redis[str] | None:
     """Like get_redis but returns None instead of raising if Redis is down."""
     try:
         return redis_manager.get_client()
@@ -133,7 +134,7 @@ async def initialize_stream_redis() -> None:
     logger.info("stream_redis_initialized", url=settings.REDIS_STREAM_URL)
 
 
-async def get_stream_redis() -> "Redis[str]":
+async def get_stream_redis() -> Redis[str]:
     """Returns stream-dedicated Redis. Falls back to app Redis if not initialized."""
     try:
         return _stream_redis_manager.get_client()
@@ -142,6 +143,7 @@ async def get_stream_redis() -> "Redis[str]":
 
 
 # ─── Tenant-scoped Redis client ───────────────────────────────────────────────
+
 
 class TenantRedisClient:
     """
@@ -157,7 +159,7 @@ class TenantRedisClient:
 
     def __init__(
         self,
-        redis: "Redis[str]",
+        redis: Redis[str],
         tenant_id: str,
         subsystem: str,
     ) -> None:
@@ -285,7 +287,9 @@ class TenantRedisClient:
 
     # ─── Rate limiting ────────────────────────────────────────────────────────
 
-    async def check_rate_limit(self, resource: str, limit: int, window_secs: int) -> tuple[bool, int]:
+    async def check_rate_limit(
+        self, resource: str, limit: int, window_secs: int
+    ) -> tuple[bool, int]:
         """
         Sliding window rate limit counter.
         Returns (is_allowed, remaining).
@@ -351,11 +355,11 @@ class TenantRedisClient:
         """Yields unprefixed keys matching pattern (prefix is stripped from results)."""
         full_pattern = self._key(pattern)
         async for full_key in self._redis.scan_iter(full_pattern):
-            yield full_key[len(self._prefix):]
+            yield full_key[len(self._prefix) :]
 
     # ─── Pipeline ─────────────────────────────────────────────────────────────
 
-    def pipeline(self) -> "TenantPipeline":
+    def pipeline(self) -> TenantPipeline:
         return TenantPipeline(self._redis.pipeline(), self._prefix)
 
 
@@ -376,50 +380,50 @@ class TenantPipeline:
     def _key(self, key: str) -> str:
         return f"{self._prefix}{key}"
 
-    def set(self, key: str, value: Any, ex: int | None = None, nx: bool = False) -> "TenantPipeline":
+    def set(self, key: str, value: Any, ex: int | None = None, nx: bool = False) -> TenantPipeline:
         self._pipe.set(self._key(key), value, ex=ex, nx=nx)
         return self
 
-    def get(self, key: str) -> "TenantPipeline":
+    def get(self, key: str) -> TenantPipeline:
         self._pipe.get(self._key(key))
         return self
 
-    def delete(self, *keys: str) -> "TenantPipeline":
+    def delete(self, *keys: str) -> TenantPipeline:
         self._pipe.delete(*[self._key(k) for k in keys])
         return self
 
-    def incr(self, key: str) -> "TenantPipeline":
+    def incr(self, key: str) -> TenantPipeline:
         self._pipe.incr(self._key(key))
         return self
 
-    def expire(self, key: str, seconds: int) -> "TenantPipeline":
+    def expire(self, key: str, seconds: int) -> TenantPipeline:
         self._pipe.expire(self._key(key), seconds)
         return self
 
-    def hset(self, name: str, mapping: dict[str, Any]) -> "TenantPipeline":
+    def hset(self, name: str, mapping: dict[str, Any]) -> TenantPipeline:
         self._pipe.hset(self._key(name), mapping=mapping)
         return self
 
-    def hgetall(self, name: str) -> "TenantPipeline":
+    def hgetall(self, name: str) -> TenantPipeline:
         self._pipe.hgetall(self._key(name))
         return self
 
-    def zadd(self, key: str, mapping: dict[str, float]) -> "TenantPipeline":
+    def zadd(self, key: str, mapping: dict[str, float]) -> TenantPipeline:
         self._pipe.zadd(self._key(key), mapping)  # type: ignore[arg-type]
         return self
 
-    def zrangebyscore(self, key: str, min: float | str, max: float | str) -> "TenantPipeline":
+    def zrangebyscore(self, key: str, min: float | str, max: float | str) -> TenantPipeline:
         self._pipe.zrangebyscore(self._key(key), min, max)
         return self
 
-    def zremrangebyscore(self, key: str, min: float | str, max: float | str) -> "TenantPipeline":
+    def zremrangebyscore(self, key: str, min: float | str, max: float | str) -> TenantPipeline:
         self._pipe.zremrangebyscore(self._key(key), min, max)
         return self
 
     async def execute(self) -> list[Any]:
         return await self._pipe.execute()
 
-    async def __aenter__(self) -> "TenantPipeline":
+    async def __aenter__(self) -> TenantPipeline:
         await self._pipe.__aenter__()
         return self
 

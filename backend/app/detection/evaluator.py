@@ -39,6 +39,7 @@ async def _maybe_auto_playbook(
     """
     try:
         from sqlalchemy import select
+
         from app.core.database import database_manager
         from app.models.playbook import PlaybookAutoConfig
         from app.models.tenant import Tenant
@@ -46,22 +47,18 @@ async def _maybe_auto_playbook(
 
         async with database_manager.session() as db:
             cfg_result = await db.execute(
-                select(PlaybookAutoConfig).where(
-                    PlaybookAutoConfig.tenant_id == tenant_id
-                )
+                select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == tenant_id)
             )
             cfg = cfg_result.scalar_one_or_none()
             if cfg is None or not cfg.enabled:
                 return
 
             alert_rank = _SEVERITY_RANK_AUTO.get(severity, 0)
-            min_rank   = _SEVERITY_RANK_AUTO.get(cfg.min_severity, 4)
+            min_rank = _SEVERITY_RANK_AUTO.get(cfg.min_severity, 4)
             if alert_rank < min_rank:
                 return
 
-            tenant_result = await db.execute(
-                select(Tenant.name).where(Tenant.id == tenant_id)
-            )
+            tenant_result = await db.execute(select(Tenant.name).where(Tenant.id == tenant_id))
             company_name = tenant_result.scalar_one_or_none() or "Your Organization"
 
             playbook = await PlaybookGeneratorService.generate(
@@ -91,7 +88,11 @@ async def _maybe_auto_playbook(
 # ─── Context-aware severity escalation ────────────────────────────────────────
 
 _SEVERITY_RANK: dict[str, int] = {
-    "critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0,
+    "critical": 4,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+    "info": 0,
 }
 _RANK_TO_SEVERITY: dict[int, AlertSeverity] = {
     4: AlertSeverity.CRITICAL,
@@ -103,11 +104,13 @@ _RANK_TO_SEVERITY: dict[int, AlertSeverity] = {
 
 # UEBA flags that represent high-confidence attack chain activity.
 # Any alert triggered alongside these flags is locked to at least HIGH.
-_CRITICAL_CHAIN_FLAGS = frozenset({
-    "impossible_travel",
-    "brute_force_success",
-    "lateral_movement_xdomain",
-})
+_CRITICAL_CHAIN_FLAGS = frozenset(
+    {
+        "impossible_travel",
+        "brute_force_success",
+        "lateral_movement_xdomain",
+    }
+)
 
 
 def _compute_alert_severity(
@@ -190,7 +193,9 @@ class RuleEvaluator:
         window_event_ids: list[str] = []
 
         if rule.rule_type == RuleType.PATTERN:
-            conditions: list[dict[str, Any]] = rule.conditions if isinstance(rule.conditions, list) else []
+            conditions: list[dict[str, Any]] = (
+                rule.conditions if isinstance(rule.conditions, list) else []
+            )
             fired = evaluate_conditions(conditions, event)
         elif rule.rule_type == RuleType.THRESHOLD:
             fired, count, window_event_ids = await self._threshold.evaluate(
@@ -261,16 +266,18 @@ class RuleEvaluator:
 
         # Fire-and-forget: auto-generate playbook if tenant has it enabled.
         # Snapshot primitive values now so the task is independent of this session.
-        create_task_safe(_maybe_auto_playbook(
-            tenant_id=alert.tenant_id,
-            alert_id=alert.id,
-            alert_title=alert.title or "",
-            severity=alert.severity.value,
-            source_host=alert.source_host,
-            mitre_techniques=list(alert.mitre_techniques or []),
-            mitre_tactics=list(alert.mitre_tactics or []),
-            evidence=dict(alert.evidence or {}),
-        ))
+        create_task_safe(
+            _maybe_auto_playbook(
+                tenant_id=alert.tenant_id,
+                alert_id=alert.id,
+                alert_title=alert.title or "",
+                severity=alert.severity.value,
+                source_host=alert.source_host,
+                mitre_techniques=list(alert.mitre_techniques or []),
+                mitre_tactics=list(alert.mitre_tactics or []),
+                evidence=dict(alert.evidence or {}),
+            )
+        )
 
         logger.info(
             "alert_created",

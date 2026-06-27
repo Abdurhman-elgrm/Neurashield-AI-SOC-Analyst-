@@ -19,12 +19,12 @@ from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-_LOGIN_RATE_LIMIT       = 10     # attempts
-_LOGIN_RATE_WINDOW      = 900    # 15 minutes
-_REGISTER_RATE_LIMIT    = 5      # attempts
-_REGISTER_RATE_WINDOW   = 3600   # 1 hour
-_ACCOUNT_LOCKOUT_LIMIT  = 20     # total failed attempts across all IPs
-_ACCOUNT_LOCKOUT_WINDOW = 1800   # 30-minute lockout window
+_LOGIN_RATE_LIMIT = 10  # attempts
+_LOGIN_RATE_WINDOW = 900  # 15 minutes
+_REGISTER_RATE_LIMIT = 5  # attempts
+_REGISTER_RATE_WINDOW = 3600  # 1 hour
+_ACCOUNT_LOCKOUT_LIMIT = 20  # total failed attempts across all IPs
+_ACCOUNT_LOCKOUT_WINDOW = 1800  # 30-minute lockout window
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -73,7 +73,6 @@ def _extract_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-
 # Atomic Lua script: INCR + EXPIRE in a single round-trip.
 # Eliminates the INCR/EXPIRE race condition where a crash between the two
 # operations would leave the key without a TTL (counter lives forever).
@@ -91,6 +90,7 @@ class _InMemoryRateLimiter:
     Thread-safe fixed-window rate limiter used when Redis is unavailable.
     Bounded to _MAX_KEYS entries to prevent unbounded memory growth.
     """
+
     _MAX_KEYS = 10_000
 
     def __init__(self) -> None:
@@ -128,6 +128,7 @@ async def _check_rate_limit(
     """
     if redis is None:
         import structlog as _structlog
+
         _structlog.get_logger(__name__).warning(
             "rate_limit_redis_unavailable_memory_fallback",
             key=key,
@@ -155,6 +156,7 @@ async def _check_rate_limit(
         raise
     except RedisError as exc:
         import structlog as _structlog
+
         _structlog.get_logger(__name__).error(
             "rate_limit_redis_error_using_memory_fallback",
             key=key,
@@ -165,7 +167,7 @@ async def _check_rate_limit(
             raise RateLimitError(
                 f"Too many attempts — try again in {window // 60} minutes",
                 retry_after=window,
-            )
+            ) from None
 
 
 class ResendVerificationRequest(BaseModel):
@@ -184,6 +186,7 @@ class ResetPasswordRequest(BaseModel):
     @classmethod
     def password_strength(cls, v: str) -> str:
         from app.schemas.auth import _validate_password_strength
+
         return _validate_password_strength(v)
 
 
@@ -195,6 +198,7 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def password_strength(cls, v: str) -> str:
         from app.schemas.auth import _validate_password_strength
+
         return _validate_password_strength(v)
 
 
@@ -212,7 +216,9 @@ async def register(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[TokenPair]:
     ip = _extract_client_ip(request)
-    await _check_rate_limit(redis, f"auth_register_ip:{ip}", _REGISTER_RATE_LIMIT, _REGISTER_RATE_WINDOW)
+    await _check_rate_limit(
+        redis, f"auth_register_ip:{ip}", _REGISTER_RATE_LIMIT, _REGISTER_RATE_WINDOW
+    )
 
     _user, token_pair = await AuthService.register(
         db,
@@ -242,7 +248,10 @@ async def login(
 
     # Per-account lockout — SHA-256 prefix of email so no PII is stored in Redis
     import hashlib as _hashlib
-    _email_key = f"auth_lockout_acct:{_hashlib.sha256(payload.email.lower().encode()).hexdigest()[:24]}"
+
+    _email_key = (
+        f"auth_lockout_acct:{_hashlib.sha256(payload.email.lower().encode()).hexdigest()[:24]}"
+    )
     await _check_rate_limit(redis, _email_key, _ACCOUNT_LOCKOUT_LIMIT, _ACCOUNT_LOCKOUT_WINDOW)
 
     _user, token_pair = await AuthService.login(
@@ -330,6 +339,7 @@ async def resend_verification(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[EmptyResponse]:
     import hashlib as _hashlib
+
     _email_hash = _hashlib.sha256(payload.email.lower().encode()).hexdigest()[:24]
     await _check_rate_limit(
         redis,
@@ -339,7 +349,6 @@ async def resend_verification(
     )
     await AuthService.resend_verification(db, payload.email)
     return APIResponse.ok(EmptyResponse())
-
 
 
 @router.post(
@@ -353,6 +362,7 @@ async def forgot_password(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[EmptyResponse]:
     import hashlib as _hashlib
+
     _email_hash = _hashlib.sha256(payload.email.lower().encode()).hexdigest()[:24]
     await _check_rate_limit(
         redis,
@@ -393,6 +403,7 @@ async def change_password(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[EmptyResponse]:
     import hashlib as _hashlib
+
     _uid_hash = _hashlib.sha256(str(current_user.id).encode()).hexdigest()[:24]
     await _check_rate_limit(redis, f"auth_change_pw:{_uid_hash}", limit=10, window=3600)
     await AuthService.change_password(
@@ -403,6 +414,7 @@ async def change_password(
 
 
 # ─── Demo mode endpoint ──────────────────────────────────────────────────────
+
 
 @router.post(
     "/demo",
@@ -418,12 +430,14 @@ async def demo_login(
     ip = _extract_client_ip(request)
     await _check_rate_limit(redis, f"auth_demo_ip:{ip}", limit=10, window=3600)
     from app.services.demo_service import demo_login as _demo_login
+
     token_pair = await _demo_login(db)
     _set_refresh_cookie(response, token_pair.refresh_token)
     return APIResponse.ok(token_pair)
 
 
 # ─── MFA endpoints ────────────────────────────────────────────────────────────
+
 
 class MFASetupResponse(BaseModel):
     provisioning_uri: str
@@ -454,14 +468,18 @@ async def mfa_setup(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[MFASetupResponse]:
     import hashlib as _hashlib
+
     _uid_hash = _hashlib.sha256(str(current_user.id).encode()).hexdigest()[:24]
     await _check_rate_limit(redis, f"auth_mfa_setup:{_uid_hash}", limit=10, window=3600)
     from app.services.mfa_service import MFAService
+
     result = MFAService.generate_totp_setup(current_user)
-    return APIResponse.ok(MFASetupResponse(
-        provisioning_uri=result["provisioning_uri"],
-        encrypted_secret=result["encrypted_secret"],
-    ))
+    return APIResponse.ok(
+        MFASetupResponse(
+            provisioning_uri=result["provisioning_uri"],
+            encrypted_secret=result["encrypted_secret"],
+        )
+    )
 
 
 @router.post(
@@ -476,16 +494,18 @@ async def mfa_verify(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[MFABackupCodesResponse]:
     import hashlib as _hashlib
+
     _uid_hash = _hashlib.sha256(str(current_user.id).encode()).hexdigest()[:24]
     await _check_rate_limit(redis, f"auth_mfa_verify:{_uid_hash}", limit=10, window=900)
-    from app.services.mfa_service import MFAService
     from app.core.exceptions import ValidationError
+    from app.services.mfa_service import MFAService
+
     try:
         raw_codes = MFAService.verify_and_activate_mfa(
             current_user, payload.encrypted_secret, payload.code
         )
     except ValueError as exc:
-        raise ValidationError(str(exc))
+        raise ValidationError(str(exc)) from exc
     await db.flush([current_user])
     await db.commit()
     return APIResponse.ok(MFABackupCodesResponse(backup_codes=raw_codes))
@@ -503,6 +523,7 @@ async def mfa_disable(
     redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[EmptyResponse]:
     import hashlib as _hashlib
+
     _uid_hash = _hashlib.sha256(str(current_user.id).encode()).hexdigest()[:24]
     await _check_rate_limit(redis, f"auth_mfa_disable:{_uid_hash}", limit=5, window=3600)
     from app.core.exceptions import UnauthorizedError, ValidationError

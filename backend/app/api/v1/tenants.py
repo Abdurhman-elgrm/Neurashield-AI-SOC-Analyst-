@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.rbac.permissions import Permission
-from app.schemas.common import APIResponse, PaginatedResponse
+from app.schemas.common import APIResponse
 from app.schemas.tenant import TenantCreateRequest, TenantResponse, TenantUpdateRequest
 from app.services.tenant_service import TenantService
 
@@ -50,8 +50,6 @@ async def list_my_tenants(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> APIResponse[list[TenantResponse]]:
-    from app.models.tenant_member import TenantMember as TM
-    from sqlalchemy import select as sa_select
     pairs = await TenantService.get_user_tenants_with_role(db, current_user.id)
     result = []
     for tenant, role in pairs:
@@ -90,6 +88,7 @@ async def update_tenant(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[TenantResponse]:
     from app.models.tenant_member import TenantMember
+
     m: TenantMember = member  # type: ignore[assignment]
     tenant = await TenantService.get_by_id(db, tenant_id)
     if tenant is None:

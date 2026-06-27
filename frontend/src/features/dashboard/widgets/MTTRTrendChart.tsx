@@ -59,7 +59,7 @@ export function MTTRTrendChart({ timeRange }: Props) {
     queryKey: ["dashboard", "mttr-trend"],
     queryFn: () =>
       apiClient.get("/dashboard/mttr-trend")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         .then((r) => ((r.data as any).data ?? r.data) as MTTRTrendPoint[])
         .catch(() => [] as MTTRTrendPoint[]),
     staleTime: 300_000,

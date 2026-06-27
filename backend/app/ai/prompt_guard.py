@@ -2,6 +2,7 @@
 
 Guards both user-supplied chat messages and DB-sourced values embedded in system prompts.
 """
+
 from __future__ import annotations
 
 import re

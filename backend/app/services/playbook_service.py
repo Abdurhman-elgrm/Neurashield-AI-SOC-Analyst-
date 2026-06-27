@@ -14,16 +14,17 @@ Variables substituted into step descriptions:
   {technique_id}, {technique_name}, {cve_id}, {cvss_score}, {timestamp},
   {analyst_note}
 """
+
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playbook import (
@@ -38,22 +39,22 @@ logger = structlog.get_logger(__name__)
 
 # ── 16 substitution variables ─────────────────────────────────────────────────
 _VARIABLE_DEFAULTS: dict[str, str] = {
-    "source_ip":      "Unknown IP",
-    "username":       "Unknown User",
-    "device_name":    "Unknown Device",
-    "device_os":      "Unknown OS",
-    "incident_id":    "INC-UNKNOWN",
-    "company_name":   "Your Organization",
-    "attempt_count":  "multiple",
-    "timeframe":      "the last 24 hours",
-    "protocol":       "Unknown Protocol",
-    "port":           "Unknown Port",
-    "technique_id":   "T0000",
+    "source_ip": "Unknown IP",
+    "username": "Unknown User",
+    "device_name": "Unknown Device",
+    "device_os": "Unknown OS",
+    "incident_id": "INC-UNKNOWN",
+    "company_name": "Your Organization",
+    "attempt_count": "multiple",
+    "timeframe": "the last 24 hours",
+    "protocol": "Unknown Protocol",
+    "port": "Unknown Port",
+    "technique_id": "T0000",
     "technique_name": "Unknown Technique",
-    "cve_id":         "N/A",
-    "cvss_score":     "N/A",
-    "timestamp":      datetime.now(tz=timezone.utc).isoformat(),
-    "analyst_note":   "[ANALYST: Review and adapt these steps to your environment]",
+    "cve_id": "N/A",
+    "cvss_score": "N/A",
+    "timestamp": datetime.now(tz=UTC).isoformat(),
+    "analyst_note": "[ANALYST: Review and adapt these steps to your environment]",
 }
 
 # ── Generic 8-step fallback playbook ─────────────────────────────────────────
@@ -327,10 +328,9 @@ Available template variables: {source_ip} {username} {device_name} {device_os} {
 
 
 class PlaybookGeneratorService:
-
     @staticmethod
     async def generate_incident_id(db: AsyncSession, tenant_id: UUID) -> str:
-        today = datetime.now(tz=timezone.utc).strftime("%Y%m%d")
+        today = datetime.now(tz=UTC).strftime("%Y%m%d")
         prefix = f"INC-{today}-"
         result = await db.execute(
             select(func.count()).where(
@@ -355,7 +355,7 @@ class PlaybookGeneratorService:
         vars_: dict[str, str] = dict(_VARIABLE_DEFAULTS)
         vars_["incident_id"] = incident_id
         vars_["company_name"] = company_name
-        vars_["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+        vars_["timestamp"] = datetime.now(tz=UTC).isoformat()
         if source_host:
             vars_["device_name"] = source_host
         # Flatten evidence fields
@@ -492,25 +492,19 @@ class PlaybookGeneratorService:
 
         # Level 1: exact technique match (system or tenant templates)
         if technique:
-            steps, tmpl_id = await cls._load_template_steps(
-                db, tenant_id, technique=technique
-            )
+            steps, tmpl_id = await cls._load_template_steps(db, tenant_id, technique=technique)
             if steps:
                 return steps, "template", tmpl_id
 
         # Level 2: tactic match
         if tactic:
-            steps, tmpl_id = await cls._load_template_steps(
-                db, tenant_id, tactic=tactic
-            )
+            steps, tmpl_id = await cls._load_template_steps(db, tenant_id, tactic=tactic)
             if steps:
                 return steps, "template_tactic", tmpl_id
 
         # Level 3: category match
         if category:
-            steps, tmpl_id = await cls._load_template_steps(
-                db, tenant_id, category=category
-            )
+            steps, tmpl_id = await cls._load_template_steps(db, tenant_id, category=category)
             if steps:
                 return steps, "template_category", tmpl_id
 
@@ -540,13 +534,10 @@ class PlaybookGeneratorService:
         tactic: str | None = None,
         category: str | None = None,
     ) -> tuple[list[dict[str, Any]], UUID | None]:
-        query = (
-            select(PlaybookTemplate)
-            .where(
-                PlaybookTemplate.enabled.is_(True),
-                PlaybookTemplate.deleted_at.is_(None),
-                (PlaybookTemplate.tenant_id == tenant_id) | (PlaybookTemplate.is_system.is_(True)),
-            )
+        query = select(PlaybookTemplate).where(
+            PlaybookTemplate.enabled.is_(True),
+            PlaybookTemplate.deleted_at.is_(None),
+            (PlaybookTemplate.tenant_id == tenant_id) | (PlaybookTemplate.is_system.is_(True)),
         )
         if technique:
             query = query.where(PlaybookTemplate.technique == technique)
@@ -605,6 +596,7 @@ class PlaybookGeneratorService:
         variables: dict[str, str],
     ) -> list[dict[str, Any]]:
         from app.ai.llm_manager import get_llm_manager
+
         llm = get_llm_manager()
 
         # Look up human-readable technique name
@@ -615,13 +607,14 @@ class PlaybookGeneratorService:
 
         severity_guidance = {
             "critical": "CRITICAL: This is a P1 incident. All containment actions must complete within 15 minutes. Alert CISO immediately.",
-            "high":     "HIGH severity: Contain within 1 hour. Escalate to senior analyst.",
-            "medium":   "MEDIUM severity: Investigate and contain within 4 hours. Standard escalation path.",
-            "low":      "LOW severity: Investigate within 24 hours. Document and monitor.",
+            "high": "HIGH severity: Contain within 1 hour. Escalate to senior analyst.",
+            "medium": "MEDIUM severity: Investigate and contain within 4 hours. Standard escalation path.",
+            "low": "LOW severity: Investigate within 24 hours. Document and monitor.",
         }.get(severity.lower(), "")
 
         technique_line = (
-            f"{technique} — {tech_name}" if tech_name != "Unknown Technique"
+            f"{technique} — {tech_name}"
+            if tech_name != "Unknown Technique"
             else (technique or "Unknown")
         )
 
@@ -629,21 +622,21 @@ class PlaybookGeneratorService:
 
         prompt = f"""\
 === INCIDENT BRIEF ===
-Incident ID:    {variables.get('incident_id', 'INC-UNKNOWN')}
-Timestamp:      {variables.get('timestamp', 'Unknown')}
+Incident ID:    {variables.get("incident_id", "INC-UNKNOWN")}
+Timestamp:      {variables.get("timestamp", "Unknown")}
 Alert:          {alert_title}
 Severity:       {severity.upper()}  — {severity_guidance}
 
 === AFFECTED ASSET ===
-Host:           {source_host or variables.get('device_name', 'Unknown')}
-OS:             {variables.get('device_os', 'Unknown')}
-Source IP:      {variables.get('source_ip', 'Unknown')}
-Username:       {variables.get('username', 'Unknown')}
-Organization:   {variables.get('company_name', 'Unknown')}
+Host:           {source_host or variables.get("device_name", "Unknown")}
+OS:             {variables.get("device_os", "Unknown")}
+Source IP:      {variables.get("source_ip", "Unknown")}
+Username:       {variables.get("username", "Unknown")}
+Organization:   {variables.get("company_name", "Unknown")}
 
 === ATTACK CLASSIFICATION ===
 MITRE Technique: {technique_line}
-MITRE Tactic:    {tactic or 'Unknown'}
+MITRE Tactic:    {tactic or "Unknown"}
 {attack_context}
 
 === AVAILABLE CONTEXT VARIABLES ===
@@ -652,8 +645,8 @@ MITRE Tactic:    {tactic or 'Unknown'}
 === TASK ===
 Generate a complete tactical incident response playbook for the attack above.
 - Every step title must name the specific artifact or system being acted on
-- Every command must be real and executable, tailored to {source_host or 'the affected host'}
-- Use {technique or 'the detected technique'} specific IOCs and artifacts in descriptions
+- Every command must be real and executable, tailored to {source_host or "the affected host"}
+- Use {technique or "the detected technique"} specific IOCs and artifacts in descriptions
 - Cover the full lifecycle: Triage → Investigation → Containment → Eradication → Recovery → Documentation
 Respond ONLY with the JSON array."""
 
@@ -695,6 +688,7 @@ Respond ONLY with the JSON array."""
         playbook = result.scalar_one_or_none()
         if playbook is None:
             from app.core.exceptions import NotFoundError
+
             raise NotFoundError(f"Playbook {playbook_id} not found")
 
         step_count_result = await db.execute(
@@ -735,6 +729,7 @@ Respond ONLY with the JSON array."""
         )
         if pb_result.scalar_one_or_none() is None:
             from app.core.exceptions import NotFoundError
+
             raise NotFoundError(f"Playbook {playbook_id} not found")
 
         step_result = await db.execute(
@@ -746,10 +741,11 @@ Respond ONLY with the JSON array."""
         step = step_result.scalar_one_or_none()
         if step is None:
             from app.core.exceptions import NotFoundError
+
             raise NotFoundError(f"Step {step_id} not found")
 
         step.status = "completed"
-        step.completed_at = datetime.now(tz=timezone.utc)
+        step.completed_at = datetime.now(tz=UTC)
         step.completed_by_id = actor_id
         if notes:
             step.notes = notes
@@ -769,9 +765,7 @@ Respond ONLY with the JSON array."""
         total = total_result.scalar_one()
         done = done_result.scalar_one()
         if done >= total:
-            pb_update = await db.execute(
-                select(Playbook).where(Playbook.id == playbook_id)
-            )
+            pb_update = await db.execute(select(Playbook).where(Playbook.id == playbook_id))
             pb = pb_update.scalar_one_or_none()
             if pb:
                 pb.status = "completed"
@@ -898,9 +892,7 @@ _CATEGORY_MAP: dict[str, str] = {
 }
 
 
-def _infer_category(
-    technique: str | None, tactic: str | None, title: str
-) -> str | None:
+def _infer_category(technique: str | None, tactic: str | None, title: str) -> str | None:
     if technique:
         base = technique.split(".")[0].upper()
         cat = _CATEGORY_MAP.get(base)

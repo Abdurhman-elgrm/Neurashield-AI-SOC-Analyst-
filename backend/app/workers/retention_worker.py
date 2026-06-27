@@ -5,6 +5,7 @@ Runs every hour. For each active tenant, deletes events/alerts older than the
 tenant's configured retention window.
 Uses chunked deletes to avoid long-running transactions and lock contention.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,12 +17,11 @@ from app.core.database import database_manager
 
 logger = structlog.get_logger(__name__)
 
-_SWEEP_INTERVAL_SECS = 3600   # 1 hour between sweeps
-_DELETE_CHUNK_SIZE   = 5_000  # rows deleted per statement
+_SWEEP_INTERVAL_SECS = 3600  # 1 hour between sweeps
+_DELETE_CHUNK_SIZE = 5_000  # rows deleted per statement
 
 
 class DataRetentionWorker:
-
     async def run(self, stop_event: asyncio.Event) -> None:
         logger.info("retention_worker_started")
         while not stop_event.is_set():
@@ -35,16 +35,18 @@ class DataRetentionWorker:
                     asyncio.shield(stop_event.wait()),
                     timeout=_SWEEP_INTERVAL_SECS,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # normal — continue to next sweep
 
     async def _sweep(self) -> None:
         async with database_manager.session() as db:
-            result = await db.execute(text("""
+            result = await db.execute(
+                text("""
                 SELECT id::text, event_retention_days, alert_retention_days
                 FROM tenants
                 WHERE is_active = TRUE AND deleted_at IS NULL
-            """))
+            """)
+            )
             tenants = result.fetchall()
 
         for row in tenants:
@@ -71,7 +73,8 @@ class DataRetentionWorker:
             async with database_manager.session() as db:
                 # Use string interpolation for INTERVAL — retention_days is an int from DB,
                 # not user-controlled input, so this is safe.
-                result = await db.execute(text(f"""
+                result = await db.execute(
+                    text(f"""
                     DELETE FROM events
                     WHERE id IN (
                         SELECT id FROM events
@@ -79,7 +82,8 @@ class DataRetentionWorker:
                           AND event_timestamp < NOW() - INTERVAL '{retention_days} days'
                         LIMIT {_DELETE_CHUNK_SIZE}
                     )
-                """).bindparams(tid=tenant_id))
+                """).bindparams(tid=tenant_id)
+                )
                 deleted = result.rowcount or 0
                 await db.commit()
 
@@ -94,7 +98,8 @@ class DataRetentionWorker:
         total = 0
         while True:
             async with database_manager.session() as db:
-                result = await db.execute(text(f"""
+                result = await db.execute(
+                    text(f"""
                     DELETE FROM alerts
                     WHERE id IN (
                         SELECT id FROM alerts
@@ -103,7 +108,8 @@ class DataRetentionWorker:
                           AND status IN ('closed', 'false_positive')
                         LIMIT {_DELETE_CHUNK_SIZE}
                     )
-                """).bindparams(tid=tenant_id))
+                """).bindparams(tid=tenant_id)
+                )
                 deleted = result.rowcount or 0
                 await db.commit()
 

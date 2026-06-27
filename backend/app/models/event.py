@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, utcnow
 
@@ -49,8 +49,11 @@ class Event(Base):
     raw_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     category: Mapped[EventCategory] = mapped_column(
-        Enum(EventCategory, name="event_category_enum",
-             values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            EventCategory,
+            name="event_category_enum",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         index=True,
     )

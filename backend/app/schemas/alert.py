@@ -41,9 +41,7 @@ class AlertResponse(BaseModel):
 
 
 class AlertUpdateRequest(BaseModel):
-    status: Literal["open", "acknowledged", "closed", "false_positive"] | None = Field(
-        default=None
-    )
+    status: Literal["open", "acknowledged", "closed", "false_positive"] | None = Field(default=None)
     notes: str | None = Field(default=None, max_length=2000)
     assignee_id: UUID | None = None
 

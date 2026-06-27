@@ -19,22 +19,21 @@ import structlog
 from app.core.config import settings
 from app.core.database import database_manager
 from app.core.logging import configure_logging
-from app.core.redis import redis_manager
+from app.core.redis import TenantRedisClient, redis_manager
+from app.core.utils import create_task_safe
 from app.pipeline import stream_names
 from app.pipeline.publisher import StreamPublisher
-from app.core.redis import TenantRedisClient
-from app.core.utils import create_task_safe
-from app.workers.normalization_worker import NormalizationWorker
-from app.workers.detection_worker import DetectionWorker
-from app.workers.correlation_worker import CorrelationWorker
-from app.workers.investigation_worker import InvestigationWorker
+from app.realtime.broadcast import RealtimeListener
 from app.workers.baseline_snapshot_worker import BaselineSnapshotWorker
+from app.workers.correlation_worker import CorrelationWorker
+from app.workers.detection_worker import DetectionWorker
 from app.workers.escalation_worker import AlertEscalationWorker
 from app.workers.heartbeat_worker import HeartbeatWorker
 from app.workers.installer_worker import InstallerTokenWorker
+from app.workers.investigation_worker import InvestigationWorker
+from app.workers.normalization_worker import NormalizationWorker
 from app.workers.realtime_worker import RealtimeWorker
 from app.workers.retention_worker import DataRetentionWorker
-from app.realtime.broadcast import RealtimeListener
 
 logger = structlog.get_logger(__name__)
 
@@ -46,7 +45,8 @@ _WORKER_ID = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
 async def _load_active_tenant_ids() -> list[str]:
     """Returns tenant IDs that have at least one active, non-deleted tenant."""
-    from sqlalchemy import select, text
+    from sqlalchemy import select
+
     from app.models.tenant import Tenant
 
     async with database_manager.session() as db:
@@ -80,8 +80,10 @@ async def _tenant_hot_reload(
             break
         try:
             async with database_manager.session() as db:
-                from app.models.tenant import Tenant
                 from sqlalchemy import select
+
+                from app.models.tenant import Tenant
+
                 result = await db.execute(
                     select(Tenant.id).where(
                         Tenant.is_active.is_(True),
@@ -99,10 +101,10 @@ async def _tenant_hot_reload(
                 await publisher.ensure_consumer_groups()
 
                 norm_worker = NormalizationWorker(tenant_id, f"norm-{_WORKER_ID}")
-                det_worker  = DetectionWorker(tenant_id, f"detect-{_WORKER_ID}")
+                det_worker = DetectionWorker(tenant_id, f"detect-{_WORKER_ID}")
                 corr_worker = CorrelationWorker(tenant_id, f"corr-{_WORKER_ID}")
-                inv_worker  = InvestigationWorker(tenant_id, f"inv-{_WORKER_ID}")
-                rt_worker   = RealtimeWorker(tenant_id, f"rt-{_WORKER_ID}")
+                inv_worker = InvestigationWorker(tenant_id, f"inv-{_WORKER_ID}")
+                rt_worker = RealtimeWorker(tenant_id, f"rt-{_WORKER_ID}")
 
                 create_task_safe(norm_worker.run(stop_event), name=f"norm-{tenant_id}")
                 create_task_safe(det_worker.run(stop_event), name=f"detect-{tenant_id}")
@@ -130,6 +132,7 @@ async def _worker_liveness_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
             import time as _time
+
             await redis.setex(
                 WORKER_LIVENESS_KEY,
                 WORKER_LIVENESS_TTL,
@@ -139,7 +142,7 @@ async def _worker_liveness_loop(stop_event: asyncio.Event) -> None:
             pass
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=60)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 
@@ -172,11 +175,11 @@ async def main() -> None:
 
     # One normalization + detection + correlation + investigation worker per tenant
     for tid in tenant_ids:
-        norm_worker  = NormalizationWorker(tid, f"norm-{_WORKER_ID}")
-        det_worker   = DetectionWorker(tid, f"detect-{_WORKER_ID}")
-        corr_worker  = CorrelationWorker(tid, f"corr-{_WORKER_ID}")
-        inv_worker   = InvestigationWorker(tid, f"inv-{_WORKER_ID}")
-        rt_worker    = RealtimeWorker(tid, f"rt-{_WORKER_ID}")
+        norm_worker = NormalizationWorker(tid, f"norm-{_WORKER_ID}")
+        det_worker = DetectionWorker(tid, f"detect-{_WORKER_ID}")
+        corr_worker = CorrelationWorker(tid, f"corr-{_WORKER_ID}")
+        inv_worker = InvestigationWorker(tid, f"inv-{_WORKER_ID}")
+        rt_worker = RealtimeWorker(tid, f"rt-{_WORKER_ID}")
         tasks.append(asyncio.create_task(norm_worker.run(stop_event), name=f"norm-{tid}"))
         tasks.append(asyncio.create_task(det_worker.run(stop_event), name=f"detect-{tid}"))
         tasks.append(asyncio.create_task(corr_worker.run(stop_event), name=f"corr-{tid}"))
@@ -209,17 +212,21 @@ async def main() -> None:
     tasks.append(asyncio.create_task(rt_listener.run(), name="realtime-listener"))
 
     # Hot-reload: spin up workers for tenants that join after startup
-    tasks.append(asyncio.create_task(
-        _tenant_hot_reload(tenant_ids_set, worker_registry, stop_event),
-        name="tenant-hot-reload",
-    ))
+    tasks.append(
+        asyncio.create_task(
+            _tenant_hot_reload(tenant_ids_set, worker_registry, stop_event),
+            name="tenant-hot-reload",
+        )
+    )
 
     # Worker liveness heartbeat — writes to Redis every 60 s so the API health
     # endpoint can report whether the worker process is actually running.
-    tasks.append(asyncio.create_task(
-        _worker_liveness_loop(stop_event),
-        name="worker-liveness",
-    ))
+    tasks.append(
+        asyncio.create_task(
+            _worker_liveness_loop(stop_event),
+            name="worker-liveness",
+        )
+    )
 
     logger.info("worker_ready", task_count=len(tasks))
 

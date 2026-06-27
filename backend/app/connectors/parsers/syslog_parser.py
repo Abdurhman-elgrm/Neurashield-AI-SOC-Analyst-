@@ -14,32 +14,25 @@ Syslog severity → internal severity:
   4-5 (warning/notice)→ 2 medium
   6-7 (info/debug)    → 1 low
 """
+
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.connectors.base import ConnectorParser, ParsedEvent
 
-_PRI_RE  = re.compile(r"^<(\d+)>")
-_TS_3164 = re.compile(
-    r"^<\d+>(\w{3}\s+\d+\s+\d+:\d+:\d+)\s+"
-)
-_TS_5424 = re.compile(
-    r"^<\d+>\d+\s+(\d{4}-\d{2}-\d{2}T[\d:.+Z]+)\s+"
-)
-_HOST_3164 = re.compile(
-    r"^<\d+>\w{3}\s+\d+\s+\d+:\d+:\d+\s+(\S+)\s+"
-)
-_HOST_5424 = re.compile(
-    r"^<\d+>\d+\s+\S+\s+(\S+)\s+"
-)
+_PRI_RE = re.compile(r"^<(\d+)>")
+_TS_3164 = re.compile(r"^<\d+>(\w{3}\s+\d+\s+\d+:\d+:\d+)\s+")
+_TS_5424 = re.compile(r"^<\d+>\d+\s+(\d{4}-\d{2}-\d{2}T[\d:.+Z]+)\s+")
+_HOST_3164 = re.compile(r"^<\d+>\w{3}\s+\d+\s+\d+:\d+:\d+\s+(\S+)\s+")
+_HOST_5424 = re.compile(r"^<\d+>\d+\s+\S+\s+(\S+)\s+")
 
 _SEV_MAP = {0: 4, 1: 4, 2: 3, 3: 3, 4: 2, 5: 2, 6: 1, 7: 1}
 
 _AUTH_KEYWORDS = ("authentication", "login", "logon", "sudo", "su ", "ssh", "pam")
-_NET_KEYWORDS  = ("connect", "accept", "listen", "firewall", "iptables", "nftables")
+_NET_KEYWORDS = ("connect", "accept", "listen", "firewall", "iptables", "nftables")
 _FILE_KEYWORDS = ("file", "open", "write", "delete", "rename", "chmod")
 
 
@@ -63,7 +56,7 @@ def _parse_syslog_line(line: str) -> tuple[int, str, datetime, str]:
         syslog_sev = pri % 8
 
     hostname = "unknown"
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     message = line
 
     m_host = _HOST_5424.match(line)
@@ -85,7 +78,7 @@ def _parse_syslog_line(line: str) -> tuple[int, str, datetime, str]:
                 try:
                     ts = datetime.strptime(
                         m_ts.group(1) + f" {ts.year}", "%b %d %H:%M:%S %Y"
-                    ).replace(tzinfo=timezone.utc)
+                    ).replace(tzinfo=UTC)
                 except Exception:
                     pass
 

@@ -8,14 +8,15 @@ Thresholds are configurable via environment variables:
   UEBA_MAX_SPEED_KMH      — max plausible travel speed (default: 900 km/h, ~aircraft)
   UEBA_MIN_DISTANCE_KM    — minimum distance to flag (default: 500 km, ignore intra-region)
 """
+
 from __future__ import annotations
 
 import math
 import os
 
 _EARTH_RADIUS_KM = 6_371.0
-_MAX_SPEED_KMH   = float(os.getenv("UEBA_MAX_SPEED_KMH",   "900"))   # commercial aircraft
-_MIN_DISTANCE_KM = float(os.getenv("UEBA_MIN_DISTANCE_KM", "500"))   # ignore intra-region
+_MAX_SPEED_KMH = float(os.getenv("UEBA_MAX_SPEED_KMH", "900"))  # commercial aircraft
+_MIN_DISTANCE_KM = float(os.getenv("UEBA_MIN_DISTANCE_KM", "500"))  # ignore intra-region
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -23,10 +24,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dphi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    )
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     return 2 * _EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 

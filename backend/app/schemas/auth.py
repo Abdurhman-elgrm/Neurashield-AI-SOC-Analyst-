@@ -1,18 +1,39 @@
 from __future__ import annotations
 
 import math
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # ─── Password strength helpers ────────────────────────────────────────────────
 
-_COMMON_PASSWORDS: frozenset[str] = frozenset({
-    "password", "password1", "password123", "123456789", "12345678",
-    "qwerty123", "qwertyuiop", "iloveyou", "admin123", "letmein",
-    "welcome1", "monkey123", "dragon123", "master123", "sunshine",
-    "princess", "football", "baseball", "superman", "batman123",
-    "trustno1", "abc123456", "pass1234", "test1234",
-})
+_COMMON_PASSWORDS: frozenset[str] = frozenset(
+    {
+        "password",
+        "password1",
+        "password123",
+        "123456789",
+        "12345678",
+        "qwerty123",
+        "qwertyuiop",
+        "iloveyou",
+        "admin123",
+        "letmein",
+        "welcome1",
+        "monkey123",
+        "dragon123",
+        "master123",
+        "sunshine",
+        "princess",
+        "football",
+        "baseball",
+        "superman",
+        "batman123",
+        "trustno1",
+        "abc123456",
+        "pass1234",
+        "test1234",
+    }
+)
 
 
 def _shannon_entropy(s: str) -> float:
@@ -48,6 +69,7 @@ def _validate_password_strength(v: str) -> str:
 
 # ─── Requests ─────────────────────────────────────────────────────────────────
 
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
@@ -75,6 +97,7 @@ class RefreshRequest(BaseModel):
 
 
 # ─── Responses ────────────────────────────────────────────────────────────────
+
 
 class TokenPair(BaseModel):
     model_config = ConfigDict(frozen=True)

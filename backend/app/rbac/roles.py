@@ -6,6 +6,7 @@ from app.rbac.permissions import Permission
 
 # ─── Role definitions ─────────────────────────────────────────────────────────
 
+
 class Role(str, Enum):
     VIEWER = "viewer"
     ANALYST = "analyst"
@@ -15,49 +16,57 @@ class Role(str, Enum):
 
 # ─── Permission sets ──────────────────────────────────────────────────────────
 
-_VIEWER_PERMISSIONS: frozenset[Permission] = frozenset({
-    Permission.ALERTS_READ,
-    Permission.EVENTS_READ,
-    Permission.AGENTS_READ,
-    Permission.RULES_READ,
-    Permission.MEMBERS_READ,
-})
+_VIEWER_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.ALERTS_READ,
+        Permission.EVENTS_READ,
+        Permission.AGENTS_READ,
+        Permission.RULES_READ,
+        Permission.MEMBERS_READ,
+    }
+)
 
-_ANALYST_PERMISSIONS: frozenset[Permission] = _VIEWER_PERMISSIONS | frozenset({
-    Permission.ALERTS_UPDATE,
-    Permission.EVENTS_EXPORT,
-    Permission.INVESTIGATIONS_READ,
-    Permission.INVESTIGATIONS_UPDATE,
-    Permission.HUNT_QUERY,
-    Permission.PLAYBOOKS_READ,
-    Permission.PLAYBOOKS_MANAGE,   # generate, execute, complete steps
-    Permission.UEBA_READ,
-    Permission.THREAT_INTEL_READ,
-    Permission.IOC_ENRICH,
-})
+_ANALYST_PERMISSIONS: frozenset[Permission] = _VIEWER_PERMISSIONS | frozenset(
+    {
+        Permission.ALERTS_UPDATE,
+        Permission.EVENTS_EXPORT,
+        Permission.INVESTIGATIONS_READ,
+        Permission.INVESTIGATIONS_UPDATE,
+        Permission.HUNT_QUERY,
+        Permission.PLAYBOOKS_READ,
+        Permission.PLAYBOOKS_MANAGE,  # generate, execute, complete steps
+        Permission.UEBA_READ,
+        Permission.THREAT_INTEL_READ,
+        Permission.IOC_ENRICH,
+    }
+)
 
-_ADMIN_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset({
-    Permission.ALERTS_DELETE,
-    Permission.AGENTS_MANAGE,
-    Permission.AGENTS_VIEW_TOKEN,
-    Permission.RULES_MANAGE,
-    Permission.MEMBERS_MANAGE,
-    Permission.INVITATIONS_MANAGE,
-    Permission.TENANT_SETTINGS,
-    Permission.AUDIT_READ,
-    Permission.INVESTIGATIONS_MANAGE,
-    Permission.PLAYBOOKS_ADMIN,    # manage templates
-    Permission.RESPONSE_EXECUTE,   # quarantine / isolate agents
-    Permission.FLEET_READ,
-    Permission.FLEET_MANAGE,
-    Permission.MSSP_READ,
-    Permission.MSSP_MANAGE,
-    Permission.THREAT_INTEL_MANAGE,
-})
+_ADMIN_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset(
+    {
+        Permission.ALERTS_DELETE,
+        Permission.AGENTS_MANAGE,
+        Permission.AGENTS_VIEW_TOKEN,
+        Permission.RULES_MANAGE,
+        Permission.MEMBERS_MANAGE,
+        Permission.INVITATIONS_MANAGE,
+        Permission.TENANT_SETTINGS,
+        Permission.AUDIT_READ,
+        Permission.INVESTIGATIONS_MANAGE,
+        Permission.PLAYBOOKS_ADMIN,  # manage templates
+        Permission.RESPONSE_EXECUTE,  # quarantine / isolate agents
+        Permission.FLEET_READ,
+        Permission.FLEET_MANAGE,
+        Permission.MSSP_READ,
+        Permission.MSSP_MANAGE,
+        Permission.THREAT_INTEL_MANAGE,
+    }
+)
 
-_OWNER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS | frozenset({
-    Permission.TENANT_DELETE,
-})
+_OWNER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS | frozenset(
+    {
+        Permission.TENANT_DELETE,
+    }
+)
 
 # ─── Canonical mapping — single source of truth ───────────────────────────────
 
@@ -78,6 +87,7 @@ ROLE_HIERARCHY: dict[Role, int] = {
 
 
 # ─── Helper functions ─────────────────────────────────────────────────────────
+
 
 def get_role_permissions(role: Role | str) -> frozenset[Permission]:
     """Return the permission set for a built-in role."""
@@ -104,7 +114,7 @@ def role_from_string(value: str) -> Role:
         return Role(value)
     except ValueError:
         valid = [r.value for r in Role]
-        raise ValueError(f"Invalid role '{value}'. Must be one of: {valid}")
+        raise ValueError(f"Invalid role '{value}'. Must be one of: {valid}") from None
 
 
 def get_effective_permissions(
@@ -121,11 +131,13 @@ def get_effective_permissions(
 
     try:
         granted = frozenset(
-            Permission(p) for p in custom_permissions.get("grant", [])
+            Permission(p)
+            for p in custom_permissions.get("grant", [])
             if p in Permission._value2member_map_
         )
         revoked = frozenset(
-            Permission(p) for p in custom_permissions.get("revoke", [])
+            Permission(p)
+            for p in custom_permissions.get("revoke", [])
             if p in Permission._value2member_map_
         )
     except Exception:

@@ -28,6 +28,7 @@ def get_user_id() -> str:
 
 # ─── Custom processors ────────────────────────────────────────────────────────
 
+
 def add_app_context(logger: Any, method: str, event_dict: EventDict) -> EventDict:
     """Inject request/tenant/user context from ContextVars into every log event."""
     if rid := request_id_ctx.get():
@@ -46,6 +47,7 @@ def drop_color_message_key(logger: Any, method: str, event_dict: EventDict) -> E
 
 
 # ─── Configuration ────────────────────────────────────────────────────────────
+
 
 def configure_logging(log_level: str = "INFO", environment: str = "development") -> None:
     """

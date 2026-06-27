@@ -13,8 +13,8 @@ class Permission(str, Enum):
 
     # ─── Alerts ───────────────────────────────────────────────────────────────
     ALERTS_READ = "alerts:read"
-    ALERTS_UPDATE = "alerts:update"        # acknowledge, close, add notes
-    ALERTS_DELETE = "alerts:delete"        # admin-only hard remove (soft delete)
+    ALERTS_UPDATE = "alerts:update"  # acknowledge, close, add notes
+    ALERTS_DELETE = "alerts:delete"  # admin-only hard remove (soft delete)
 
     # ─── Events ───────────────────────────────────────────────────────────────
     EVENTS_READ = "events:read"
@@ -22,51 +22,51 @@ class Permission(str, Enum):
 
     # ─── Agents ───────────────────────────────────────────────────────────────
     AGENTS_READ = "agents:read"
-    AGENTS_MANAGE = "agents:manage"        # register, delete, update config
+    AGENTS_MANAGE = "agents:manage"  # register, delete, update config
     AGENTS_VIEW_TOKEN = "agents:view_token"  # see enrollment tokens
 
     # ─── Detection Rules ──────────────────────────────────────────────────────
     RULES_READ = "rules:read"
-    RULES_MANAGE = "rules:manage"          # create, update, delete, enable/disable
+    RULES_MANAGE = "rules:manage"  # create, update, delete, enable/disable
 
     # ─── Team Management ──────────────────────────────────────────────────────
     MEMBERS_READ = "members:read"
-    MEMBERS_MANAGE = "members:manage"      # change roles, remove members
+    MEMBERS_MANAGE = "members:manage"  # change roles, remove members
     INVITATIONS_MANAGE = "invitations:manage"
 
     # ─── Tenant ───────────────────────────────────────────────────────────────
-    TENANT_SETTINGS = "tenant:settings"    # update tenant name, config
-    TENANT_DELETE = "tenant:delete"        # owner only
+    TENANT_SETTINGS = "tenant:settings"  # update tenant name, config
+    TENANT_DELETE = "tenant:delete"  # owner only
 
     # ─── Audit ────────────────────────────────────────────────────────────────
-    AUDIT_READ = "audit:read"              # view audit log entries
+    AUDIT_READ = "audit:read"  # view audit log entries
 
     # ─── Investigations (Phase 3.4) ───────────────────────────────────────────
-    INVESTIGATIONS_READ   = "investigations:read"
-    INVESTIGATIONS_UPDATE = "investigations:update"   # notes, status, verdict, assign
-    INVESTIGATIONS_MANAGE = "investigations:manage"   # merge, split, force-close
-    HUNT_QUERY            = "hunt:query"             # threat hunting queries
+    INVESTIGATIONS_READ = "investigations:read"
+    INVESTIGATIONS_UPDATE = "investigations:update"  # notes, status, verdict, assign
+    INVESTIGATIONS_MANAGE = "investigations:manage"  # merge, split, force-close
+    HUNT_QUERY = "hunt:query"  # threat hunting queries
 
     # ─── Playbook Generator / SOAR ────────────────────────────────────────────
-    PLAYBOOKS_READ    = "playbooks:read"
-    PLAYBOOKS_MANAGE  = "playbooks:manage"    # generate, execute, complete steps
-    PLAYBOOKS_ADMIN   = "playbooks:admin"     # manage templates (admin/owner only)
+    PLAYBOOKS_READ = "playbooks:read"
+    PLAYBOOKS_MANAGE = "playbooks:manage"  # generate, execute, complete steps
+    PLAYBOOKS_ADMIN = "playbooks:admin"  # manage templates (admin/owner only)
 
     # ─── Response Actions / Agent Containment ────────────────────────────────
-    RESPONSE_EXECUTE  = "response:execute"    # quarantine, isolate, release agents
+    RESPONSE_EXECUTE = "response:execute"  # quarantine, isolate, release agents
 
     # ─── Fleet Management ─────────────────────────────────────────────────────
-    FLEET_READ        = "fleet:read"          # view fleet dashboard
-    FLEET_MANAGE      = "fleet:manage"        # bulk update/reinstall agents
+    FLEET_READ = "fleet:read"  # view fleet dashboard
+    FLEET_MANAGE = "fleet:manage"  # bulk update/reinstall agents
 
     # ─── UEBA ─────────────────────────────────────────────────────────────────
-    UEBA_READ         = "ueba:read"           # view behavioral analytics
+    UEBA_READ = "ueba:read"  # view behavioral analytics
 
     # ─── MSSP Portal ──────────────────────────────────────────────────────────
-    MSSP_READ         = "mssp:read"           # view cross-tenant MSSP overview
-    MSSP_MANAGE       = "mssp:manage"         # provision new tenant workspaces
+    MSSP_READ = "mssp:read"  # view cross-tenant MSSP overview
+    MSSP_MANAGE = "mssp:manage"  # provision new tenant workspaces
 
     # ─── Threat Intelligence ──────────────────────────────────────────────────
-    THREAT_INTEL_READ   = "threat_intel:read"    # view feeds and IOCs
+    THREAT_INTEL_READ = "threat_intel:read"  # view feeds and IOCs
     THREAT_INTEL_MANAGE = "threat_intel:manage"  # CRUD feeds, import IOCs
-    IOC_ENRICH          = "ioc:enrich"           # on-demand IOC enrichment
+    IOC_ENRICH = "ioc:enrich"  # on-demand IOC enrichment

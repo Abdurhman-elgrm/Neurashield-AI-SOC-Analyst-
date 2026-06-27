@@ -78,7 +78,7 @@ class ThresholdEvaluator:
         pipe.zremrangebyscore(full_key, "-inf", cutoff)
         pipe.zcount(full_key, cutoff, "+inf")
         pipe.zrangebyscore(full_key, cutoff, "+inf")  # retrieve members for evidence
-        pipe.expire(full_key, window_secs + 60)        # TTL slightly longer than window
+        pipe.expire(full_key, window_secs + 60)  # TTL slightly longer than window
         results = await pipe.execute()
         count = int(results[2])
         # Members are event IDs (or high-res timestamps) — cap at 25 for evidence
@@ -100,7 +100,6 @@ class ThresholdEvaluator:
 
     async def get_count(self, rule_id: str, group_value: str = "global") -> int:
         """Returns current sliding-window count without incrementing."""
-        now = time.time()
         # We need the window_secs to compute cutoff, but we don't have it here.
         # Return the total ZSET count as a best-effort approximation.
         zset_key = f"threshold:{rule_id}:{group_value}"
