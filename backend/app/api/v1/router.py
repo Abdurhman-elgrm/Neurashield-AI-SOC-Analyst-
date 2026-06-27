@@ -4,6 +4,7 @@ from app.api.v1 import (
     agents,
     alerts,
     api_keys,
+    audit,
     auth,
     dashboard,
     entities,
@@ -74,6 +75,7 @@ api_router.include_router(entities.router)
 
 # ─── Settings: API Keys ───────────────────────────────────────────────────────
 api_router.include_router(api_keys.router)
+api_router.include_router(audit.router)
 
 # ─── Compliance Reports ───────────────────────────────────────────────────────
 api_router.include_router(reports.router)

@@ -60,7 +60,7 @@ function AuditRow({ event }: { event: AuditEvent }) {
         </td>
         <td className="px-3 py-2.5 text-xs text-text-muted">
           <span className="text-2xs bg-bg-elevated px-1.5 py-0.5 rounded">{event.resource_type}</span>
-          {" "}{event.resource_title || event.resource_id.slice(0, 12)}
+          {" "}{event.resource_title || event.resource_id?.slice(0, 12) || "—"}
         </td>
         <td className="px-3 py-2.5 text-2xs text-text-muted font-mono">{event.ip_address}</td>
         <td className="px-3 py-2.5 text-text-muted">
