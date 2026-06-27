@@ -427,17 +427,20 @@ Write-Step "Starting agent..."
 # Snapshot log modification time before starting -- we verify against this
 $logBefore = if (Test-Path $LOG_FILE) { (Get-Item $LOG_FILE).LastWriteTime } else { [datetime]::MinValue }
 
-if ($taskInstalled) {
+if ($taskInstalled -and -not $taskRunsAsUser) {
+    # SYSTEM task: Start-ScheduledTask works correctly in a separate session.
     Start-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue
 } else {
-    # Fallback: run agent directly as current user (no admin required)
-    Write-Host "[bootstrap] INFO  Starting agent as current user (no SYSTEM task)..." -ForegroundColor Cyan
-    Start-Process -FilePath $pythonwExe -ArgumentList "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
+    # User-logon task (LogonType=Interactive) or no task: Start-ScheduledTask
+    # keeps the task in Queued state and never actually runs the process in the
+    # current session. Launch the agent directly via Start-Process instead --
+    # the task handles logon persistence for future reboots.
+    Write-Host "[bootstrap] INFO  Launching agent directly (user task or no task)..." -ForegroundColor Cyan
+    Start-Process -FilePath $pythonwExe -ArgumentList "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR -WindowStyle Hidden
 }
 
-# SYSTEM tasks need more time to initialise than user-run processes.
-# Wait up to 45 seconds; on timeout this is NOT a failure for SYSTEM tasks.
-$waitSecs  = if ($taskInstalled) { 45 } else { 25 }
+# User tasks start immediately via Start-Process; SYSTEM tasks need ~45 s.
+$waitSecs  = if ($taskInstalled -and -not $taskRunsAsUser) { 45 } else { 25 }
 $deadline  = (Get-Date).AddSeconds($waitSecs)
 $agentStarted = $false
 while ((Get-Date) -lt $deadline) {
