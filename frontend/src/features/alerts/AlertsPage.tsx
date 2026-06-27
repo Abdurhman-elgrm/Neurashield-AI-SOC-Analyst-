@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { RefreshCw, SlidersHorizontal, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/table/DataTable";
 import { TablePagination } from "@/components/table/TablePagination";
 import { FilterBar } from "@/components/filters/FilterBar";
-import { alertColumns } from "./alertColumns";
+import { buildAlertColumns } from "./alertColumns";
 import { ALERT_FILTER_FIELDS } from "./alertFilterFields";
 import { AlertDrawer } from "./components/AlertDrawer";
 import { BulkActionBar } from "./components/BulkActionBar";
@@ -525,6 +525,16 @@ export function AlertsPage() {
   const alerts = data?.items ?? [];
   const selectedIndex = alerts.findIndex((a) => a.id === selectedAlertId);
 
+  // Dedup map: ruleName::hostname → count of occurrences on current page
+  const dedupeMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of alerts) {
+      const k = `${a.ruleName ?? ""}::${a.hostname ?? ""}`;
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [alerts]);
+
   const quickAction = useCallback(async (status: AlertStatus) => {
     if (!selectedAlertId) return;
     try {
@@ -537,10 +547,30 @@ export function AlertsPage() {
     }
   }, [selectedAlertId, queryClient, tenantId]);
 
-  const escalateToInvestigation = useCallback(() => {
-    if (!selectedAlertId) return;
-    navigate(`/investigations?createFrom=${selectedAlertId}`);
+  // Inline row quick-action (works without drawer being open)
+  const handleRowQuickAction = useCallback(async (alertId: string, status: AlertStatus) => {
+    try {
+      await updateAlert(alertId, { status });
+      queryClient.invalidateQueries({ queryKey: alertsKeys.lists(tenantId) });
+      queryClient.invalidateQueries({ queryKey: alertsKeys.summary(tenantId) });
+      toastSuccess(`Alert ${status.replace(/_/g, " ")}`);
+    } catch {
+      toastError("Failed to update alert");
+    }
+  }, [queryClient, tenantId]);
+
+  const escalateToInvestigation = useCallback((alertId?: string) => {
+    const id = alertId ?? selectedAlertId;
+    if (!id) return;
+    navigate(`/investigations?createFrom=${id}`);
   }, [selectedAlertId, navigate]);
+
+  // Column defs — rebuilt only when dedupeMap reference changes (i.e. new page data)
+  const columns = useMemo(() => buildAlertColumns({
+    dedupeMap,
+    onQuickAction: handleRowQuickAction,
+    onEscalate: (id) => escalateToInvestigation(id),
+  }), [dedupeMap, handleRowQuickAction, escalateToInvestigation]);
 
   useEffect(() => {
     if (!selectedAlertId) return;
@@ -556,7 +586,7 @@ export function AlertsPage() {
         case "A": void quickAction("acknowledged"); break;
         case "C": void quickAction("closed"); break;
         case "F": void quickAction("false_positive"); break;
-        case "E": escalateToInvestigation(); break;
+        case "E": escalateToInvestigation(undefined); break;
         case "N": {
           const next = alerts[selectedIndex + 1];
           if (next) setSelectedAlertId(next.id);
@@ -657,7 +687,7 @@ export function AlertsPage() {
             {showColMenu && (
               <div className="absolute right-0 top-full mt-1 z-30 bg-bg-card border border-border rounded-lg p-2 shadow-elevated w-44">
                 <p className="text-2xs font-bold uppercase tracking-widest text-text-muted px-1 mb-1.5">Show / Hide Columns</p>
-                {alertColumns
+                {columns
                   .filter((c) => "id" in c && c.id && c.id !== "select")
                   .map((c) => {
                     const id = (c as { id: string }).id;
@@ -701,7 +731,7 @@ export function AlertsPage() {
       <div className={cn("flex-1 min-h-0 card overflow-hidden flex flex-col mt-2")}>
         <DataTable
           data={alerts}
-          columns={alertColumns}
+          columns={columns}
           isLoading={isLoading}
           emptyMessage={
             activeStatus

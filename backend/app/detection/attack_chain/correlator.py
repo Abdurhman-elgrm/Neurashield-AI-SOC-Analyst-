@@ -152,6 +152,9 @@ async def _run_chain_check(alert: Alert, tenant_id: UUID, redis: "Redis") -> Non
                     contributing_alerts=len(match.matched_alert_ids),
                 )
 
+                # Auto-create an Investigation so analysts have a workspace
+                await _auto_create_investigation(db, chain_alert, match, tenant_id)
+
                 # Notify via WebSocket
                 _notify_chain_alert(chain_alert, tenant_id)
 
@@ -280,6 +283,77 @@ def _build_chain_alert(match: ChainMatch, tenant_id: UUID) -> Alert:
         suppression_key=f"chain:{tenant_id}:{match.host}:{chain.name}",
     )
 
+
+
+async def _auto_create_investigation(
+    db: AsyncSession,
+    chain_alert: Alert,
+    match: "ChainMatch",
+    tenant_id: UUID,
+) -> None:
+    """
+    Create an Investigation that analysts can open immediately after a chain fires.
+    Uses the chain fingerprint as investigation_group_id to prevent duplicates.
+    """
+    try:
+        from app.models.investigation import Investigation, InvestigationStatus
+        from sqlalchemy import select as _select
+
+        group_id = f"chain:{tenant_id}:{_cluster_fingerprint(match.matched_alert_ids)}"
+
+        # Idempotent: skip if an investigation for this fingerprint already exists
+        existing = await db.execute(
+            _select(Investigation.id).where(
+                Investigation.tenant_id == tenant_id,
+                Investigation.investigation_group_id == group_id,
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            return
+
+        sev_score = {"critical": 90, "high": 75, "medium": 50, "low": 25}
+        threat_score = sev_score.get(chain_alert.severity.value, 75)
+
+        stages_str = " → ".join(match.matched_stage_names)
+        inv = Investigation(
+            tenant_id=tenant_id,
+            investigation_group_id=group_id,
+            title=f"[Auto] {match.rule.name} on {match.host}",
+            source="auto_chain",
+            status=InvestigationStatus.NEW.value,
+            threat_score=threat_score,
+            confidence="high",
+            tp_probability=0.8,
+            fp_probability=0.2,
+            executive_summary=(
+                f"Attack chain '{match.rule.name}' detected on host {match.host}. "
+                f"Stages: {stages_str}. "
+                f"Correlated from {len(match.matched_alert_ids)} alert(s)."
+            ),
+            technical_summary=match.rule.description,
+            triggering_alert_ids=[str(aid) for aid in match.matched_alert_ids] + [str(chain_alert.id)],
+            attack_progression=[
+                {"stage": s, "matched": True} for s in match.matched_stage_names
+            ],
+            recommended_actions=[
+                "Isolate affected host immediately",
+                "Review LSASS access and credential activity",
+                "Check for lateral movement from this host",
+                "Escalate to incident response if confirmed",
+            ],
+        )
+        db.add(inv)
+        await db.commit()
+
+        logger.info(
+            "auto_investigation_created",
+            investigation_id=str(inv.id),
+            chain=match.rule.name,
+            host=match.host,
+            tenant_id=str(tenant_id),
+        )
+    except Exception as exc:
+        logger.warning("auto_investigation_failed", error=str(exc), exc_info=True)
 
 
 def _notify_chain_alert(alert: Alert, tenant_id: UUID) -> None:

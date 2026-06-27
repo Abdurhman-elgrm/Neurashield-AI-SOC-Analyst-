@@ -153,7 +153,7 @@ export function DataTable<TData>({
               onMouseLeave={(e) => onRowMouseLeave?.(row.original, e)}
               data-selected={row.getIsSelected()}
               className={cn(
-                "border-b border-border transition-colors duration-100",
+                "group border-b border-border transition-colors duration-100",
                 "hover:bg-bg-elevated",
                 onRowClick && "cursor-pointer",
                 row.getIsSelected() && "bg-accent/5",
