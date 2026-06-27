@@ -13,11 +13,15 @@ interface QuotaMetric {
 }
 
 interface QuotaData {
-  metrics: QuotaMetric[];
   plan: string;
   renewal_date: string;
   ingestion_rate_eps: number;
   ingestion_limit_eps: number;
+  agents_active: number;
+  agents_total: number;
+  members_active: number;
+  storage_used_gb: number;
+  storage_limit_gb: number;
 }
 
 // ─── Usage bar ────────────────────────────────────────────────────────────────
@@ -61,7 +65,7 @@ const ICONS: Record<string, typeof Database> = {
 export function QuotaDashboardSection() {
   const { data, isLoading } = useQuery({
     queryKey: ["quota-dashboard"],
-    queryFn: () => apiClient.get<QuotaData>("/settings/quota").then((r) => r.data),
+    queryFn: () => apiClient.get<{ data: QuotaData }>("/settings/quota").then((r) => r.data.data),
     staleTime: 60_000,
   });
 
@@ -97,7 +101,11 @@ export function QuotaDashboardSection() {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-bg-card p-4 space-y-5">
-          {(data?.metrics ?? []).map((metric) => {
+          {data ? ([
+            { name: "Agents",  used: data.agents_active,  limit: data.agents_total || data.agents_active || 1, unit: "online" },
+            { name: "Analysts", used: data.members_active, limit: Math.max(data.members_active, 50),            unit: "users"  },
+            { name: "Storage", used: data.storage_used_gb, limit: data.storage_limit_gb,                        unit: "GB"     },
+          ] as QuotaMetric[]).map((metric) => {
             const Icon = ICONS[metric.name] ?? Activity;
             return (
               <div key={metric.name} className="space-y-1">
@@ -108,8 +116,7 @@ export function QuotaDashboardSection() {
                 <UsageBar metric={metric} />
               </div>
             );
-          })}
-          {(!data?.metrics || data.metrics.length === 0) && (
+          }) : (
             <p className="text-xs text-text-muted text-center py-4">Quota data unavailable.</p>
           )}
         </div>

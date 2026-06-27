@@ -21,6 +21,7 @@ from app.api.v1 import (
     playbooks,
     reports,
     rules,
+    settings,
     sigma,
     suppressions,
     tenants,
@@ -93,6 +94,7 @@ api_router.include_router(notifications_router)
 
 # ─── Outbound notification channels (Slack/Teams/webhook/PagerDuty/email) ────
 api_router.include_router(notification_channels.router)
+api_router.include_router(settings.router)
 
 # ─── Alert suppression rules ─────────────────────────────────────────────────
 api_router.include_router(suppressions.router)

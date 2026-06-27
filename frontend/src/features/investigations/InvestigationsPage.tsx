@@ -504,7 +504,7 @@ export function InvestigationsPage() {
     ? rawItems.filter(i => getSLAStatus(i).breached)
     : rawItems
 
-  const total: number = (data as any)?.total ?? 0
+  const total: number = (data as any)?.pagination?.total ?? rawItems.length
   const hasFilters = !!(titleSearch || minScore !== "" || fromTs || quickFilter !== "all")
 
   const PAGE_TABS = [
