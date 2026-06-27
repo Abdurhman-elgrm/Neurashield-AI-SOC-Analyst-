@@ -479,6 +479,8 @@ async def update_auto_config(
         cfg.min_severity = payload.min_severity
         cfg.updated_by_id = m.user_id
 
+    await db.flush()  # ensure cfg.id is populated before audit log
+
     await AuditService.log(
         db,
         action="playbook_auto_config.updated",

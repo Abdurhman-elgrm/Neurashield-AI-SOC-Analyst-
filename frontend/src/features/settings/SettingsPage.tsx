@@ -3,12 +3,8 @@ import {
   User, Building2, Key, Users, Bell, Bot,
   Plus, Copy, Check, Trash2, CheckCircle,
   Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle, Lock, Camera, Loader,
-  Zap, Ticket, Gauge, BarChart3, BellRing, Monitor, ScrollText, Upload,
+  Zap, ScrollText, Upload,
 } from 'lucide-react'
-import { NotificationRulesSection } from './NotificationRulesSection'
-import { SeverityThresholdsSection } from './SeverityThresholdsSection'
-import { QuotaDashboardSection } from './QuotaDashboardSection'
-import { TicketingConfigSection } from './TicketingConfigSection'
 import { AuditLogPage } from '../audit-log/AuditLogPage'
 import { ImportPage } from '../import/ImportPage'
 import { Button } from '@/components/ui/Button'
@@ -202,6 +198,10 @@ function ProfileTab() {
       setJobTitle(p.job_title ?? '')
       setBio(p.bio ?? '')
       setAvatarUrl(p.avatar_url ?? '')
+      // Keep authStore in sync so the TopBar avatar always reflects the DB value
+      if (storeUser) {
+        setUser({ ...storeUser, full_name: p.full_name ?? storeUser.full_name, avatar_url: p.avatar_url ?? null })
+      }
     }).catch(e => toastError(extractApiError(e), 'Failed to load profile'))
   }, [])
 
@@ -1694,18 +1694,22 @@ const SEVERITY_OPTIONS: { value: AutoPlaybookConfig['min_severity']; label: stri
 ]
 
 function AutomationTab() {
-  const [cfg,     setCfg]     = useState<AutoPlaybookConfig>({ enabled: false, min_severity: 'critical' })
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
+  const [cfg,       setCfg]       = useState<AutoPlaybookConfig>({ enabled: false, min_severity: 'critical' })
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [saved,     setSaved]     = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey,  setRetryKey]  = useState(0)
 
   useEffect(() => {
+    setLoading(true)
+    setLoadError(null)
     playbookAutoApi.getConfig()
-      .then(c => setCfg(c))
-      .catch(e => toastError(extractApiError(e), 'Failed to load automation config'))
+      .then(c => { setCfg(c) })
+      .catch(e => { const msg = extractApiError(e); setLoadError(msg) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [retryKey])
 
   const handleSave = async () => {
     setSaving(true); setError(null)
@@ -1723,6 +1727,24 @@ function AutomationTab() {
   }
 
   const activeSeverity = SEVERITY_OPTIONS.find(s => s.value === cfg.min_severity)!
+
+  if (loadError) {
+    return (
+      <div style={{ maxWidth: 520 }}>
+        <SectionHeader title="Automation" description="Configure AI-powered automatic responses to security events" />
+        <div style={{ padding: '24px 20px', borderRadius: 10, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: '#FCA5A5', fontWeight: 600, marginBottom: 6 }}>Failed to load configuration</div>
+          <div style={{ fontSize: 11, color: '#5C6373', marginBottom: 16 }}>{loadError}</div>
+          <button
+            onClick={() => setRetryKey(k => k + 1)}
+            style={{ padding: '6px 16px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5', cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth: 520 }}>
@@ -1844,76 +1866,62 @@ function AutomationTab() {
   )
 }
 
-// ─── Display section ──────────────────────────────────────────────────────────
+// ─── DisplaySection ───────────────────────────────────────────────────────────
 
-type Density = 'compact' | 'default' | 'comfortable'
+type UIDensity = 'compact' | 'default' | 'comfortable'
+
+const DENSITIES: { value: UIDensity; label: string; description: string }[] = [
+  { value: 'compact',     label: 'Compact',     description: 'More rows, smaller spacing' },
+  { value: 'default',     label: 'Default',     description: 'Balanced density' },
+  { value: 'comfortable', label: 'Comfortable', description: 'Extra breathing room' },
+]
 
 function DisplaySection() {
-  const [density, setDensity] = useState<Density>(() => {
-    return (localStorage.getItem('neurashield-density') as Density) || 'default'
+  const [density, setDensity] = useState<UIDensity>(() => {
+    return (localStorage.getItem('ui-density') as UIDensity) ?? 'default'
   })
 
-  const applyDensity = (d: Density) => {
+  const apply = (d: UIDensity) => {
     setDensity(d)
-    localStorage.setItem('neurashield-density', d)
-    if (d === 'default') {
-      document.documentElement.removeAttribute('data-density')
-    } else {
-      document.documentElement.setAttribute('data-density', d)
-    }
+    localStorage.setItem('ui-density', d)
+    document.documentElement.setAttribute('data-density', d)
   }
 
-  useEffect(() => {
-    const saved = (localStorage.getItem('neurashield-density') as Density) || 'default'
-    if (saved !== 'default') document.documentElement.setAttribute('data-density', saved)
-  }, [])
-
-  const options: Array<{ value: Density; label: string; description: string }> = [
-    { value: 'compact',     label: 'Compact',     description: 'Smaller rows and cards — fits more data on screen' },
-    { value: 'default',     label: 'Default',     description: 'Balanced density for everyday use'                },
-    { value: 'comfortable', label: 'Comfortable', description: 'More whitespace — easier to scan individual rows'  },
-  ]
-
   return (
-    <div>
-      <SectionHeader title="Display" description="Customize the visual density and appearance of the interface" />
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#5C6373', marginBottom: 12 }}>
-          Data Density
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 420 }}>
-          {options.map(({ value, label, description }) => (
-            <button
-              key={value}
-              onClick={() => applyDensity(value)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 14px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                background: density === value ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${density === value ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.06)'}`,
-                transition: 'all 120ms',
-              }}
-            >
-              <div style={{
-                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                background: density === value ? '#3B82F6' : 'rgba(255,255,255,0.06)',
-                border: `2px solid ${density === value ? '#3B82F6' : 'rgba(255,255,255,0.12)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {density === value && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: density === value ? '#F5F7FA' : '#8B95A7' }}>{label}</div>
-                <div style={{ fontSize: 11, color: '#5C6373', marginTop: 2 }}>{description}</div>
-              </div>
-            </button>
-          ))}
-        </div>
+    <div style={{ maxWidth: 480 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#E8EBF0', marginBottom: 4 }}>Display</div>
+        <div style={{ fontSize: 12, color: '#8B95A7' }}>Adjust the table and list density across all pages.</div>
       </div>
 
-      <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', maxWidth: 420 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {DENSITIES.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => apply(opt.value)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 16px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
+              background: density === opt.value ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${density === opt.value ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.06)'}`,
+            }}
+          >
+            <div style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              border: `2px solid ${density === opt.value ? '#3B82F6' : '#4A5568'}`,
+              background: density === opt.value ? '#3B82F6' : 'transparent',
+            }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: density === opt.value ? '#93C5FD' : '#C9D0DB' }}>{opt.label}</div>
+              <div style={{ fontSize: 11, color: '#8B95A7', marginTop: 2 }}>{opt.description}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', maxWidth: 420, marginTop: 16 }}>
         <div style={{ fontSize: 11, color: '#8B95A7', lineHeight: 1.6 }}>
-          Density setting is saved locally and applies immediately across all pages. Changes take effect without reloading.
+          Density setting is saved locally and applies immediately across all pages.
         </div>
       </div>
     </div>
@@ -1925,23 +1933,22 @@ function DisplaySection() {
 import type { MemberRole } from '@/types/tenant'
 
 const ALL_TABS = [
-  { id: 'profile',              label: 'Profile',             icon: User,       minRole: 'viewer'  as MemberRole },
-  { id: 'org',                  label: 'Organization',        icon: Building2,  minRole: 'admin'   as MemberRole },
-  { id: 'api-keys',             label: 'API Keys',            icon: Key,        minRole: 'admin'   as MemberRole },
-  { id: 'members',              label: 'Members',             icon: Users,      minRole: 'viewer'  as MemberRole },
-  { id: 'audit-log',            label: 'Audit Log',           icon: ScrollText, minRole: 'admin'   as MemberRole },
-  { id: 'log-import',           label: 'Log Import',          icon: Upload,     minRole: 'admin'   as MemberRole },
-  { id: 'notifications',        label: 'Notifications',       icon: Bell,       minRole: 'viewer'  as MemberRole },
-  { id: 'notification-rules',   label: 'Alert Routing',       icon: BellRing,   minRole: 'admin'   as MemberRole },
-  { id: 'severity-thresholds',  label: 'Severity Thresholds', icon: BarChart3,  minRole: 'admin'   as MemberRole },
-  { id: 'ticketing',            label: 'Integrations',        icon: Ticket,     minRole: 'admin'   as MemberRole },
-  { id: 'quota',                label: 'Quota & Usage',       icon: Gauge,      minRole: 'admin'   as MemberRole },
-  { id: 'automation',           label: 'Automation',          icon: Zap,        minRole: 'admin'   as MemberRole },
-  { id: 'display',              label: 'Display',             icon: Monitor,    minRole: 'viewer'  as MemberRole },
+  { id: 'profile',              label: 'Profile',             icon: User,       minRole: 'viewer' as MemberRole },
+  { id: 'org',                  label: 'Organization',        icon: Building2,  minRole: 'admin'  as MemberRole },
+  { id: 'api-keys',             label: 'API Keys',            icon: Key,        minRole: 'admin'  as MemberRole },
+  { id: 'members',              label: 'Members',             icon: Users,      minRole: 'viewer' as MemberRole },
+  { id: 'audit-log',            label: 'Audit Log',           icon: ScrollText, minRole: 'admin'  as MemberRole },
+  { id: 'log-import',           label: 'Log Import',          icon: Upload,     minRole: 'admin'  as MemberRole },
+  { id: 'notifications',        label: 'Notifications',       icon: Bell,       minRole: 'viewer' as MemberRole },
+  { id: 'notification-rules',   label: 'Alert Routing',       icon: BellRing,   minRole: 'admin'  as MemberRole },
+  { id: 'severity-thresholds',  label: 'Severity Thresholds', icon: BarChart3,  minRole: 'admin'  as MemberRole },
+  { id: 'ticketing',            label: 'Integrations',        icon: Ticket,     minRole: 'admin'  as MemberRole },
+  { id: 'quota',                label: 'Quota & Usage',       icon: Gauge,      minRole: 'admin'  as MemberRole },
+  { id: 'automation',           label: 'Automation',          icon: Zap,        minRole: 'admin'  as MemberRole },
+  { id: 'display',              label: 'Display',             icon: Monitor,    minRole: 'viewer' as MemberRole },
 ] as const
 
 type TabId = typeof ALL_TABS[number]['id']
-
 
 const TAB_GROUPS: Array<{ label: string; ids: TabId[] }> = [
   { label: 'Account',        ids: ['profile', 'notifications', 'display'] },
@@ -2016,19 +2023,19 @@ export function SettingsPage() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 32px 32px' }}>
-        {activeTab === 'profile'             && <ProfileTab              />}
-        {activeTab === 'org'                 && <OrgTab                  />}
-        {activeTab === 'api-keys'            && <ApiKeysTab              />}
-        {activeTab === 'members'             && <MembersTab              />}
-        {activeTab === 'audit-log'           && <AuditLogPage            />}
-        {activeTab === 'log-import'          && <ImportPage embedded     />}
+        {activeTab === 'profile'       && <ProfileTab       />}
+        {activeTab === 'org'           && <OrgTab           />}
+        {activeTab === 'api-keys'      && <ApiKeysTab       />}
+        {activeTab === 'members'       && <MembersTab       />}
+        {activeTab === 'audit-log'     && <AuditLogPage     />}
+        {activeTab === 'log-import'    && <ImportPage embedded />}
         {activeTab === 'notifications'       && <NotificationsTab        />}
         {activeTab === 'notification-rules'  && <NotificationRulesSection />}
         {activeTab === 'severity-thresholds' && <SeverityThresholdsSection />}
-        {activeTab === 'ticketing'           && <TicketingConfigSection  />}
-        {activeTab === 'quota'               && <QuotaDashboardSection   />}
-        {activeTab === 'automation'          && <AutomationTab           />}
-        {activeTab === 'display'             && <DisplaySection          />}
+        {activeTab === 'ticketing'           && <TicketingConfigSection   />}
+        {activeTab === 'quota'               && <QuotaDashboardSection    />}
+        {activeTab === 'automation'          && <AutomationTab            />}
+        {activeTab === 'display'             && <DisplaySection           />}
       </div>
     </div>
   )

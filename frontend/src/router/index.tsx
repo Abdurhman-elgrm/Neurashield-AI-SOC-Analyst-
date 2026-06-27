@@ -175,12 +175,7 @@ const ImportPage = lazyPage(() =>
 const SocMetricsPage = lazyPage(() =>
   import("@/features/soc-metrics/SocMetricsPage").then((m) => ({ default: m.SocMetricsPage }))
 );
-const AssetsPage = lazyPage(() =>
-  import("@/features/assets/AssetsPage").then((m) => ({ default: m.AssetsPage }))
-);
-const UEBADashboard = lazyPage(() =>
-  import("@/features/ueba/UEBADashboard").then((m) => ({ default: m.UEBADashboard }))
-);
+
 const AuditLogPage = lazyPage(() =>
   import("@/features/audit-log/AuditLogPage").then((m) => ({ default: m.AuditLogPage }))
 );
@@ -193,9 +188,7 @@ const ThreatIntelPage = lazyPage(() =>
 const MitreNavigatorPage = lazyPage(() =>
   import("@/features/mitre/MitreNavigatorPage").then((m) => ({ default: m.MitreNavigatorPage }))
 );
-const MSSPOverviewPage = lazyPage(() =>
-  import("@/features/mssp/MSSPOverviewPage").then((m) => ({ default: m.MSSPOverviewPage }))
-);
+
 const FleetDashboardPage = lazyPage(() =>
   import("@/features/fleet/FleetDashboardPage").then((m) => ({ default: m.FleetDashboardPage }))
 );
@@ -282,16 +275,13 @@ const router = createBrowserRouter([
       // SOC Operations
       { path: "soc-metrics",        element: <S><RequireRole min="analyst"><SocMetricsPage /></RequireRole></S> },
       { path: "soc-metrics/sla",    element: <S><RequireRole min="analyst"><SLADashboard /></RequireRole></S> },
-      { path: "assets",             element: <S><RequireRole min="analyst"><AssetsPage /></RequireRole></S> },
-      { path: "ueba",               element: <S><RequireRole min="analyst"><UEBADashboard /></RequireRole></S> },
       { path: "audit-log",          element: <S><RequireRole min="admin"><AuditLogPage /></RequireRole></S> },
       { path: "rules/suppression",  element: <S><RequireRole min="analyst"><SuppressionRulesPage /></RequireRole></S> },
       { path: "threat-intel",       element: <S><RequireRole min="analyst"><ThreatIntelPage /></RequireRole></S> },
       { path: "mitre",              element: <S><RequireRole min="analyst"><MitreNavigatorPage /></RequireRole></S> },
       { path: "compliance-reports", element: <S><RequireRole min="analyst"><ComplianceSchedulerPage /></RequireRole></S> },
-      // Admin / MSSP
+      // Admin
       { path: "fleet",              element: <S><RequireRole min="admin"><FleetDashboardPage /></RequireRole></S> },
-      { path: "mssp",               element: <S><RequireRole min="admin"><MSSPOverviewPage /></RequireRole></S> },
     ],
   },
 
