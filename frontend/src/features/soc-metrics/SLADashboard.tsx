@@ -20,66 +20,30 @@ import { cn } from "@/lib/utils";
 
 type TimeRange = "7d" | "30d" | "90d";
 
-// ─── Sample data ─────────────────────────────────────────────────────────────
+// ─── Empty states ─────────────────────────────────────────────────────────────
 
-const SAMPLE_SUMMARY: SLASummary = {
-  compliance_pct: 87.4,
-  compliance_delta: +2.1,
-  total_breaches: 34,
-  breach_delta: -8,
-  avg_response_minutes: 38,
-  avg_resolve_minutes: 214,
-  within_sla: 246,
-  total: 280,
+const EMPTY_SUMMARY: SLASummary = {
+  compliance_pct: 0, compliance_delta: 0,
+  total_breaches: 0, breach_delta: 0,
+  avg_response_minutes: 0, avg_resolve_minutes: 0,
+  within_sla: 0, total: 0,
 };
 
-const SAMPLE_BY_SEVERITY: SLABySeverityRow[] = [
-  { severity: "critical", target_minutes: 120,  avg_minutes: 143,  compliance_pct: 72.1, total_alerts: 28,  breached: 8  },
-  { severity: "high",     target_minutes: 240,  avg_minutes: 201,  compliance_pct: 85.3, total_alerts: 74,  breached: 11 },
-  { severity: "medium",   target_minutes: 480,  avg_minutes: 312,  compliance_pct: 94.2, total_alerts: 121, breached: 7  },
-  { severity: "low",      target_minutes: 1440, avg_minutes: 680,  compliance_pct: 98.1, total_alerts: 57,  breached: 1  },
+const EMPTY_BY_SEVERITY: SLABySeverityRow[] = [
+  { severity: "critical", target_minutes: 120,  avg_minutes: 0, compliance_pct: 0, total_alerts: 0, breached: 0 },
+  { severity: "high",     target_minutes: 240,  avg_minutes: 0, compliance_pct: 0, total_alerts: 0, breached: 0 },
+  { severity: "medium",   target_minutes: 480,  avg_minutes: 0, compliance_pct: 0, total_alerts: 0, breached: 0 },
+  { severity: "low",      target_minutes: 1440, avg_minutes: 0, compliance_pct: 0, total_alerts: 0, breached: 0 },
 ];
 
-function makeTrend(days: number): SLABreachPoint[] {
-  const now = Date.now();
-  return Array.from({ length: days }, (_, i) => {
-    const d = new Date(now - (days - i) * 86400_000);
-    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const base = 8 + Math.sin(i / 4) * 4 + Math.random() * 3;
-    return { date: label, warn_breach_pct: parseFloat(base.toFixed(1)), crit_breach_pct: parseFloat((base * 0.4).toFixed(1)) };
-  });
-}
-
-const SAMPLE_TREND_30: SLABreachPoint[] = makeTrend(30);
-const SAMPLE_TREND_7:  SLABreachPoint[] = makeTrend(7);
-const SAMPLE_TREND_90: SLABreachPoint[] = makeTrend(90);
-
-const SAMPLE_BREACHES: SLABreachAlert[] = [
-  { alert_id: "a1", title: "Lateral movement detected — DESKTOP-A",  severity: "critical", created_at: new Date(Date.now()-7_200_000).toISOString(), resolved_at: null,                                         assigned_to: "Marcus Webb",    elapsed_minutes: 120, target_minutes: 120, breach_type: "response" },
-  { alert_id: "a2", title: "Encoded PowerShell execution on DC01",    severity: "critical", created_at: new Date(Date.now()-18_000_000).toISOString(), resolved_at: new Date(Date.now()-14_000_000).toISOString(), assigned_to: "Sara Kim",        elapsed_minutes: 290, target_minutes: 120, breach_type: "resolution" },
-  { alert_id: "a3", title: "After-hours data access — FileServer",    severity: "high",     created_at: new Date(Date.now()-86_400_000).toISOString(), resolved_at: new Date(Date.now()-80_000_000).toISOString(), assigned_to: "James Torres",   elapsed_minutes: 380, target_minutes: 240, breach_type: "resolution" },
-  { alert_id: "a4", title: "Suspicious DNS tunneling activity",       severity: "high",     created_at: new Date(Date.now()-172_800_000).toISOString(), resolved_at: null,                                        assigned_to: null,             elapsed_minutes: 1440, target_minutes: 240, breach_type: "response" },
-  { alert_id: "a5", title: "Credential stuffing — Auth service",      severity: "critical", created_at: new Date(Date.now()-259_200_000).toISOString(), resolved_at: new Date(Date.now()-255_000_000).toISOString(), assigned_to: "Marcus Webb", elapsed_minutes: 185, target_minutes: 120, breach_type: "resolution" },
-  { alert_id: "a6", title: "Registry run key modification detected",  severity: "medium",   created_at: new Date(Date.now()-345_600_000).toISOString(), resolved_at: new Date(Date.now()-340_000_000).toISOString(), assigned_to: "Sara Kim",    elapsed_minutes: 520, target_minutes: 480, breach_type: "resolution" },
-  { alert_id: "a7", title: "WMI-based remote execution attempt",      severity: "high",     created_at: new Date(Date.now()-432_000_000).toISOString(), resolved_at: new Date(Date.now()-428_000_000).toISOString(), assigned_to: "James Torres", elapsed_minutes: 310, target_minutes: 240, breach_type: "resolution" },
-  { alert_id: "a8", title: "New external IP in authentication logs",  severity: "medium",   created_at: new Date(Date.now()-518_400_000).toISOString(), resolved_at: new Date(Date.now()-512_000_000).toISOString(), assigned_to: "Priya Patel",  elapsed_minutes: 495, target_minutes: 480, breach_type: "resolution" },
-];
-
-const SAMPLE_ANALYST_SLA: AnalystSLARow[] = [
-  { user_id: "u1", name: "Marcus Webb",   handled: 84, within_sla: 76, compliance_pct: 90.5, avg_response_minutes: 28,  avg_resolve_minutes: 195, open_breaches: 2 },
-  { user_id: "u2", name: "Sara Kim",      handled: 71, within_sla: 62, compliance_pct: 87.3, avg_response_minutes: 41,  avg_resolve_minutes: 228, open_breaches: 3 },
-  { user_id: "u3", name: "James Torres",  handled: 59, within_sla: 49, compliance_pct: 83.1, avg_response_minutes: 55,  avg_resolve_minutes: 310, open_breaches: 4 },
-  { user_id: "u4", name: "Priya Patel",   handled: 66, within_sla: 59, compliance_pct: 89.4, avg_response_minutes: 32,  avg_resolve_minutes: 185, open_breaches: 1 },
-];
-
-const SAMPLE_RT_DIST: ResponseTimeBin[] = [
-  { label: "<15m",  max_minutes: 15,   critical: 3,  high: 8,  medium: 18, low: 12 },
-  { label: "15-30m",max_minutes: 30,   critical: 6,  high: 22, medium: 41, low: 18 },
-  { label: "30-60m",max_minutes: 60,   critical: 8,  high: 28, medium: 52, low: 22 },
-  { label: "1-2h",  max_minutes: 120,  critical: 5,  high: 14, medium: 28, low: 11 },
-  { label: "2-4h",  max_minutes: 240,  critical: 4,  high: 9,  medium: 15, low: 8  },
-  { label: "4-8h",  max_minutes: 480,  critical: 2,  high: 5,  medium: 8,  low: 4  },
-  { label: ">8h",   max_minutes: 99999,critical: 4,  high: 5,  medium: 4,  low: 2  },
+const EMPTY_RT_DIST: ResponseTimeBin[] = [
+  { label: "<15m",   max_minutes: 15,    critical: 0, high: 0, medium: 0, low: 0 },
+  { label: "15-30m", max_minutes: 30,    critical: 0, high: 0, medium: 0, low: 0 },
+  { label: "30-60m", max_minutes: 60,    critical: 0, high: 0, medium: 0, low: 0 },
+  { label: "1-2h",   max_minutes: 120,   critical: 0, high: 0, medium: 0, low: 0 },
+  { label: "2-4h",   max_minutes: 240,   critical: 0, high: 0, medium: 0, low: 0 },
+  { label: "4-8h",   max_minutes: 480,   critical: 0, high: 0, medium: 0, low: 0 },
+  { label: ">8h",    max_minutes: 99999, critical: 0, high: 0, medium: 0, low: 0 },
 ];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -496,46 +460,44 @@ export function SLADashboard() {
 
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
 
-  const trendSample = timeRange === "7d" ? SAMPLE_TREND_7 : timeRange === "90d" ? SAMPLE_TREND_90 : SAMPLE_TREND_30;
-
   const { data: summary, isLoading: loadSummary } = useQuery({
     queryKey: ["metrics", "sla-summary", timeRange],
-    queryFn: () => socMetricsApi.getSLASummary(timeRange).catch(() => SAMPLE_SUMMARY),
+    queryFn: () => socMetricsApi.getSLASummary(timeRange).catch(() => EMPTY_SUMMARY),
     staleTime: 120_000,
   });
 
   const { data: bySeverity, isLoading: loadBySev } = useQuery({
     queryKey: ["metrics", "sla-by-severity", timeRange],
-    queryFn: () => socMetricsApi.getSLABySeverity(timeRange).catch(() => SAMPLE_BY_SEVERITY),
+    queryFn: () => socMetricsApi.getSLABySeverity(timeRange).catch(() => EMPTY_BY_SEVERITY),
     staleTime: 120_000,
   });
 
   const { data: breachRate, isLoading: loadTrend } = useQuery({
     queryKey: ["metrics", "sla-breach-rate", timeRange],
-    queryFn: () => socMetricsApi.getSLABreachRate(timeRange).catch(() => trendSample),
+    queryFn: () => socMetricsApi.getSLABreachRate(timeRange).catch(() => [] as SLABreachPoint[]),
     staleTime: 120_000,
   });
 
   const { data: breachList, isLoading: loadBreaches } = useQuery({
     queryKey: ["metrics", "sla-breaches", timeRange],
-    queryFn: () => socMetricsApi.getSLABreaches(timeRange).catch(() => ({ items: SAMPLE_BREACHES, total: SAMPLE_BREACHES.length, page: 1 })),
+    queryFn: () => socMetricsApi.getSLABreaches(timeRange).catch(() => ({ items: [] as SLABreachAlert[], total: 0, page: 1 })),
     staleTime: 120_000,
   });
 
   const { data: rtDist, isLoading: loadRt } = useQuery({
     queryKey: ["metrics", "response-time-distribution", timeRange],
-    queryFn: () => socMetricsApi.getResponseTimeDistribution(timeRange).catch(() => SAMPLE_RT_DIST),
+    queryFn: () => socMetricsApi.getResponseTimeDistribution(timeRange).catch(() => EMPTY_RT_DIST),
     staleTime: 120_000,
   });
 
   const { data: analystSLA, isLoading: loadAnalysts } = useQuery({
     queryKey: ["metrics", "analyst-sla", timeRange],
-    queryFn: () => socMetricsApi.getAnalystSLA(timeRange).catch(() => SAMPLE_ANALYST_SLA),
+    queryFn: () => socMetricsApi.getAnalystSLA(timeRange).catch(() => [] as AnalystSLARow[]),
     staleTime: 120_000,
   });
 
-  const s = summary ?? SAMPLE_SUMMARY;
-  const breaches = breachList?.items ?? SAMPLE_BREACHES;
+  const s = summary ?? EMPTY_SUMMARY;
+  const breaches = breachList?.items ?? [];
 
   return (
     <div className="pb-8">
@@ -612,12 +574,12 @@ export function SLADashboard() {
       <div className="grid grid-cols-5 gap-3 mb-3">
         <div className="col-span-3">
           <WidgetErrorBoundary title="SLA Breach Trend">
-            <BreachTrendChart data={breachRate ?? trendSample} loading={loadTrend} />
+            <BreachTrendChart data={breachRate ?? []} loading={loadTrend} />
           </WidgetErrorBoundary>
         </div>
         <div className="col-span-2">
           <WidgetErrorBoundary title="SLA by Severity">
-            <SLABySeveritySection data={bySeverity ?? SAMPLE_BY_SEVERITY} loading={loadBySev} />
+            <SLABySeveritySection data={bySeverity ?? EMPTY_BY_SEVERITY} loading={loadBySev} />
           </WidgetErrorBoundary>
         </div>
       </div>
@@ -626,7 +588,7 @@ export function SLADashboard() {
       <div className="grid grid-cols-5 gap-3 mb-3">
         <div className="col-span-3">
           <WidgetErrorBoundary title="Response Time Distribution">
-            <ResponseTimeChart data={rtDist ?? SAMPLE_RT_DIST} loading={loadRt} />
+            <ResponseTimeChart data={rtDist ?? EMPTY_RT_DIST} loading={loadRt} />
           </WidgetErrorBoundary>
         </div>
         <div className="col-span-2">
@@ -637,7 +599,7 @@ export function SLADashboard() {
       {/* Row 4: analyst SLA table */}
       <div className="mb-3">
         <WidgetErrorBoundary title="Analyst SLA Performance">
-          <AnalystSLATable data={analystSLA ?? SAMPLE_ANALYST_SLA} loading={loadAnalysts} />
+          <AnalystSLATable data={analystSLA ?? []} loading={loadAnalysts} />
         </WidgetErrorBoundary>
       </div>
 
