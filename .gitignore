@@ -39,8 +39,6 @@ coverage.xml
 *.log
 logs/
 
-# Docker
-.dockerignore
 
 # Alembic
 backend/migrations/versions/__pycache__/

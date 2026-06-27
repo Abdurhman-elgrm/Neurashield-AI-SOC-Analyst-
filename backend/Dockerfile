@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml .
 RUN pip install --no-cache-dir --upgrade pip "setuptools>=68.0" wheel \
-    && pip install --no-cache-dir --no-build-isolation ".[dev]"
+    && pip install --no-cache-dir --no-build-isolation "."
 
 # ─── Stage 2: Development ─────────────────────────────────────────────────────
 FROM python:3.12-slim AS development

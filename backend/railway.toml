@@ -3,7 +3,7 @@
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
-[[deploy]]
+[deploy]
 startCommand = "./start.sh"
 healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 60

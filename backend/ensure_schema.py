@@ -6,7 +6,7 @@ Uses SQLAlchemy create_all(checkfirst=True) which:
   - Creates only what is missing — never touches existing objects
   - Handles all PostgreSQL ENUM types automatically
 
-After success, stamps alembic_version to head so future
+After success, stamps alembic_version to the current head revision so future
 `alembic upgrade head` calls become no-ops.
 """
 from __future__ import annotations
@@ -21,6 +21,19 @@ from app.core.config import settings
 from app.models import Base  # registers all tables into Base.metadata
 
 
+def _get_alembic_head() -> str:
+    """Return the current head revision ID from alembic scripts."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config("alembic.ini")
+    script_dir = ScriptDirectory.from_config(cfg)
+    head = script_dir.get_current_head()
+    if head is None:
+        raise RuntimeError("Could not determine alembic head revision")
+    return head
+
+
 async def main() -> int:
     connect_args: dict = {}
     if settings.is_production:
@@ -32,6 +45,8 @@ async def main() -> int:
         connect_args=connect_args,
     )
     try:
+        head_rev = _get_alembic_head()
+
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all, checkfirst=True)
 
@@ -43,9 +58,9 @@ async def main() -> int:
                 "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
             ))
             await conn.execute(text("DELETE FROM alembic_version"))
-            await conn.execute(text("INSERT INTO alembic_version VALUES ('006_api_keys')"))
+            await conn.execute(text(f"INSERT INTO alembic_version VALUES ('{head_rev}')"))
 
-        print("[ensure_schema] All missing tables created. Stamped alembic to 006_api_keys.")
+        print(f"[ensure_schema] All missing tables created. Stamped alembic to {head_rev}.")
         return 0
     except Exception as exc:
         print(f"[ensure_schema] Failed: {exc}", file=sys.stderr)
