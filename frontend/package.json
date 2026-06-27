@@ -37,7 +37,6 @@
     "@tanstack/react-query": "^5.59.0",
     "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.10.9",
-    "@types/react-simple-maps": "^3.0.6",
     "@xyflow/react": "^12.11.0",
     "axios": "^1.7.7",
     "class-variance-authority": "^0.7.0",
@@ -53,7 +52,6 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.27.0",
-    "react-simple-maps": "^3.0.0",
     "recharts": "^2.13.3",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.1"

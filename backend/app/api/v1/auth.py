@@ -410,9 +410,13 @@ async def change_password(
     summary="One-click demo login — no credentials required",
 )
 async def demo_login(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    redis: Annotated[object | None, Depends(get_redis_optional)] = None,
 ) -> APIResponse[TokenPair]:
+    ip = _extract_client_ip(request)
+    await _check_rate_limit(redis, f"auth_demo_ip:{ip}", limit=10, window=3600)
     from app.services.demo_service import demo_login as _demo_login
     token_pair = await _demo_login(db)
     _set_refresh_cookie(response, token_pair.refresh_token)

@@ -89,7 +89,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
-    Adds defensive HTTP security headers to every response.
+    Adds defensive HTTP security headers to every API response.
 
     Header rationale:
       X-Frame-Options          — prevents clickjacking (DENY = no iframes at all)
@@ -100,8 +100,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
       Strict-Transport-Security — HSTS; only effective over HTTPS, ignored over HTTP
       Content-Security-Policy  — restricts which resources the browser may load
 
-    CSP allows same-origin + data: URIs for images (avatars/icons) and
-    unsafe-inline for styles (SPA bundlers inject inline <style> blocks).
+    ⚠️  CSP COVERAGE NOTE
+    This service is a pure JSON API — it serves no HTML pages.  Browsers only
+    enforce CSP on HTML document responses, so the CSP header here provides
+    defence-in-depth for API responses but does NOT protect the React SPA against
+    XSS.  CSP for the SPA must be set at the layer that serves the built frontend
+    (Nginx, Railway static, or CDN).  Use a header equivalent to:
+
+        Content-Security-Policy:
+          default-src 'self';
+          script-src  'self';
+          style-src   'self' 'unsafe-inline';
+          img-src     'self' data:;
+          font-src    'self' data:;
+          connect-src 'self' wss:;
+          frame-ancestors 'none';
+          base-uri    'self';
+          form-action 'self'
+
+    Note: connect-src must include 'wss:' (or the specific backend WSS origin) so
+    the frontend WebSocket connection is allowed by the browser.
     """
 
     _HEADERS: dict[str, str] = {

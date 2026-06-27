@@ -71,12 +71,13 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "soc-auth",
       storage: createJSONStorage(() => localStorage),
-      // accessToken and user are NOT persisted — they are re-hydrated on page load
-      // via /auth/me.  Only the active tenant selection survives a hard reload.
-      // mfaPending is intentionally excluded — it must not survive a page reload.
+      // Only the active tenant selection persists across reloads. accessToken,
+      // user, and mfaPending are intentionally excluded: accessToken must not be
+      // in localStorage (XSS readable), user PII has no reason to survive a reload
+      // (AuthGuard redirects unauthenticated users to /login before any component
+      // renders), and mfaPending must not survive a reload by design.
       partialize: (state) => ({
         activeTenantId: state.activeTenantId,
-        user: state.user,
       }),
     },
   ),

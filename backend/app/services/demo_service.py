@@ -150,16 +150,18 @@ async def _wipe_tenant_data(db: AsyncSession, tenant_id: str) -> None:
     from uuid import UUID as _UUID
     tid_obj = _UUID(tenant_id)
     # playbook_steps has no tenant_id — cascade-deleted via playbooks FK
-    for table in [
-        "playbook_runs", "playbooks",
-        "suppression_rules", "audit_logs",
-        "alerts", "investigations",
-        "detection_rules", "heartbeats", "agents",
+    for stmt in [
+        text("DELETE FROM playbook_runs     WHERE tenant_id = :tid"),
+        text("DELETE FROM playbooks         WHERE tenant_id = :tid"),
+        text("DELETE FROM suppression_rules WHERE tenant_id = :tid"),
+        text("DELETE FROM audit_logs        WHERE tenant_id = :tid"),
+        text("DELETE FROM alerts            WHERE tenant_id = :tid"),
+        text("DELETE FROM investigations    WHERE tenant_id = :tid"),
+        text("DELETE FROM detection_rules   WHERE tenant_id = :tid"),
+        text("DELETE FROM heartbeats        WHERE tenant_id = :tid"),
+        text("DELETE FROM agents            WHERE tenant_id = :tid"),
     ]:
-        await db.execute(
-            text(f"DELETE FROM {table} WHERE tenant_id = :tid"),
-            {"tid": tid_obj},
-        )
+        await db.execute(stmt, {"tid": tid_obj})
     await db.flush()
 
 
