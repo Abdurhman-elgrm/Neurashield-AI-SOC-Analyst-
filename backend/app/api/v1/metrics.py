@@ -531,6 +531,108 @@ async def get_alert_volume(
     return APIResponse.ok(list(by_date.values()))
 
 
+# ─── /metrics/analyst-performance ────────────────────────────────────────────
+
+@router.get("/analyst-performance", response_model=APIResponse[list])
+async def get_analyst_performance(
+    member: Annotated[object, require_permission(Permission.ALERTS_READ)],
+    db: AsyncSession = Depends(get_db),
+    timeRange: str = Query(default="30d"),
+):
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    since = _parse_range(timeRange)
+    today_start = datetime.now(tz=timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    result = await db.execute(
+        select(Investigation).where(
+            Investigation.tenant_id == m.tenant_id,
+            Investigation.created_at >= since,
+        )
+    )
+    investigations = result.scalars().all()
+
+    analyst_ids = list({i.assigned_to for i in investigations if i.assigned_to})
+    if not analyst_ids:
+        return APIResponse.ok([])
+
+    user_result = await db.execute(select(User).where(User.id.in_(analyst_ids)))
+    users = {u.id: u for u in user_result.scalars().all()}
+
+    stats: dict = {}
+    for inv in investigations:
+        uid = inv.assigned_to
+        if not uid:
+            continue
+        if uid not in stats:
+            u = users.get(uid)
+            stats[uid] = {
+                "user_id":    str(uid),
+                "name":       getattr(u, "full_name", None) or getattr(u, "email", str(uid)[:8]),
+                "email":      getattr(u, "email", ""),
+                "triaged_today": 0,
+                "open_count": 0,
+                "resolve_times": [],
+            }
+        s = stats[uid]
+        status_str = inv.status if isinstance(inv.status, str) else inv.status.value
+        if _is_terminal(status_str):
+            if inv.updated_at and inv.updated_at.replace(tzinfo=timezone.utc) >= today_start:
+                s["triaged_today"] += 1
+            s["resolve_times"].append(_elapsed_minutes(inv.created_at, inv.updated_at))
+        else:
+            s["open_count"] += 1
+
+    out = []
+    for s in stats.values():
+        rt = s["resolve_times"]
+        out.append({
+            "user_id":               s["user_id"],
+            "name":                  s["name"],
+            "email":                 s["email"],
+            "alerts_triaged_today":  s["triaged_today"],
+            "avg_resolution_minutes": round(sum(rt) / len(rt)) if rt else 0,
+            "open_assignments":      s["open_count"],
+        })
+    return APIResponse.ok(sorted(out, key=lambda x: -x["alerts_triaged_today"]))
+
+
+# ─── /metrics/verdict-distribution ───────────────────────────────────────────
+
+@router.get("/verdict-distribution", response_model=APIResponse[dict])
+async def get_verdict_distribution(
+    member: Annotated[object, require_permission(Permission.ALERTS_READ)],
+    db: AsyncSession = Depends(get_db),
+    timeRange: str = Query(default="30d"),
+):
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+    since = _parse_range(timeRange)
+
+    result = await db.execute(
+        select(Investigation.verdict, Investigation.status).where(
+            Investigation.tenant_id == m.tenant_id,
+            Investigation.created_at >= since,
+        )
+    )
+    rows = result.all()
+
+    counts = {"true_positive": 0, "false_positive": 0, "benign": 0, "unknown": 0}
+    for verdict, status in rows:
+        verdict_str = (verdict or "").lower()
+        status_str = (status if isinstance(status, str) else status.value).lower()
+        if verdict_str == "true_positive" or status_str == "true_positive":
+            counts["true_positive"] += 1
+        elif verdict_str == "false_positive" or status_str == "false_positive":
+            counts["false_positive"] += 1
+        elif verdict_str == "benign":
+            counts["benign"] += 1
+        else:
+            counts["unknown"] += 1
+
+    return APIResponse.ok(counts)
+
+
 # ─── /dashboard/geo-threats ──────────────────────────────────────────────────
 # Note: this is served under /dashboard prefix but logically belongs here.
 # We mount it here and alias it in the router.

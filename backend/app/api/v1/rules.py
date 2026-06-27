@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission
-from app.models.detection_rule import RuleType
+from app.models.detection_rule import DetectionRule, RuleType
 from app.models.event import Event
 from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse, EmptyResponse, PaginatedResponse
@@ -294,3 +294,44 @@ async def test_rule_dry_run(
         match_count=len(matches),
     )
     return APIResponse.ok(result)
+
+
+# ─── /rules/coverage ─────────────────────────────────────────────────────────
+
+@router.get("/coverage", response_model=APIResponse[dict])
+async def get_rules_coverage(
+    member: Annotated[object, require_permission(Permission.RULES_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[dict]:
+    """Return MITRE ATT&CK technique coverage score based on active detection rules."""
+    from app.models.tenant_member import TenantMember
+    m: TenantMember = member  # type: ignore[assignment]
+
+    result = await db.execute(
+        select(DetectionRule.mitre_techniques).where(
+            DetectionRule.tenant_id == m.tenant_id,
+            DetectionRule.enabled == True,  # noqa: E712
+        )
+    )
+    technique_lists = result.scalars().all()
+
+    covered: set[str] = set()
+    for tech_list in technique_lists:
+        if not isinstance(tech_list, list):
+            continue
+        for item in tech_list:
+            tid = item.get("technique_id") if isinstance(item, dict) else str(item)
+            if tid:
+                covered.add(tid)
+
+    # ATT&CK Enterprise v14 has ~200 techniques; use 200 as denominator
+    total = 200
+    covered_count = len(covered)
+    score_pct = min(100, round((covered_count / total) * 100))
+
+    return APIResponse.ok({
+        "score_pct":           score_pct,
+        "covered_techniques":  covered_count,
+        "total_techniques":    total,
+        "trend_delta":         0,
+    })

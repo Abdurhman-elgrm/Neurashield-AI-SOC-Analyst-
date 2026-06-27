@@ -141,43 +141,47 @@ export interface NetworkFlowData {
   links: NetworkFlowLink[];
 }
 
+// All backend endpoints return APIResponse envelope {status, data}. Unwrap with .data.data
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const unwrap = (r: { data: any }) => r.data?.data ?? r.data;
+
 export const socMetricsApi = {
   getMTTR: (timeRange = "30d") =>
-    apiClient.get<MTTRData[]>(`/metrics/mttr?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/mttr?timeRange=${timeRange}`).then(unwrap) as Promise<MTTRData[]>,
 
   getAlertVolume: (timeRange = "30d") =>
-    apiClient.get<AlertVolumePoint[]>(`/metrics/alert-volume?timeRange=${timeRange}&group_by=day,severity`).then((r) => r.data),
+    apiClient.get(`/metrics/alert-volume?timeRange=${timeRange}&group_by=day,severity`).then(unwrap) as Promise<AlertVolumePoint[]>,
 
   getAnalystPerformance: () =>
-    apiClient.get<AnalystPerformance[]>("/metrics/analyst-performance").then((r) => r.data),
+    apiClient.get("/metrics/analyst-performance").then(unwrap) as Promise<AnalystPerformance[]>,
 
   getSLABreachRate: (timeRange = "30d") =>
-    apiClient.get<SLABreachPoint[]>(`/metrics/sla-breach-rate?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/sla-breach-rate?timeRange=${timeRange}`).then(unwrap) as Promise<SLABreachPoint[]>,
 
   getSLASummary: (timeRange = "30d") =>
-    apiClient.get<SLASummary>(`/metrics/sla-summary?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/sla-summary?timeRange=${timeRange}`).then(unwrap) as Promise<SLASummary>,
 
   getSLABySeverity: (timeRange = "30d") =>
-    apiClient.get<SLABySeverityRow[]>(`/metrics/sla-by-severity?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/sla-by-severity?timeRange=${timeRange}`).then(unwrap) as Promise<SLABySeverityRow[]>,
 
   getSLABreaches: (timeRange = "30d", page = 1) =>
-    apiClient.get<SLABreachListResponse>(`/metrics/sla-breaches?timeRange=${timeRange}&page=${page}`).then((r) => r.data),
+    apiClient.get(`/metrics/sla-breaches?timeRange=${timeRange}&page=${page}`).then(unwrap) as Promise<SLABreachListResponse>,
 
   getResponseTimeDistribution: (timeRange = "30d") =>
-    apiClient.get<ResponseTimeBin[]>(`/metrics/response-time-distribution?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/response-time-distribution?timeRange=${timeRange}`).then(unwrap) as Promise<ResponseTimeBin[]>,
 
   getAnalystSLA: (timeRange = "30d") =>
-    apiClient.get<AnalystSLARow[]>(`/metrics/analyst-sla?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/analyst-sla?timeRange=${timeRange}`).then(unwrap) as Promise<AnalystSLARow[]>,
 
   getVerdictDistribution: (timeRange = "30d") =>
-    apiClient.get<VerdictDistribution>(`/metrics/verdict-distribution?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/metrics/verdict-distribution?timeRange=${timeRange}`).then(unwrap) as Promise<VerdictDistribution>,
 
   getCoverageScore: () =>
-    apiClient.get<DetectionCoverageScore>("/rules/coverage").then((r) => r.data),
+    apiClient.get("/rules/coverage").then(unwrap) as Promise<DetectionCoverageScore>,
 
   getGeoThreats: (timeRange = "24h") =>
-    apiClient.get<GeoThreat[]>(`/dashboard/geo-threats?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/dashboard/geo-threats?timeRange=${timeRange}`).then(unwrap) as Promise<GeoThreat[]>,
 
   getNetworkFlow: (timeRange = "24h") =>
-    apiClient.get<NetworkFlowData>(`/dashboard/network-flow?timeRange=${timeRange}`).then((r) => r.data),
+    apiClient.get(`/dashboard/network-flow?timeRange=${timeRange}`).then(unwrap) as Promise<NetworkFlowData>,
 };
