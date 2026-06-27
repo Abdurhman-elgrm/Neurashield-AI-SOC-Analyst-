@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiGet, apiPost, apiPatch, apiDelete } from "./client";
 
 export type SuppressionDuration = "1h" | "4h" | "24h" | "7d" | "30d" | "indefinite";
 export type SuppressionReason = "testing" | "known_good" | "noisy_rule" | "maintenance_window" | "other";
@@ -32,14 +32,14 @@ export interface CreateSuppressionPayload {
 
 export const suppressionApi = {
   list: () =>
-    apiClient.get<SuppressionRule[]>("/rules/suppression").then((r) => r.data),
+    apiGet<SuppressionRule[]>("/suppression-rules"),
 
   create: (payload: CreateSuppressionPayload) =>
-    apiClient.post<SuppressionRule>("/rules/suppression", payload).then((r) => r.data),
+    apiPost<SuppressionRule>("/suppression-rules", payload),
 
   update: (id: string, payload: Partial<CreateSuppressionPayload>) =>
-    apiClient.patch<SuppressionRule>(`/rules/suppression/${id}`, payload).then((r) => r.data),
+    apiPatch<SuppressionRule>(`/suppression-rules/${id}`, payload),
 
   delete: (id: string) =>
-    apiClient.delete(`/rules/suppression/${id}`).then((r) => r.data),
+    apiDelete(`/suppression-rules/${id}`),
 };

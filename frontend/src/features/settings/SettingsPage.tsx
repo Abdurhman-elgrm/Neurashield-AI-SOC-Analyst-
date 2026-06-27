@@ -3,8 +3,12 @@ import {
   User, Building2, Key, Users, Bell, Bot,
   Plus, Copy, Check, Trash2, CheckCircle,
   Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle, Lock, Camera, Loader,
-  Zap, ScrollText, Upload,
+  Zap, ScrollText, Upload, BellRing, BarChart3, Ticket, Gauge, Monitor,
 } from 'lucide-react'
+import { NotificationRulesSection } from './NotificationRulesSection'
+import { SeverityThresholdsSection } from './SeverityThresholdsSection'
+import { TicketingConfigSection } from './TicketingConfigSection'
+import { QuotaDashboardSection } from './QuotaDashboardSection'
 import { AuditLogPage } from '../audit-log/AuditLogPage'
 import { ImportPage } from '../import/ImportPage'
 import { Button } from '@/components/ui/Button'
