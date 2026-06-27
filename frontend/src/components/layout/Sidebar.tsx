@@ -11,7 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useTenantStore } from "@/stores/tenantStore";
 import { useUIStore } from "@/stores/uiStore";
 import { LogoCompact } from "@/components/ui/Logo";
-import { getAlerts } from "@/services/alertsApi";
+import { getAlertsSummary } from "@/services/alertsApi";
 import { agentsApi } from "@/api/agents";
 import { useQuery } from "@tanstack/react-query";
 import { useMyAlertCount } from "@/hooks/useMyAlertCount";
@@ -21,10 +21,10 @@ import { useMyAlertCount } from "@/hooks/useMyAlertCount";
 function useOpenAlertCount() {
   const { data } = useQuery({
     queryKey: ["sidebar", "alerts-open"],
-    queryFn: () => getAlerts({ status: ["open"], pageSize: 1, page: 1 }),
+    queryFn: () => getAlertsSummary(),
     staleTime: 60_000, refetchInterval: 60_000, retry: false,
   });
-  return data?.total ?? 0;
+  return data?.open ?? 0;
 }
 
 function useOnlineAgentCount() {

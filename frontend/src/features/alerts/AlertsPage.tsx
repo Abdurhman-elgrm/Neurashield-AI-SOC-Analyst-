@@ -559,10 +559,17 @@ export function AlertsPage() {
     }
   }, [queryClient, tenantId]);
 
-  const escalateToInvestigation = useCallback((alertId?: string) => {
+  const escalateToInvestigation = useCallback(async (alertId?: string) => {
     const id = alertId ?? selectedAlertId;
     if (!id) return;
-    navigate(`/investigations?createFrom=${id}`);
+    try {
+      const { promoteAlert } = await import("@/features/investigations/api/investigationsApi");
+      const res = await promoteAlert(id);
+      toastSuccess("Investigation created");
+      navigate(`/investigations/${res.investigation_id}`);
+    } catch {
+      toastError("Failed to promote alert to investigation");
+    }
   }, [selectedAlertId, navigate]);
 
   // Column defs — rebuilt only when dedupeMap reference changes (i.e. new page data)
