@@ -349,7 +349,16 @@ $LOG_FILE = Join-Path $INSTALL_DIR "agent_v2.log"
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
-$taskInstalled = $false
+# Detect user-local Python (AppData or anywhere under C:\Users\<name>).
+# The SYSTEM account cannot read user-profile directories, so a SYSTEM
+# scheduled task would stay permanently Queued and never execute.
+# When Python is user-local we register the task as the current user instead.
+$pythonIsUserLocal = ($pythonExe -match [regex]::Escape($env:USERPROFILE)) -or
+                     ($pythonExe -match "\\AppData\\") -or
+                     ($pythonExe -match "\\Users\\[^\\]+\\")
+
+$taskInstalled  = $false
+$taskRunsAsUser = $false
 
 if ($isAdmin) {
     # Remove existing task if present
@@ -359,8 +368,8 @@ if ($isAdmin) {
         Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
     }
 
-    $action  = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
-    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $action          = New-ScheduledTaskAction -Execute $pythonwExe -Argument "-u `"$AGENT_FILE`"" -WorkingDirectory $INSTALL_DIR
+    $startupTrigger  = New-ScheduledTaskTrigger -AtStartup
     $logonTrigger    = New-ScheduledTaskTrigger -AtLogOn
     $watchdogTrigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 30) `
         -Once -At ([datetime]::Today)
@@ -373,18 +382,36 @@ if ($isAdmin) {
         -RunOnlyIfNetworkAvailable:$false `
         -MultipleInstances        Queue
 
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    if ($pythonIsUserLocal) {
+        # Python is installed in the user profile (e.g. AppData\Local\Programs\Python).
+        # SYSTEM has no access to that path -- register as the current interactive user
+        # so the task inherits access to the AppData Python installation and its packages.
+        Write-Host "[bootstrap] WARN  Python is user-local -- registering task as current user (not SYSTEM)" -ForegroundColor Yellow
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $principal   = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Highest
+        # AtStartup is meaningless for interactive-user tasks; AtLogon is the correct trigger.
+        $triggers       = @($logonTrigger, $watchdogTrigger)
+        $taskRunsAsUser = $true
+    } else {
+        # Python is system-wide (e.g. C:\Python3xx) -- SYSTEM can access it safely.
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $triggers  = @($startupTrigger, $logonTrigger, $watchdogTrigger)
+    }
 
     try {
         Register-ScheduledTask `
             -TaskName  $TASK_NAME `
             -Action    $action `
-            -Trigger   @($trigger, $logonTrigger, $watchdogTrigger) `
+            -Trigger   $triggers `
             -Settings  $settings `
             -Principal $principal `
             -Force -ErrorAction Stop | Out-Null
         $taskInstalled = $true
-        Write-OK "Scheduled task '$TASK_NAME' installed (runs as SYSTEM at startup)"
+        if ($taskRunsAsUser) {
+            Write-OK "Scheduled task '$TASK_NAME' installed (runs as $currentUser at logon)"
+        } else {
+            Write-OK "Scheduled task '$TASK_NAME' installed (runs as SYSTEM at startup)"
+        }
     } catch {
         Write-Host "[bootstrap] WARN  Scheduled task registration failed: $_" -ForegroundColor Yellow
     }
@@ -443,10 +470,13 @@ if ($agentStarted) {
     }
 
     if ($taskInstalled -and -not $hasRealError) {
-        # SYSTEM tasks run in a separate session -- the log may not update
-        # within the wait window even when everything is healthy.
         $state = (Get-ScheduledTask -TaskName $TASK_NAME -ErrorAction SilentlyContinue).State
-        Write-OK "SYSTEM task installed (state: $state) -- agent starts automatically at login/startup"
+        if ($taskRunsAsUser) {
+            Write-OK "User task installed (state: $state) -- agent starts automatically at logon"
+            Write-Host "            NOTE: Task runs as $currentUser (Python is user-local)" -ForegroundColor DarkGray
+        } else {
+            Write-OK "SYSTEM task installed (state: $state) -- agent starts automatically at login/startup"
+        }
         Write-Host "            To verify now: Start-ScheduledTask '$TASK_NAME'" -ForegroundColor DarkGray
         Write-Host "            Log at:        Get-Content '$LOG_FILE'" -ForegroundColor DarkGray
     } elseif (-not $taskInstalled) {
@@ -461,7 +491,11 @@ Write-Host "  Agent enrolled successfully." -ForegroundColor Green
 Write-Host "  Credentials stored at: $CREDS_FILE" -ForegroundColor DarkGray
 Write-Host "  Agent script at:       $AGENT_FILE" -ForegroundColor DarkGray
 if ($taskInstalled) {
-    Write-Host "  Scheduled task:        $TASK_NAME (SYSTEM, runs at startup)" -ForegroundColor DarkGray
+    if ($taskRunsAsUser) {
+        Write-Host "  Scheduled task:        $TASK_NAME ($currentUser, runs at logon)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Scheduled task:        $TASK_NAME (SYSTEM, runs at startup)" -ForegroundColor DarkGray
+    }
 } else {
     Write-Host "  NOTE: Run as Administrator to install as a persistent SYSTEM service." -ForegroundColor Yellow
 }
