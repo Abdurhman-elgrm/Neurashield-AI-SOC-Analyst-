@@ -6,18 +6,6 @@ import { socMetricsApi } from "@/api/soc-metrics";
 import type { GeoThreat } from "@/api/soc-metrics";
 import type { DashboardTimeRange } from "../types/dashboard";
 
-const SAMPLE_THREATS: GeoThreat[] = [
-  { lat: 55.75, lng: 37.62,  severity: "critical", count: 24, country: "Russia"        },
-  { lat: 39.91, lng: 116.39, severity: "critical", count: 18, country: "China"         },
-  { lat: 37.77, lng: -122.41,severity: "high",     count: 12, country: "United States" },
-  { lat: 51.50, lng: -0.12,  severity: "high",     count: 9,  country: "United Kingdom"},
-  { lat: 1.35,  lng: 103.82, severity: "high",     count: 8,  country: "Singapore"     },
-  { lat: 19.07, lng: 72.87,  severity: "high",     count: 7,  country: "India"         },
-  { lat: 48.85, lng: 2.35,   severity: "medium",   count: 5,  country: "France"        },
-  { lat: 35.68, lng: 139.69, severity: "medium",   count: 5,  country: "Japan"         },
-  { lat: 52.52, lng: 13.41,  severity: "medium",   count: 4,  country: "Germany"       },
-  { lat: -23.5, lng: -46.63, severity: "low",      count: 3,  country: "Brazil"        },
-];
 
 const SEV_COLORS: Record<string, string> = {
   critical: "#EF4444",
@@ -78,12 +66,12 @@ export function GeoThreatMap({ timeRange }: Props) {
 
   const { data } = useQuery({
     queryKey: ["geo-threats", timeRange],
-    queryFn: () => socMetricsApi.getGeoThreats(timeRange).catch(() => SAMPLE_THREATS),
+    queryFn: () => socMetricsApi.getGeoThreats(timeRange).catch(() => [] as GeoThreat[]),
     staleTime: 120_000,
-    placeholderData: SAMPLE_THREATS,
+    placeholderData: [] as GeoThreat[],
   });
 
-  const threats = data ?? SAMPLE_THREATS;
+  const threats = data ?? [];
   const totalCount = threats.reduce((s, t) => s + t.count, 0);
 
   // Top 5 countries by count

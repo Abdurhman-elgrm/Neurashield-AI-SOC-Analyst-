@@ -10,6 +10,7 @@ from app.api.v1 import sigma
 from app.api.v1 import imports
 from app.api.v1 import fleet, ueba, iocs
 from app.api.v1 import integrations
+from app.api.v1 import metrics
 from app.api.v1.copilot import router as copilot_router
 from app.api.v1.invitations import router as invitations_router
 from app.api.v1.mssp_api import router as mssp_router
@@ -95,6 +96,7 @@ api_router.include_router(mssp_router)
 api_router.include_router(threat_intel_router)
 api_router.include_router(iocs.router)
 api_router.include_router(integrations.router)
+api_router.include_router(metrics.router)
 
 # ─── Phase 2: WebSocket (registered at root level, no prefix) ────────────────
 api_router.include_router(ws_router)

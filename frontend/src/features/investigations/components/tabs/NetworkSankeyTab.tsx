@@ -20,20 +20,6 @@ interface NetworkFlowResponse {
   end_time: string;
 }
 
-// ─── Sample data ──────────────────────────────────────────────────────────────
-
-const SAMPLE: NetworkFlowResponse = {
-  flows: [
-    { source: "10.0.0.45 (DESKTOP-A)",  target: "10.0.0.12 (DC01)",          bytes: 48200,   packets: 342,  proto: "TCP", is_lateral: true },
-    { source: "10.0.0.45 (DESKTOP-A)",  target: "10.0.0.33 (FILESERVER)",     bytes: 2400000, packets: 1820, proto: "TCP", is_lateral: true },
-    { source: "10.0.0.45 (DESKTOP-A)",  target: "185.220.101.45 (External)",  bytes: 890000,  packets: 620,  proto: "TCP", is_exfil: true   },
-    { source: "10.0.0.12 (DC01)",       target: "10.0.0.45 (DESKTOP-A)",      bytes: 12000,   packets: 98,   proto: "TCP"                   },
-    { source: "10.0.0.33 (FILESERVER)", target: "10.0.0.45 (DESKTOP-A)",      bytes: 58000,   packets: 210,  proto: "TCP"                   },
-    { source: "10.0.0.22 (DESKTOP-B)",  target: "10.0.0.12 (DC01)",           bytes: 8900,    packets: 67,   proto: "TCP"                   },
-  ],
-  start_time: new Date(Date.now() - 3600_000).toISOString(),
-  end_time:   new Date().toISOString(),
-};
 
 // ─── Sankey layout engine (simple) ───────────────────────────────────────────
 
@@ -162,9 +148,10 @@ export function NetworkSankeyTab({ id, isActive }: Props) {
     queryKey: ["inv-network-flows", id],
     queryFn: () =>
       apiClient
-        .get<NetworkFlowResponse>(`/investigations/${id}/network-flows`)
-        .then((r) => r.data)
-        .catch(() => SAMPLE),
+        .get<{ data: NetworkFlowResponse }>(`/investigations/${id}/network-flows`)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .then((r) => (r.data as any).data ?? r.data)
+        .catch(() => ({ flows: [] as NetworkFlow[], start_time: null, end_time: null })),
     enabled: isActive,
     staleTime: 120_000,
   });
@@ -285,7 +272,7 @@ export function NetworkSankeyTab({ id, isActive }: Props) {
           <div className="grid px-4 py-2 bg-bg-elevated border-b border-border text-2xs font-bold uppercase tracking-widest text-text-muted" style={{ gridTemplateColumns: "1fr 1fr 80px 80px 70px 80px" }}>
             {["Source", "Destination", "Bytes", "Packets", "Proto", "Type"].map((h) => <span key={h}>{h}</span>)}
           </div>
-          {data.flows.map((flow, i) => (
+          {data.flows.map((flow: NetworkFlow, i: number) => (
             <div key={i} className="grid items-center px-4 py-2 border-b border-border/50 last:border-0 hover:bg-bg-elevated/50 transition-colors text-xs" style={{ gridTemplateColumns: "1fr 1fr 80px 80px 70px 80px" }}>
               <span className="font-mono text-text-secondary truncate pr-2">{flow.source}</span>
               <span className="font-mono text-text-secondary truncate pr-2">{flow.target}</span>

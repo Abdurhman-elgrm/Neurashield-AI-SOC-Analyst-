@@ -949,3 +949,54 @@ async def get_ai_operations(
     ))
     await _kpi_set(redis, cache_key, result.model_dump_json())
     return result
+
+
+# ─── /dashboard/geo-threats ──────────────────────────────────────────────────
+
+@router.get("/geo-threats", response_model=APIResponse[list])
+async def get_geo_threats(
+    member: Annotated[object, require_permission(Permission.ALERTS_READ)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    time_range: str = Query(default="24h"),
+) -> APIResponse[list]:
+    """Return geo-located threat sources from alert network evidence."""
+    from app.models.tenant_member import TenantMember
+    from app.models.alert import Alert
+    from datetime import datetime, timezone, timedelta
+    m: TenantMember = member  # type: ignore[assignment]
+
+    mapping = {"24h": 24, "last_24h": 24, "48h": 48, "7d": 168, "last_7d": 168}
+    hours = mapping.get(time_range, 24)
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+
+    result = await db.execute(
+        select(Alert.evidence, Alert.severity).where(
+            Alert.tenant_id == m.tenant_id,
+            Alert.created_at >= since,
+            Alert.evidence.is_not(None),
+        )
+    )
+    rows = result.all()
+
+    sev_order = ["low", "medium", "high", "critical"]
+    country_map: dict[str, dict] = {}
+    for ev, sev in rows:
+        if not ev:
+            continue
+        network = ev.get("network") or {}
+        geo = network.get("geo") or ev.get("geo") or {}
+        country = geo.get("country") or network.get("country")
+        lat = geo.get("lat") or network.get("lat")
+        lng = geo.get("lng") or geo.get("lon") or network.get("lng")
+        if not country or lat is None or lng is None:
+            continue
+        sev_str = sev.value if hasattr(sev, "value") else str(sev)
+        if country not in country_map:
+            country_map[country] = {"lat": lat, "lng": lng, "count": 0, "severity": "low", "country": country}
+        country_map[country]["count"] += 1
+        existing_idx = sev_order.index(country_map[country]["severity"]) if country_map[country]["severity"] in sev_order else 0
+        curr_idx = sev_order.index(sev_str) if sev_str in sev_order else 0
+        if curr_idx > existing_idx:
+            country_map[country]["severity"] = sev_str
+
+    return APIResponse.ok(list(country_map.values()))

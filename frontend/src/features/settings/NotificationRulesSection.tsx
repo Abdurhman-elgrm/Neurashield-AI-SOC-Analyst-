@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Bell } from "lucide-react";
 import { apiClient } from "@/api/client";
+import type { APIResponse } from "@/types/api";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { extractApiError } from "@/lib/utils";
@@ -11,11 +12,22 @@ import { extractApiError } from "@/lib/utils";
 type Channel = "email" | "slack" | "pagerduty" | "webhook";
 type SeverityLevel = "critical" | "high" | "medium" | "low";
 
+// Backend shape from /notification-channels
+interface ChannelResponse {
+  id: string;
+  name: string;
+  type: string;
+  enabled: boolean;
+  min_severity: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface NotificationRule {
   id: string;
   name: string;
   channel: Channel;
-  destination: string; // email address, webhook URL, Slack channel
+  destination: string;
   min_severity: SeverityLevel;
   enabled: boolean;
 }
@@ -43,10 +55,39 @@ const SEVERITIES: { value: SeverityLevel; label: string; color: string }[] = [
 
 const PLACEHOLDER: Record<Channel, string> = {
   email:     "analyst@company.com",
-  slack:     "#security-alerts",
+  slack:     "https://hooks.slack.com/services/...",
   pagerduty: "routing-key",
   webhook:   "https://hooks.example.com/...",
 };
+
+// Map backend ChannelResponse → frontend NotificationRule
+function adaptChannel(ch: ChannelResponse): NotificationRule {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const configRaw = (ch as any).config ?? {};
+  let destination = "";
+  if (ch.type === "slack" || ch.type === "teams") destination = configRaw.webhook_url ?? "";
+  else if (ch.type === "webhook")    destination = configRaw.url ?? "";
+  else if (ch.type === "pagerduty")  destination = configRaw.integration_key ?? configRaw.routing_key ?? "";
+  else if (ch.type === "email")      destination = Array.isArray(configRaw.recipients) ? configRaw.recipients[0] ?? "" : configRaw.recipients ?? "";
+  return {
+    id:           ch.id,
+    name:         ch.name,
+    channel:      (ch.type as Channel) ?? "webhook",
+    destination,
+    min_severity: (ch.min_severity as SeverityLevel) ?? "high",
+    enabled:      ch.enabled,
+  };
+}
+
+// Map frontend payload → backend ChannelCreateRequest
+function toBackendPayload(p: CreateRulePayload) {
+  let config: Record<string, unknown> = {};
+  if (p.channel === "slack")      config = { webhook_url: p.destination };
+  else if (p.channel === "webhook")    config = { url: p.destination };
+  else if (p.channel === "pagerduty")  config = { integration_key: p.destination };
+  else if (p.channel === "email")      config = { recipients: [p.destination] };
+  return { name: p.name, type: p.channel, config, min_severity: p.min_severity, enabled: true };
+}
 
 // ─── NotificationRulesSection ─────────────────────────────────────────────────
 
@@ -58,16 +99,21 @@ export function NotificationRulesSection() {
   });
 
   const { data: rules = [], isLoading } = useQuery({
-    queryKey: ["notification-rules"],
-    queryFn: () => apiClient.get<NotificationRule[]>("/settings/notifications/rules").then((r) => r.data),
+    queryKey: ["notification-channels"],
+    queryFn: () =>
+      apiClient
+        .get<APIResponse<ChannelResponse[]>>("/notification-channels")
+        .then((r) => (r.data.data ?? []).map(adaptChannel)),
     staleTime: 60_000,
   });
 
   const createMut = useMutation({
     mutationFn: (payload: CreateRulePayload) =>
-      apiClient.post<NotificationRule>("/settings/notifications/rules", payload).then((r) => r.data),
+      apiClient
+        .post<APIResponse<ChannelResponse>>("/notification-channels", toBackendPayload(payload))
+        .then((r) => r.data.data),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["notification-rules"] });
+      void qc.invalidateQueries({ queryKey: ["notification-channels"] });
       toastSuccess("Notification rule created");
       setAdding(false);
       setForm({ name: "", channel: "email", destination: "", min_severity: "high" });
@@ -76,15 +122,15 @@ export function NotificationRulesSection() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/settings/notifications/rules/${id}`),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["notification-rules"] }),
+    mutationFn: (id: string) => apiClient.delete(`/notification-channels/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["notification-channels"] }),
     onError: (e) => toastError(extractApiError(e)),
   });
 
   const toggleMut = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      apiClient.patch(`/settings/notifications/rules/${id}`, { enabled }).then((r) => r.data),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["notification-rules"] }),
+      apiClient.patch(`/notification-channels/${id}`, { enabled }).then((r) => r.data),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["notification-channels"] }),
     onError: (e) => toastError(extractApiError(e)),
   });
 
