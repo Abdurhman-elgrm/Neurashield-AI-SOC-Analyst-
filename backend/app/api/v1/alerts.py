@@ -67,18 +67,32 @@ async def list_alerts(
     severity: str | None = Query(default=None),
     source_host: str | None = Query(default=None),
     rule_id: UUID | None = Query(default=None),
+    from_ts: str | None = Query(default=None, description="ISO-8601 start datetime filter"),
+    to_ts: str | None = Query(default=None, description="ISO-8601 end datetime filter"),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> PaginatedResponse[AlertResponse]:
+    from datetime import datetime
+
     from app.models.tenant_member import TenantMember
 
     m: TenantMember = member  # type: ignore[assignment]
+
+    def _parse_dt(s: str | None) -> datetime | None:
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
 
     params = AlertFilterParams(
         status=status,
         severity=severity,
         source_host=source_host,
         rule_id=rule_id,
+        from_ts=_parse_dt(from_ts),
+        to_ts=_parse_dt(to_ts),
         cursor=cursor,
         limit=limit,
     )

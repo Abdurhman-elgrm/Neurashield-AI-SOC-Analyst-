@@ -138,15 +138,16 @@ function adaptAlert(raw: Record<string, any>): Alert {
 // ─── List alerts (paginated, filterable) ──────────────────────────────────────
 
 export async function getAlerts(params: AlertListParams): Promise<AlertListResponse> {
-   
   const { data } = await apiClient.get<any>("/alerts", {
     params: {
       limit: params.pageSize ?? 50,
-      ...(params.status?.length && { status: params.status.join(",") }),
-      ...(params.severity?.length && { severity: params.severity.join(",") }),
-      ...(params.hostname && { source_host: params.hostname }),
-      ...(params.search && { search: params.search }),
-      ...(params.cursor && { cursor: params.cursor }),
+      ...(params.status?.length   && { status:    params.status.join(",") }),
+      ...(params.severity?.length && { severity:  params.severity.join(",") }),
+      ...(params.hostname         && { source_host: params.hostname }),
+      ...(params.search           && { search:    params.search }),
+      ...(params.cursor           && { cursor:    params.cursor }),
+      ...(params.fromTs           && { from_ts:   params.fromTs }),
+      ...(params.toTs             && { to_ts:     params.toTs }),
     },
   });
 

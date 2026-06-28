@@ -91,6 +91,8 @@ export interface AlertListParams {
   tags?: string[];
   search?: string;
   timeRange?: string;
+  fromTs?: string;           // ISO-8601 start (sent as from_ts to backend)
+  toTs?: string;             // ISO-8601 end   (sent as to_ts  to backend)
   correlationId?: string;
   cursor?: string;
 }

@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   ShieldCheck,
-  Zap,
   Server,
   Activity,
   GitMerge,
@@ -36,7 +35,7 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
   const s = data;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
       <KPICard
         label="Total Alerts"
         value={s.alerts.total}
@@ -64,16 +63,6 @@ export function KPIMetricsRow({ timeRange }: KPIMetricsRowProps) {
         colorVariant="accent"
         isLoading={isPlaceholderData}
         onClick={() => navigate("/investigations")}
-      />
-      <KPICard
-        label="Events / Sec"
-        value={s.ingestion.epsNow}
-        deltaPercent={s.ingestion.deltaPercent}
-        icon={<Zap size={12} />}
-        colorVariant="low"
-        isLive
-        isLoading={isPlaceholderData}
-        formatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v)}
       />
       <KPICard
         label="Online Agents"

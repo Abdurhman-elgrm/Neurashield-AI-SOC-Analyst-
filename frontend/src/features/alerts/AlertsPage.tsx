@@ -357,7 +357,10 @@ function filtersToParams(filterState: FilterState, pagination: PaginationState, 
       case "assigned_to":     params.assignedTo     = String(value ?? ""); break;
     }
   }
-  if (filterState.dateRange?.preset) params.timeRange = filterState.dateRange.preset;
+  if (filterState.dateRange) {
+    params.fromTs = filterState.dateRange.from;
+    params.toTs   = filterState.dateRange.to;
+  }
   return params;
 }
 
