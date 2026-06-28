@@ -8,6 +8,33 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+
+# ── Sentry — initialised once at module load, before any FastAPI wiring ────────
+# No-ops silently when SENTRY_DSN is empty so development stays unaffected.
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.asyncio import AsyncioIntegration
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.httpx import HttpxIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        release=settings.APP_VERSION,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+        integrations=[
+            StarletteIntegration(transaction_style="url"),
+            FastApiIntegration(transaction_style="url"),
+            SqlalchemyIntegration(),
+            AsyncioIntegration(),
+            HttpxIntegration(),
+        ],
+        # Never send PII (email, IP, user-agent) to Sentry
+        send_default_pii=False,
+    )
 from app.core.database import database_manager
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging

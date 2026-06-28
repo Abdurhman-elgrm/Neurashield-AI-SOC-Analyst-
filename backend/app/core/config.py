@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     # Bearer token required by Prometheus scraper to access /metrics.
     # Leave empty to disable token auth (metrics are still accessible in dev).
     METRICS_SECRET_TOKEN: str = ""
+    # Sentry DSN — leave empty to disable error tracking (safe default).
+    # Set in Railway environment: SENTRY_DSN=https://...@sentry.io/...
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions traced
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
 
     # ─── Frontend ─────────────────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:5173"

@@ -28,11 +28,21 @@ export default defineConfig({
         sourcemap: true,
         rollupOptions: {
             output: {
-                manualChunks: {
-                    vendor: ["react", "react-dom", "react-router-dom"],
-                    query: ["@tanstack/react-query"],
-                    table: ["@tanstack/react-table", "@tanstack/react-virtual"],
-                    motion: ["framer-motion"],
+                manualChunks: (id) => {
+                    if (id.includes("node_modules")) {
+                        if (id.includes("/react/") ||
+                            id.includes("/react-dom/") ||
+                            id.includes("/react-router-dom/") ||
+                            id.includes("/react-router/"))
+                            return "vendor";
+                        if (id.includes("/@tanstack/react-query"))
+                            return "query";
+                        if (id.includes("/@tanstack/react-table") ||
+                            id.includes("/@tanstack/react-virtual"))
+                            return "table";
+                        if (id.includes("/framer-motion/"))
+                            return "motion";
+                    }
                 },
             },
         },
