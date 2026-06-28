@@ -52,6 +52,8 @@ class TestSuppressionStore:
         client = MagicMock()
         # SET NX returns None = key already existed = suppressed
         client.set = AsyncMock(return_value=None)
+        # expire is called to slide the window when key already exists
+        client.expire = AsyncMock(return_value=True)
         store = SuppressionStore(client)
         suppressed = await store.check_and_suppress("key1", 300)
         assert suppressed is True

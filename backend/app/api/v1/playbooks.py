@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel as _BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -228,6 +229,82 @@ async def generate_playbook(
     return APIResponse.ok(await _load_playbook_response(db, playbook.id, tenant_id=m.tenant_id))
 
 
+# ── Auto-config ───────────────────────────────────────────────────────────────
+
+
+class AutoConfigResponse(_BaseModel):
+    enabled: bool
+    min_severity: str
+
+
+class AutoConfigUpdateRequest(_BaseModel):
+    enabled: bool
+    min_severity: str = "critical"
+
+
+@router.get("/auto-config", response_model=APIResponse[AutoConfigResponse])
+async def get_auto_config(
+    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[AutoConfigResponse]:
+    m: TenantMember = member  # type: ignore[assignment]
+    result = await db.execute(
+        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        return APIResponse.ok(AutoConfigResponse(enabled=False, min_severity="critical"))
+    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))
+
+
+@router.put("/auto-config", response_model=APIResponse[AutoConfigResponse])
+async def update_auto_config(
+    payload: AutoConfigUpdateRequest,
+    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[AutoConfigResponse]:
+    m: TenantMember = member  # type: ignore[assignment]
+
+    valid_severities = {"critical", "high", "medium", "low"}
+    if payload.min_severity not in valid_severities:
+        from app.core.exceptions import ValidationError
+
+        raise ValidationError(f"min_severity must be one of {sorted(valid_severities)}")
+
+    result = await db.execute(
+        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        cfg = PlaybookAutoConfig(
+            tenant_id=m.tenant_id,
+            enabled=payload.enabled,
+            min_severity=payload.min_severity,
+            updated_by_id=m.user_id,
+        )
+        db.add(cfg)
+    else:
+        cfg.enabled = payload.enabled
+        cfg.min_severity = payload.min_severity
+        cfg.updated_by_id = m.user_id
+
+    await db.flush()  # ensure cfg.id is populated before audit log
+
+    await AuditService.log(
+        db,
+        action="playbook_auto_config.updated",
+        actor_id=m.user_id,
+        actor_role=m.role,
+        tenant_id=m.tenant_id,
+        resource_type="playbook_auto_config",
+        resource_id=cfg.id if cfg.id else None,
+    )
+    await db.commit()
+    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))
+
+
+# ── Playbook CRUD ──────────────────────────────────────────────────────────────
+
 @router.get("", response_model=PaginatedResponse[PlaybookResponse])
 async def list_playbooks(
     member: Annotated[object, require_permission(Permission.PLAYBOOKS_READ)],
@@ -416,79 +493,3 @@ async def _load_playbook_response(
         update={"steps": [PlaybookStepResponse.model_validate(s) for s in steps]}
     )
     return resp
-
-
-# ── Auto-config ───────────────────────────────────────────────────────────────
-
-from pydantic import BaseModel as _BaseModel
-
-
-class AutoConfigResponse(_BaseModel):
-    enabled: bool
-    min_severity: str
-
-
-class AutoConfigUpdateRequest(_BaseModel):
-    enabled: bool
-    min_severity: str = "critical"
-
-
-@router.get("/auto-config", response_model=APIResponse[AutoConfigResponse])
-async def get_auto_config(
-    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> APIResponse[AutoConfigResponse]:
-    m: TenantMember = member  # type: ignore[assignment]
-    result = await db.execute(
-        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
-    )
-    cfg = result.scalar_one_or_none()
-    if cfg is None:
-        return APIResponse.ok(AutoConfigResponse(enabled=False, min_severity="critical"))
-    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))
-
-
-@router.put("/auto-config", response_model=APIResponse[AutoConfigResponse])
-async def update_auto_config(
-    payload: AutoConfigUpdateRequest,
-    member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> APIResponse[AutoConfigResponse]:
-    m: TenantMember = member  # type: ignore[assignment]
-
-    valid_severities = {"critical", "high", "medium", "low"}
-    if payload.min_severity not in valid_severities:
-        from app.core.exceptions import ValidationError
-
-        raise ValidationError(f"min_severity must be one of {sorted(valid_severities)}")
-
-    result = await db.execute(
-        select(PlaybookAutoConfig).where(PlaybookAutoConfig.tenant_id == m.tenant_id)
-    )
-    cfg = result.scalar_one_or_none()
-    if cfg is None:
-        cfg = PlaybookAutoConfig(
-            tenant_id=m.tenant_id,
-            enabled=payload.enabled,
-            min_severity=payload.min_severity,
-            updated_by_id=m.user_id,
-        )
-        db.add(cfg)
-    else:
-        cfg.enabled = payload.enabled
-        cfg.min_severity = payload.min_severity
-        cfg.updated_by_id = m.user_id
-
-    await db.flush()  # ensure cfg.id is populated before audit log
-
-    await AuditService.log(
-        db,
-        action="playbook_auto_config.updated",
-        actor_id=m.user_id,
-        actor_role=m.role,
-        tenant_id=m.tenant_id,
-        resource_type="playbook_auto_config",
-        resource_id=cfg.id if cfg.id else None,
-    )
-    await db.commit()
-    return APIResponse.ok(AutoConfigResponse(enabled=cfg.enabled, min_severity=cfg.min_severity))

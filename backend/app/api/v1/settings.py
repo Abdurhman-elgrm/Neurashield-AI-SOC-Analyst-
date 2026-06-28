@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,12 +19,12 @@ _THRESHOLDS_KEY = "severity_thresholds"
 
 
 class SeverityThresholds(BaseModel):
-    critical_min_score: int = 80
-    high_min_score: int = 60
-    medium_min_score: int = 30
-    low_min_score: int = 0
-    escalate_after_minutes: int = 60
-    auto_close_after_days: int = 30
+    critical_min_score: int = Field(default=80, ge=0, le=100)
+    high_min_score: int = Field(default=60, ge=0, le=100)
+    medium_min_score: int = Field(default=30, ge=0, le=100)
+    low_min_score: int = Field(default=0, ge=0, le=100)
+    escalate_after_minutes: int = Field(default=60, ge=1)
+    auto_close_after_days: int = Field(default=30, ge=1)
 
 
 @router.get(

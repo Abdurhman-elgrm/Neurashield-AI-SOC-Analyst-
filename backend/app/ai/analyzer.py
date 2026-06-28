@@ -45,13 +45,22 @@ class AnalysisResult:
     recommended_action: str
     indicators: list[str]
 
+    @property
+    def verdict(self) -> str:
+        if self.severity_assessment in ("malicious", "suspicious"):
+            return "true_positive"
+        if self.severity_assessment == "benign":
+            return "benign"
+        return "pending"
+
     def to_dict(self) -> dict[str, Any]:
         return {
+            "verdict": self.verdict,
             "severity_assessment": self.severity_assessment,
-            "confidence": self.confidence,
+            "confidence": round(self.confidence * 100),
+            "reasoning": self.summary,
             "mitre_technique": self.mitre_technique,
             "mitre_tactic": self.mitre_tactic,
-            "summary": self.summary,
             "recommended_action": self.recommended_action,
             "indicators": self.indicators,
         }

@@ -19,32 +19,15 @@ _BASE = f"{settings.API_PREFIX}/installer"
 
 
 @pytest_asyncio.fixture
-async def setup(client: AsyncClient) -> dict[str, Any]:
-    """Register a user, create a tenant, return full auth headers."""
-    reg = await client.post(
-        f"{settings.API_PREFIX}/auth/register",
-        json={
-            "email": "installer-owner@example.com",
-            "password": "TestPass1!",
-            "full_name": "Owner",
-        },
-    )
-    assert reg.status_code == 201
-    token = reg.json()["data"]["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+async def setup(client: AsyncClient, db_session: AsyncSession) -> dict[str, Any]:
+    """Register a verified user, create a tenant, return full auth headers."""
+    from tests.conftest import setup_verified_user_and_tenant
 
-    tenant_resp = await client.post(
-        f"{settings.API_PREFIX}/tenants",
-        json={"name": "Installer Corp", "slug": "installer-corp"},
-        headers=headers,
-    )
-    assert tenant_resp.status_code == 201
-    tenant_id = tenant_resp.json()["data"]["id"]
-
+    data = await setup_verified_user_and_tenant(client, db_session, prefix="installer")
     return {
-        "headers": {**headers, "X-Tenant-ID": tenant_id},
-        "tenant_id": tenant_id,
-        "token": token,
+        "headers": data["headers"],
+        "tenant_id": data["tenant_id"],
+        "token": data["token"],
     }
 
 

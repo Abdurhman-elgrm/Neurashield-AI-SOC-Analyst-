@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.events.schemas import (
@@ -23,31 +24,19 @@ from app.events.schemas import (
     EventSearchResponse,
     TimelineResponse,
 )
+from tests.conftest import setup_verified_user_and_tenant
 
 # ─── Fixture: authenticated tenant member ─────────────────────────────────────
 
 
 @pytest_asyncio.fixture
-async def auth_member(client: AsyncClient) -> dict[str, Any]:
-    reg = await client.post(
-        f"{settings.API_PREFIX}/auth/register",
-        json={"email": "explorer@example.com", "password": "TestPass1!", "full_name": "Explorer"},
-    )
-    assert reg.status_code == 201
-    token = reg.json()["data"]["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    tenant_resp = await client.post(
-        f"{settings.API_PREFIX}/tenants",
-        json={"name": "ACME SOC", "slug": "acme-soc"},
-        headers=headers,
-    )
-    assert tenant_resp.status_code == 201
-    tenant_id = tenant_resp.json()["data"]["id"]
-
+async def auth_member(
+    client: AsyncClient, db_session: AsyncSession
+) -> dict[str, Any]:
+    data = await setup_verified_user_and_tenant(client, db_session, prefix="explorer")
     return {
-        "headers": {**headers, "X-Tenant-ID": tenant_id},
-        "tenant_id": tenant_id,
+        "headers": data["headers"],
+        "tenant_id": data["tenant_id"],
     }
 
 

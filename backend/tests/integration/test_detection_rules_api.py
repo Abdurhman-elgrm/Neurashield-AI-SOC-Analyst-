@@ -7,26 +7,15 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from tests.conftest import setup_verified_user_and_tenant
 
 
 @pytest_asyncio.fixture
-async def setup(client: AsyncClient) -> dict[str, Any]:
-    reg = await client.post(
-        f"{settings.API_PREFIX}/auth/register",
-        json={"email": "analyst@example.com", "password": "TestPass1!", "full_name": "Analyst"},
-    )
-    token = reg.json()["data"]["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    tenant_resp = await client.post(
-        f"{settings.API_PREFIX}/tenants",
-        json={"name": "Corp", "slug": "corp"},
-        headers=headers,
-    )
-    tenant_id = tenant_resp.json()["data"]["id"]
-    return {"headers": {**headers, "X-Tenant-ID": tenant_id}}
+async def setup(client: AsyncClient, db_session: AsyncSession) -> dict[str, Any]:
+    return await setup_verified_user_and_tenant(client, db_session, prefix="rules")
 
 
 _PATTERN_RULE = {

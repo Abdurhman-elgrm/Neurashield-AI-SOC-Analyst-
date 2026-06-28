@@ -8,18 +8,26 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.alert import Alert, AlertSeverity, AlertStatus
+from app.models.user import User
 
 
 @pytest_asyncio.fixture
 async def setup(client: AsyncClient, db_session: AsyncSession) -> dict[str, Any]:
     reg = await client.post(
         f"{settings.API_PREFIX}/auth/register",
-        json={"email": "soc@example.com", "password": "TestPass1!", "full_name": "SOC"},
+        json={"email": "soc@example.com", "password": "SocTestPass1!Secure", "full_name": "SOC"},
     )
+    assert reg.status_code == 201, reg.text
+    # Bypass email verification gate so tenant creation and alerts endpoints work
+    await db_session.execute(
+        update(User).where(User.email == "soc@example.com").values(email_verified=True)
+    )
+    await db_session.flush()
     token = reg.json()["data"]["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     tenant_resp = await client.post(

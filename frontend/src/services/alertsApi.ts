@@ -47,13 +47,25 @@ function _adaptMitre(raw: Record<string, any>): MitreAttack | undefined {
   };
 }
 
- 
+
+function _severityToVerdict(s: string | undefined): "true_positive" | "benign" | "pending" {
+  if (s === "malicious" || s === "suspicious") return "true_positive";
+  if (s === "benign") return "benign";
+  return "pending";
+}
+
 function _adaptAiVerdict(ai: Record<string, any> | null | undefined) {
   if (!ai) return undefined;
+  // New format has `verdict`; old stored records only have `severity_assessment`
+  const verdict = (ai.verdict ?? _severityToVerdict(ai.severity_assessment)) as
+    "true_positive" | "false_positive" | "benign" | "pending";
+  // New format stores confidence as 0-100; old format stored 0-1
+  const rawConf = Number(ai.confidence ?? ai.confidence_score ?? 0);
+  const confidence = rawConf <= 1 ? Math.round(rawConf * 100) : rawConf;
   return {
-    verdict:    (ai.verdict ?? "pending") as "true_positive" | "false_positive" | "benign" | "pending",
-    confidence: Number(ai.confidence ?? ai.confidence_score ?? 0),
-    reasoning:  ai.reasoning ?? ai.explanation ?? undefined,
+    verdict,
+    confidence,
+    reasoning:  ai.reasoning ?? ai.explanation ?? ai.summary ?? undefined,
     analyzedAt: ai.analyzed_at ?? ai.analyzedAt ?? undefined,
   };
 }

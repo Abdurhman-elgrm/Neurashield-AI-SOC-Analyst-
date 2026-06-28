@@ -7,30 +7,18 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from tests.conftest import setup_verified_user_and_tenant
 
 
 @pytest_asyncio.fixture
-async def tenant_and_member(client: AsyncClient) -> dict[str, Any]:
-    """Creates a user, logs in, creates a tenant, returns auth headers + tenant_id."""
-    reg = await client.post(
-        f"{settings.API_PREFIX}/auth/register",
-        json={"email": "owner@example.com", "password": "TestPass1!", "full_name": "Owner"},
-    )
-    assert reg.status_code == 201
-    token = reg.json()["data"]["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    tenant_resp = await client.post(
-        f"{settings.API_PREFIX}/tenants",
-        json={"name": "Acme Corp", "slug": "acme"},
-        headers=headers,
-    )
-    assert tenant_resp.status_code == 201
-    tenant_id = tenant_resp.json()["data"]["id"]
-
-    return {"headers": {**headers, "X-Tenant-ID": tenant_id}, "tenant_id": tenant_id}
+async def tenant_and_member(
+    client: AsyncClient, db_session: AsyncSession
+) -> dict[str, Any]:
+    """Creates a verified user, creates a tenant, returns auth headers + tenant_id."""
+    return await setup_verified_user_and_tenant(client, db_session, prefix="agents")
 
 
 @pytest.mark.asyncio

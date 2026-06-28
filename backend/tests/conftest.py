@@ -37,6 +37,10 @@ def _replace_jsonb(target, connection, **kw):
             for col in table.columns:
                 if isinstance(col.type, JSONB):
                     col.type = JSON()
+                    # PostgreSQL-specific server_default (e.g. '{}'::jsonb) is
+                    # not valid SQLite syntax — clear it so create_all succeeds.
+                    # Python-side `default=` still applies for inserts.
+                    col.server_default = None
 
 
 # ─── Test database ────────────────────────────────────────────────────────────
@@ -139,23 +143,90 @@ async def client(db_session: AsyncSession, mock_redis: Any) -> AsyncGenerator[As
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 
+async def setup_verified_user_and_tenant(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    *,
+    prefix: str = "test",
+) -> dict[str, Any]:
+    """
+    Register a user with a valid password, verify their email in-process
+    (bypassing the email link), and create a tenant.
+
+    Returns a dict with: email, token, headers (with X-Tenant-ID),
+    auth_headers (without X-Tenant-ID), and tenant_id.
+
+    Use this in setup fixtures to avoid EMAIL_NOT_VERIFIED 403 errors.
+    Uses a per-call unique email/slug to prevent 409 conflicts when
+    committed rows persist across function-scoped tests.
+    """
+    import uuid
+
+    from sqlalchemy import update
+
+    from app.models.user import User
+
+    uid = uuid.uuid4().hex[:8]
+    email = f"{prefix}-{uid}@example.com"
+
+    reg = await client.post(
+        f"{settings.API_PREFIX}/auth/register",
+        json={"email": email, "password": "StrongTestPass1!X", "full_name": "Test User"},
+    )
+    assert reg.status_code == 201, f"Register failed: {reg.text}"
+
+    await db_session.execute(
+        update(User).where(User.email == email).values(email_verified=True)
+    )
+    await db_session.flush()
+
+    token = reg.json()["data"]["access_token"]
+    auth_hdrs = {"Authorization": f"Bearer {token}"}
+
+    tenant_resp = await client.post(
+        f"{settings.API_PREFIX}/tenants",
+        json={"name": f"Tenant {uid}", "slug": f"{prefix}-{uid}"},
+        headers=auth_hdrs,
+    )
+    assert tenant_resp.status_code == 201, f"Create tenant failed: {tenant_resp.text}"
+    tenant_id = tenant_resp.json()["data"]["id"]
+
+    return {
+        "email": email,
+        "token": token,
+        "auth_headers": auth_hdrs,
+        "headers": {**auth_hdrs, "X-Tenant-ID": tenant_id},
+        "tenant_id": tenant_id,
+    }
+
+
 @pytest_asyncio.fixture
-async def registered_user(client: AsyncClient) -> dict[str, Any]:
-    """Creates a test user and returns the registration response payload."""
+async def registered_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> dict[str, Any]:
+    """Creates a verified test user and returns the registration response payload."""
+    import uuid
+
+    from sqlalchemy import update
+
+    from app.models.user import User
+
+    uid = uuid.uuid4().hex[:8]
+    email = f"test-{uid}@example.com"
     response = await client.post(
         f"{settings.API_PREFIX}/auth/register",
-        json={
-            "email": "test@example.com",
-            "password": "TestPassword1",
-            "full_name": "Test User",
-        },
+        json={"email": email, "password": "StrongTestPass1!X", "full_name": "Test User"},
     )
     assert response.status_code == 201
+    await db_session.execute(
+        update(User).where(User.email == email).values(email_verified=True)
+    )
+    await db_session.flush()
     return response.json()
 
 
 @pytest_asyncio.fixture
 async def auth_headers(registered_user: dict[str, Any]) -> dict[str, str]:
-    """Returns Authorization headers for an authenticated test user."""
+    """Returns Authorization headers for an authenticated verified test user."""
     token = registered_user["data"]["access_token"]
     return {"Authorization": f"Bearer {token}"}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -224,9 +224,16 @@ class TestRevokeToken:
         db.flush = AsyncMock()
         db.add = MagicMock()
 
-        revoked = await InstallerService.revoke_token(
-            db, token.tenant_id, token.id, revoked_by_id=uuid4(), reason="test"
-        )
+        # AuditService.log uses db.begin_nested() as an async context manager.
+        # AsyncMock.__call__ returns a coroutine, not an async CM, so we patch
+        # the audit call to avoid an unawaited-coroutine warning.
+        with patch(
+            "app.services.installer_service.AuditService.log",
+            new_callable=AsyncMock,
+        ):
+            revoked = await InstallerService.revoke_token(
+                db, token.tenant_id, token.id, revoked_by_id=uuid4(), reason="test"
+            )
         assert revoked.status == InstallerTokenStatus.REVOKED
         assert revoked.revoked_at is not None
 
@@ -255,10 +262,16 @@ class TestRevokeToken:
 class TestExpireOldTokens:
     async def test_returns_count_of_expired_tokens(self):
         db = AsyncMock()
-        fake_result = MagicMock()
-        fake_result.fetchall = MagicMock(return_value=[MagicMock(), MagicMock()])
-        db.execute = AsyncMock(return_value=fake_result)
         db.flush = AsyncMock()
+
+        # expire_old_tokens calls db.execute twice:
+        #   1st → PENDING → EXPIRED  (2 rows)
+        #   2nd → INSTALLING → FAILED (0 rows)
+        expired_result = MagicMock()
+        expired_result.fetchall = MagicMock(return_value=[MagicMock(), MagicMock()])
+        stuck_result = MagicMock()
+        stuck_result.fetchall = MagicMock(return_value=[])
+        db.execute = AsyncMock(side_effect=[expired_result, stuck_result])
 
         count = await InstallerService.expire_old_tokens(db)
         assert count == 2
