@@ -3,13 +3,8 @@ import {
   User, Building2, Key, Users, Bell, Bot,
   Plus, Copy, Check, Trash2, CheckCircle,
   Mail, ChevronDown, ChevronUp, Shield, X, AlertCircle, Lock, Camera, Loader,
-  Zap, ScrollText, Upload, BellRing, BarChart3, Ticket, Gauge, Monitor,
+  Zap, Upload,
 } from 'lucide-react'
-import { NotificationRulesSection } from './NotificationRulesSection'
-import { SeverityThresholdsSection } from './SeverityThresholdsSection'
-import { TicketingConfigSection } from './TicketingConfigSection'
-import { QuotaDashboardSection } from './QuotaDashboardSection'
-import { AuditLogPage } from '../audit-log/AuditLogPage'
 import { ImportPage } from '../import/ImportPage'
 import { Button } from '@/components/ui/Button'
 import { formatRelativeTime } from '@/lib/utils'
@@ -1870,95 +1865,26 @@ function AutomationTab() {
   )
 }
 
-// ─── DisplaySection ───────────────────────────────────────────────────────────
-
-type UIDensity = 'compact' | 'default' | 'comfortable'
-
-const DENSITIES: { value: UIDensity; label: string; description: string }[] = [
-  { value: 'compact',     label: 'Compact',     description: 'More rows, smaller spacing' },
-  { value: 'default',     label: 'Default',     description: 'Balanced density' },
-  { value: 'comfortable', label: 'Comfortable', description: 'Extra breathing room' },
-]
-
-function DisplaySection() {
-  const [density, setDensity] = useState<UIDensity>(() => {
-    return (localStorage.getItem('ui-density') as UIDensity) ?? 'default'
-  })
-
-  const apply = (d: UIDensity) => {
-    setDensity(d)
-    localStorage.setItem('ui-density', d)
-    document.documentElement.setAttribute('data-density', d)
-  }
-
-  return (
-    <div style={{ maxWidth: 480 }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#E8EBF0', marginBottom: 4 }}>Display</div>
-        <div style={{ fontSize: 12, color: '#8B95A7' }}>Adjust the table and list density across all pages.</div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {DENSITIES.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => apply(opt.value)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '12px 16px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
-              background: density === opt.value ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${density === opt.value ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.06)'}`,
-            }}
-          >
-            <div style={{
-              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-              border: `2px solid ${density === opt.value ? '#3B82F6' : '#4A5568'}`,
-              background: density === opt.value ? '#3B82F6' : 'transparent',
-            }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: density === opt.value ? '#93C5FD' : '#C9D0DB' }}>{opt.label}</div>
-              <div style={{ fontSize: 11, color: '#8B95A7', marginTop: 2 }}>{opt.description}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div style={{ padding: '12px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', maxWidth: 420, marginTop: 16 }}>
-        <div style={{ fontSize: 11, color: '#8B95A7', lineHeight: 1.6 }}>
-          Density setting is saved locally and applies immediately across all pages.
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── SettingsPage ─────────────────────────────────────────────────────────────
 
 import type { MemberRole } from '@/types/tenant'
 
 const ALL_TABS = [
   { id: 'profile',              label: 'Profile',             icon: User,       minRole: 'viewer' as MemberRole },
-  { id: 'org',                  label: 'Organization',        icon: Building2,  minRole: 'admin'  as MemberRole },
-  { id: 'api-keys',             label: 'API Keys',            icon: Key,        minRole: 'admin'  as MemberRole },
-  { id: 'members',              label: 'Members',             icon: Users,      minRole: 'viewer' as MemberRole },
-  { id: 'audit-log',            label: 'Audit Log',           icon: ScrollText, minRole: 'admin'  as MemberRole },
-  { id: 'log-import',           label: 'Log Import',          icon: Upload,     minRole: 'admin'  as MemberRole },
   { id: 'notifications',        label: 'Notifications',       icon: Bell,       minRole: 'viewer' as MemberRole },
-  { id: 'notification-rules',   label: 'Alert Routing',       icon: BellRing,   minRole: 'admin'  as MemberRole },
-  { id: 'severity-thresholds',  label: 'Severity Thresholds', icon: BarChart3,  minRole: 'admin'  as MemberRole },
-  { id: 'ticketing',            label: 'Integrations',        icon: Ticket,     minRole: 'admin'  as MemberRole },
-  { id: 'quota',                label: 'Quota & Usage',       icon: Gauge,      minRole: 'admin'  as MemberRole },
+  { id: 'org',                  label: 'Organization',        icon: Building2,  minRole: 'admin'  as MemberRole },
+  { id: 'members',              label: 'Members',             icon: Users,      minRole: 'viewer' as MemberRole },
+  { id: 'api-keys',             label: 'API Keys',            icon: Key,        minRole: 'admin'  as MemberRole },
+  { id: 'log-import',           label: 'Log Import',          icon: Upload,     minRole: 'admin'  as MemberRole },
   { id: 'automation',           label: 'Automation',          icon: Zap,        minRole: 'admin'  as MemberRole },
-  { id: 'display',              label: 'Display',             icon: Monitor,    minRole: 'viewer' as MemberRole },
 ] as const
 
 type TabId = typeof ALL_TABS[number]['id']
 
 const TAB_GROUPS: Array<{ label: string; ids: TabId[] }> = [
-  { label: 'Account',        ids: ['profile', 'notifications', 'display'] },
-  { label: 'Administration', ids: ['org', 'members', 'api-keys', 'audit-log', 'log-import'] },
-  { label: 'Operations',     ids: ['notification-rules', 'severity-thresholds', 'automation'] },
-  { label: 'Platform',       ids: ['ticketing', 'quota'] },
+  { label: 'Account',        ids: ['profile', 'notifications'] },
+  { label: 'Administration', ids: ['org', 'members', 'api-keys', 'log-import'] },
+  { label: 'Operations',     ids: ['automation'] },
 ]
 
 export function SettingsPage() {
@@ -2028,18 +1954,12 @@ export function SettingsPage() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 32px 32px' }}>
         {activeTab === 'profile'       && <ProfileTab       />}
+        {activeTab === 'notifications' && <NotificationsTab />}
         {activeTab === 'org'           && <OrgTab           />}
-        {activeTab === 'api-keys'      && <ApiKeysTab       />}
         {activeTab === 'members'       && <MembersTab       />}
-        {activeTab === 'audit-log'     && <AuditLogPage     />}
+        {activeTab === 'api-keys'      && <ApiKeysTab       />}
         {activeTab === 'log-import'    && <ImportPage embedded />}
-        {activeTab === 'notifications'       && <NotificationsTab        />}
-        {activeTab === 'notification-rules'  && <NotificationRulesSection />}
-        {activeTab === 'severity-thresholds' && <SeverityThresholdsSection />}
-        {activeTab === 'ticketing'           && <TicketingConfigSection   />}
-        {activeTab === 'quota'               && <QuotaDashboardSection    />}
-        {activeTab === 'automation'          && <AutomationTab            />}
-        {activeTab === 'display'             && <DisplaySection           />}
+        {activeTab === 'automation'    && <AutomationTab    />}
       </div>
     </div>
   )
