@@ -19,6 +19,7 @@ interface ChannelResponse {
   type: string;
   enabled: boolean;
   min_severity: string;
+  config?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -63,12 +64,13 @@ const PLACEHOLDER: Record<Channel, string> = {
 // Map backend ChannelResponse → frontend NotificationRule
 function adaptChannel(ch: ChannelResponse): NotificationRule {
    
-  const configRaw = (ch as any).config ?? {};
+  const configRaw = ch.config ?? {};
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
   let destination = "";
-  if (ch.type === "slack" || ch.type === "teams") destination = configRaw.webhook_url ?? "";
-  else if (ch.type === "webhook")    destination = configRaw.url ?? "";
-  else if (ch.type === "pagerduty")  destination = configRaw.integration_key ?? configRaw.routing_key ?? "";
-  else if (ch.type === "email")      destination = Array.isArray(configRaw.recipients) ? configRaw.recipients[0] ?? "" : configRaw.recipients ?? "";
+  if (ch.type === "slack" || ch.type === "teams") destination = str(configRaw.webhook_url);
+  else if (ch.type === "webhook")    destination = str(configRaw.url);
+  else if (ch.type === "pagerduty")  destination = str(configRaw.integration_key) || str(configRaw.routing_key);
+  else if (ch.type === "email")      destination = Array.isArray(configRaw.recipients) ? str(configRaw.recipients[0]) : str(configRaw.recipients);
   return {
     id:           ch.id,
     name:         ch.name,

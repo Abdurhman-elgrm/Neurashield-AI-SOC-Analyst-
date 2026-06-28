@@ -16,15 +16,8 @@ export const installerApi = {
     limit?: number;
     status?: string;
   }): Promise<InstallerTokensPage> => {
-    try {
-      const resp = await apiClient.get<InstallerTokensPage>("/installer/tokens", {
-        params,
-      });
-      return resp.data;
-    } catch (error) {
-      console.error("[installerApi.list] failed:", error);
-      throw error;
-    }
+    const resp = await apiClient.get<InstallerTokensPage>("/installer/tokens", { params });
+    return resp.data;
   },
 
   getStatus: (id: string) =>

@@ -50,6 +50,9 @@ export interface InvestigationDetail {
   updated_at: string
   resolved_at?: string | null
   closed_at?: string | null
+  triaged_at?: string | null
+  investigating_at?: string | null
+  contained_at?: string | null
   technical_summary: string
   attack_progression: string[]
   recommended_actions: string[]

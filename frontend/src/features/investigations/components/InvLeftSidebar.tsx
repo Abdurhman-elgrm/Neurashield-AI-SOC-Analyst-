@@ -32,11 +32,11 @@ function StatusHistoryPanel({ inv }: { inv: InvestigationDetail }) {
     { status: "active", at: inv.created_at,  label: "Opened"  },
   ]
 
-  if ((inv as any).triaged_at)       events.push({ status: "triaged",       at: (inv as any).triaged_at,       label: "Triaged"       })
-  if ((inv as any).investigating_at) events.push({ status: "investigating",  at: (inv as any).investigating_at, label: "Investigating"  })
-  if ((inv as any).contained_at)     events.push({ status: "contained",      at: (inv as any).contained_at,     label: "Contained"     })
-  if (inv.resolved_at)               events.push({ status: "resolved",       at: inv.resolved_at,               label: "Resolved"      })
-  if ((inv as any).closed_at)        events.push({ status: "closed",         at: (inv as any).closed_at,        label: "Closed"        })
+  if (inv.triaged_at)       events.push({ status: "triaged",       at: inv.triaged_at,       label: "Triaged"       })
+  if (inv.investigating_at) events.push({ status: "investigating",  at: inv.investigating_at, label: "Investigating"  })
+  if (inv.contained_at)     events.push({ status: "contained",      at: inv.contained_at,     label: "Contained"     })
+  if (inv.resolved_at)      events.push({ status: "resolved",       at: inv.resolved_at,      label: "Resolved"      })
+  if (inv.closed_at)        events.push({ status: "closed",         at: inv.closed_at,        label: "Closed"        })
 
   let currentIdx = 0
   for (let i = events.length - 1; i >= 0; i--) {

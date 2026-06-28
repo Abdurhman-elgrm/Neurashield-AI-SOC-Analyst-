@@ -58,8 +58,6 @@ export function GenerateTokenModal({ open, onClose, onSuccess }: Props) {
       resetForm();
       onSuccess(result);
     } catch (err: unknown) {
-      console.error("[GenerateToken] error:", err);
-
       const e = err as {
         response?: {
           data?: { error?: { message?: string }; detail?: string };

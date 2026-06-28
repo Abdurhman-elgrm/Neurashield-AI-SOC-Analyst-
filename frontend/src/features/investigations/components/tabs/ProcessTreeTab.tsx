@@ -21,7 +21,7 @@ export function ProcessTreeTab({ id, isActive }: Props) {
       apiClient
         .get<{ data: ProcessTreeResponse }>(`/investigations/${id}/process-tree`)
          
-        .then((r) => (r.data as any).data ?? r.data)
+        .then((r) => r.data.data ?? { roots: [] as ProcessNode[] })
         .catch(() => ({ roots: [] as ProcessNode[] })),
     enabled: isActive,
     staleTime: 120_000,

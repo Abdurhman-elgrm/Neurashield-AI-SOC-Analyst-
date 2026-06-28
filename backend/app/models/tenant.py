@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
@@ -27,6 +27,11 @@ class Tenant(Base, TimestampMixin, SoftDeleteMixin):
     # ─── Data retention policies ───────────────────────────────────────────────
     event_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     alert_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
+
+    # ─── Tenant-level configuration (severity thresholds, future settings) ────
+    settings_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
 
     # ─── Relationships ────────────────────────────────────────────────────────
     members: Mapped[list[TenantMember]] = relationship(  # type: ignore[name-defined]

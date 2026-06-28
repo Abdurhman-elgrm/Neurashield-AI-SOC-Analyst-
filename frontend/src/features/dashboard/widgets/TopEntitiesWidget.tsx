@@ -56,9 +56,8 @@ export function TopEntitiesWidget({ timeRange }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", "top-entities", timeRange],
     queryFn: () =>
-      apiClient.get(`/dashboard/top-entities?timeRange=${timeRange}`)
-         
-        .then((r) => ((r.data as any).data ?? r.data) as TopEntitiesData)
+      apiClient.get<{ data: TopEntitiesData }>(`/dashboard/top-entities?timeRange=${timeRange}`)
+        .then((r) => r.data.data ?? empty)
         .catch(() => empty),
     staleTime: 120_000,
     placeholderData: empty,

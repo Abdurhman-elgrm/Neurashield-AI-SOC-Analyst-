@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { listInvestigations } from "./api/investigationsApi"
-import type { InvestigationListItem } from "./api/investigationsApi"
+import type { InvestigationListItem, InvestigationListResponse } from "./api/investigationsApi"
 import { CreateInvestigationModal } from "./components/CreateInvestigationModal"
 import { GraphPage } from "../graph/GraphPage"
 
@@ -495,7 +495,8 @@ export function InvestigationsPage() {
     retry: 1,
   })
 
-  const rawItems: InvestigationListItem[] = (data as any)?.data ?? []
+  const typedData = data as InvestigationListResponse | undefined
+  const rawItems: InvestigationListItem[] = typedData?.data ?? []
 
   // Client-side post-filtering for quick filters that need computed fields
   const items = quickFilter === "unassigned"
@@ -504,7 +505,7 @@ export function InvestigationsPage() {
     ? rawItems.filter(i => getSLAStatus(i).breached)
     : rawItems
 
-  const total: number = (data as any)?.pagination?.total ?? rawItems.length
+  const total: number = typedData?.total ?? rawItems.length
   const hasFilters = !!(titleSearch || minScore !== "" || fromTs || quickFilter !== "all")
 
   const PAGE_TABS = [

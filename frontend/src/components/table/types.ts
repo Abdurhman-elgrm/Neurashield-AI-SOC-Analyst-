@@ -1,4 +1,12 @@
-import type { ColumnDef, SortingState, VisibilityState, RowSelectionState, PaginationState, ColumnFiltersState } from "@tanstack/react-table";
+import type {
+  ColumnDef,
+  SortingState,
+  VisibilityState,
+  RowSelectionState,
+  PaginationState,
+  ColumnFiltersState,
+  OnChangeFn,
+} from "@tanstack/react-table";
 
 export type { ColumnDef, SortingState, VisibilityState, RowSelectionState, PaginationState, ColumnFiltersState };
 
@@ -8,22 +16,22 @@ export interface DataTableProps<TData> {
   // Pagination
   pageCount?: number;           // total pages (server-side)
   pagination?: PaginationState;
-  onPaginationChange?: (p: PaginationState) => void;
+  onPaginationChange?: OnChangeFn<PaginationState>;
   manualPagination?: boolean;
   // Sorting
   sorting?: SortingState;
-  onSortingChange?: (s: SortingState) => void;
+  onSortingChange?: OnChangeFn<SortingState>;
   manualSorting?: boolean;
   // Column filters
   columnFilters?: ColumnFiltersState;
-  onColumnFiltersChange?: (f: ColumnFiltersState) => void;
+  onColumnFiltersChange?: OnChangeFn<ColumnFiltersState>;
   // Row selection
   rowSelection?: RowSelectionState;
-  onRowSelectionChange?: (s: RowSelectionState) => void;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
   enableRowSelection?: boolean;
   // Column visibility
   columnVisibility?: VisibilityState;
-  onColumnVisibilityChange?: (v: VisibilityState) => void;
+  onColumnVisibilityChange?: OnChangeFn<VisibilityState>;
   // Features
   enableVirtualization?: boolean;
   stickyHeader?: boolean;

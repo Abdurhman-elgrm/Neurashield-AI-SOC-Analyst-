@@ -9,7 +9,8 @@ from uuid import uuid4
 import structlog
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from app.core.config import settings
 
@@ -182,7 +183,7 @@ def decode_access_token(token: str) -> TokenPayload:
         return TokenPayload(sub=sub, token_type="access", email_verified=email_verified)
     except ExpiredSignatureError:
         raise UnauthorizedError("Token has expired") from None
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         logger.debug("jwt_decode_failed", error=str(exc))
         raise UnauthorizedError("Invalid token") from None
 
@@ -206,6 +207,6 @@ def decode_refresh_token(token: str) -> TokenPayload:
         return TokenPayload(sub=sub, token_type="refresh", jti=jti)
     except ExpiredSignatureError:
         raise UnauthorizedError("Refresh token has expired") from None
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         logger.debug("refresh_token_decode_failed", error=str(exc))
         raise UnauthorizedError("Invalid refresh token") from None

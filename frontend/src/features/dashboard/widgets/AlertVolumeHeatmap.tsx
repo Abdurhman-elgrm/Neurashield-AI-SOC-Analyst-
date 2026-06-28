@@ -35,9 +35,8 @@ export function AlertVolumeHeatmap({ timeRange }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", "heatmap", timeRange],
     queryFn: () =>
-      apiClient.get(`/dashboard/alert-heatmap?timeRange=${timeRange}`)
-         
-        .then((r) => ((r.data as any).data ?? r.data) as HeatmapCell[])
+      apiClient.get<{ data: HeatmapCell[] }>(`/dashboard/alert-heatmap?timeRange=${timeRange}`)
+        .then((r) => r.data.data ?? [])
         .catch(() => [] as HeatmapCell[]),
     staleTime: 300_000,
     placeholderData: [] as HeatmapCell[],

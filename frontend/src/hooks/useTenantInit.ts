@@ -40,8 +40,7 @@ export function useTenantInit() {
         setStoreTenant(tenant, role)
         setAuthTenant(tenant.id)
       })
-      .catch((err) => {
-        console.warn('[useTenantInit] fetch failed, will retry:', err)
+      .catch(() => {
         running.current = false
         setTimeout(() => setRetryKey((k) => k + 1), 3000)
       })

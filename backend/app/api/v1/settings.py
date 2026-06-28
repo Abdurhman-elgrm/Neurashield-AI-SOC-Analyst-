@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,6 +14,8 @@ from app.rbac.permissions import Permission
 from app.schemas.common import APIResponse
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
+
+_THRESHOLDS_KEY = "severity_thresholds"
 
 
 class SeverityThresholds(BaseModel):
@@ -32,8 +34,15 @@ class SeverityThresholds(BaseModel):
 )
 async def get_severity_thresholds(
     member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[SeverityThresholds]:
-    return APIResponse.ok(SeverityThresholds())
+    from app.models.tenant import Tenant
+    from app.models.tenant_member import TenantMember
+
+    m: TenantMember = member  # type: ignore[assignment]
+    tenant = await db.get(Tenant, m.tenant_id)
+    raw: dict = (tenant.settings_json or {}).get(_THRESHOLDS_KEY, {}) if tenant else {}
+    return APIResponse.ok(SeverityThresholds(**raw))
 
 
 @router.put(
@@ -44,8 +53,19 @@ async def get_severity_thresholds(
 async def put_severity_thresholds(
     payload: SeverityThresholds,
     member: Annotated[object, require_permission(Permission.TENANT_SETTINGS)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> APIResponse[SeverityThresholds]:
-    # TODO: persist to tenant settings JSON column when migration is available
+    from app.models.tenant import Tenant
+    from app.models.tenant_member import TenantMember
+
+    m: TenantMember = member  # type: ignore[assignment]
+    tenant = await db.get(Tenant, m.tenant_id)
+    if tenant is not None:
+        merged = {**(tenant.settings_json or {}), _THRESHOLDS_KEY: payload.model_dump()}
+        await db.execute(
+            update(Tenant).where(Tenant.id == m.tenant_id).values(settings_json=merged)
+        )
+        await db.commit()
     return APIResponse.ok(payload)
 
 

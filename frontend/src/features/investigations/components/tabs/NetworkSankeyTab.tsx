@@ -150,7 +150,7 @@ export function NetworkSankeyTab({ id, isActive }: Props) {
       apiClient
         .get<{ data: NetworkFlowResponse }>(`/investigations/${id}/network-flows`)
          
-        .then((r) => (r.data as any).data ?? r.data)
+        .then((r) => r.data.data ?? { flows: [] as NetworkFlow[], start_time: "", end_time: "" })
         .catch(() => ({ flows: [] as NetworkFlow[], start_time: null, end_time: null })),
     enabled: isActive,
     staleTime: 120_000,

@@ -58,9 +58,8 @@ export function MTTRTrendChart({ timeRange }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard", "mttr-trend"],
     queryFn: () =>
-      apiClient.get("/dashboard/mttr-trend")
-         
-        .then((r) => ((r.data as any).data ?? r.data) as MTTRTrendPoint[])
+      apiClient.get<{ data: MTTRTrendPoint[] }>("/dashboard/mttr-trend")
+        .then((r) => r.data.data ?? [])
         .catch(() => [] as MTTRTrendPoint[]),
     staleTime: 300_000,
     placeholderData: [] as MTTRTrendPoint[],
