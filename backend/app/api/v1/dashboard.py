@@ -295,17 +295,23 @@ async def get_dashboard_summary(
     period_start, now, _ = _window(time_range)
     prev_start = period_start - (now - period_start)  # equal-length previous period
 
-    # ── Alerts: current + previous period ────────────────────────────────────
+    # ── Alerts ────────────────────────────────────────────────────────────────
+    # total/critical/high count ALL non-closed alerts so the KPI reflects the
+    # analyst's full current workload, not just alerts created in the period.
+    # delta is based on NEW alerts created in the period vs the previous period
+    # so the trend arrow still reflects recent activity.
     alert_row = (
         await db.execute(
             text("""
         SELECT
-            COUNT(*) FILTER (WHERE created_at >= :ps)                       AS total,
-            COUNT(*) FILTER (WHERE created_at >= :ps AND status = 'open')   AS open,
-            COUNT(*) FILTER (WHERE created_at >= :ps AND severity = 'critical') AS critical,
-            COUNT(*) FILTER (WHERE created_at >= :ps AND severity = 'high') AS high,
-            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps) AS prev_total,
-            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps AND severity = 'critical') AS prev_critical
+            COUNT(*) FILTER (WHERE status NOT IN ('closed','false_positive'))                              AS total,
+            COUNT(*) FILTER (WHERE status = 'open')                                                        AS open,
+            COUNT(*) FILTER (WHERE severity = 'critical' AND status NOT IN ('closed','false_positive'))    AS critical,
+            COUNT(*) FILTER (WHERE severity = 'high'     AND status NOT IN ('closed','false_positive'))    AS high,
+            COUNT(*) FILTER (WHERE created_at >= :ps)                                                      AS new_curr,
+            COUNT(*) FILTER (WHERE created_at >= :prev_ps AND created_at < :ps)                            AS new_prev,
+            COUNT(*) FILTER (WHERE severity = 'critical' AND created_at >= :ps)                            AS crit_curr,
+            COUNT(*) FILTER (WHERE severity = 'critical' AND created_at >= :prev_ps AND created_at < :ps)  AS crit_prev
         FROM alerts
         WHERE tenant_id = CAST(:tid AS uuid)
           AND deleted_at IS NULL
@@ -314,18 +320,13 @@ async def get_dashboard_summary(
         )
     ).fetchone()
 
-    curr_total = alert_row.total or 0
-    curr_critical = alert_row.critical or 0
-    prev_total = alert_row.prev_total or 0
-    prev_critical = alert_row.prev_critical or 0
-
     alerts = AlertKPI(
-        total=curr_total,
+        total=alert_row.total or 0,
         open=alert_row.open or 0,
-        critical=curr_critical,
+        critical=alert_row.critical or 0,
         high=alert_row.high or 0,
-        delta24h=_pct_delta(curr_total, prev_total),
-        criticalDelta24h=_pct_delta(curr_critical, prev_critical),
+        delta24h=_pct_delta(alert_row.new_curr or 0, alert_row.new_prev or 0),
+        criticalDelta24h=_pct_delta(alert_row.crit_curr or 0, alert_row.crit_prev or 0),
     )
 
     # ── Investigations ────────────────────────────────────────────────────────
