@@ -204,31 +204,49 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 300,
     },
     {
-        "name": "Account Lockout Detected (Event 4740)",
+        "name": "Account Lockout Storm - Password Spray Indicator (Event 4740)",
         "description": (
-            "A Windows user account was locked out after repeated authentication "
-            "failures.  Frequent lockouts indicate a brute force campaign."
+            "Three or more distinct account lockouts occur on the same host within "
+            "10 minutes, indicating automated password spraying or a credential "
+            "stuffing campaign.  Single lockout events — the most common false "
+            "positive, triggered when a user simply forgets their password — are "
+            "excluded entirely by the threshold requirement."
         ),
-        "rule_type": "pattern",
-        "severity": "medium",
-        "conditions": [
-            {"field": "raw.windows_event_id", "op": "eq", "value": "4740"},
-        ],
+        "rule_type": "threshold",
+        "severity": "high",
+        "conditions": {
+            "field": "user.name",
+            "group_by": "hostname",
+            "threshold": 3,
+            "window_secs": 600,
+            "filters": [
+                {"field": "raw.windows_event_id", "op": "eq", "value": "4740"},
+            ],
+        },
         "mitre_tactics": ["Credential Access"],
         "mitre_techniques": ["T1110"],
         "suppression_window_secs": 600,
     },
     {
-        "name": "Kerberoasting Indicator - Kerberos Pre-Auth Failure (Event 4771)",
+        "name": "Kerberoasting / AS-REP Roast - Pre-Auth Failure Burst (Event 4771)",
         "description": (
-            "Kerberos pre-authentication failure (4771) can indicate Kerberoasting, "
-            "AS-REP roasting, or password spraying against Active Directory accounts."
+            "Ten or more Kerberos pre-authentication failures on the same host within "
+            "5 minutes indicate AS-REP roasting, Kerberoasting, or password spraying "
+            "against Active Directory accounts.  Single failures (mistyped password, "
+            "expired certificate, clock skew) are excluded — they are the dominant "
+            "false-positive source for this event class."
         ),
-        "rule_type": "pattern",
-        "severity": "medium",
-        "conditions": [
-            {"field": "raw.windows_event_id", "op": "eq", "value": "4771"},
-        ],
+        "rule_type": "threshold",
+        "severity": "high",
+        "conditions": {
+            "field": "hostname",
+            "group_by": "hostname",
+            "threshold": 10,
+            "window_secs": 300,
+            "filters": [
+                {"field": "raw.windows_event_id", "op": "eq", "value": "4771"},
+            ],
+        },
         "mitre_tactics": ["Credential Access"],
         "mitre_techniques": ["T1558.003"],
         "suppression_window_secs": 300,
@@ -257,10 +275,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 300,
     },
     {
-        "name": "Linux sudo Privilege Escalation",
+        "name": "Linux sudo - Shell or Interpreter Privilege Escalation",
         "description": (
-            "A user executed a command as root via sudo.  Expected for administrators; "
-            "review when triggered by service accounts or at unusual times."
+            "sudo executed a shell binary, scripting interpreter, or dual-use network "
+            "tool as root.  Generic administrative commands (apt, systemctl, service, "
+            "journalctl, etc.) are NOT matched — they account for nearly all false "
+            "positives from this event class and carry no attack signal.  "
+            "Fires only when the sudo COMMAND field targets a shell (/bash, /sh, /zsh), "
+            "a scripting runtime (python, perl, ruby, node), a network utility (nc, "
+            "curl, wget, socat), sensitive file editing (vi on passwd/shadow/sudoers), "
+            "or kernel module manipulation (insmod, modprobe)."
         ),
         "rule_type": "pattern",
         "severity": "medium",
@@ -268,10 +292,45 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
             {"field": "category", "op": "eq", "value": "auth"},
             {"field": "raw.program", "op": "eq", "value": "sudo"},
             {"field": "raw.outcome", "op": "eq", "value": "success"},
+            {
+                "op": "any_of",
+                "conditions": [
+                    # Interactive or spawned shell as root
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"COMMAND=\S*(/bash|/sh\b|/dash|/zsh|/ksh|/fish)\b",
+                    },
+                    # Script interpreter execution
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"COMMAND=\S*(python[23]?|ruby|perl|node)\b",
+                    },
+                    # Network / C2 utility invoked as root
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"COMMAND=\S*(nc\b|ncat|netcat|curl|wget|socat)\b",
+                    },
+                    # Editing privileged credential files via root
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"COMMAND=\S*(vim|nano|vi|emacs)\b.*(passwd|shadow|sudoers|crontab)",
+                    },
+                    # Kernel module manipulation (rootkit installation vector)
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"COMMAND=\S*(insmod|rmmod|modprobe)\b",
+                    },
+                ],
+            },
         ],
         "mitre_tactics": ["Privilege Escalation"],
         "mitre_techniques": ["T1548.003"],
-        "suppression_window_secs": 600,
+        "suppression_window_secs": 300,
     },
     # ═══════════════════════════════════════════════════════════════════════
     #  DEFENSE EVASION
@@ -539,24 +598,48 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     #  PERSISTENCE
     # ═══════════════════════════════════════════════════════════════════════
     {
-        "name": "Scheduled Task Created (Event 4698)",
+        "name": "Scheduled Task Created via Suspicious Binary or Location (Event 4698)",
         "description": (
-            "A new scheduled task was registered.  Scheduled tasks are the most "
-            "common Windows persistence mechanism used by attackers. "
-            "The SOCAnalystAgent task created by bootstrap enrollment is excluded "
-            "to avoid a false positive on every new agent installation."
+            "A new scheduled task was registered whose action runs from a user-writable "
+            "or suspicious location (Temp, AppData, Public, Downloads), invokes a LOLBin "
+            "(cmd.exe, powershell.exe, wscript.exe, mshta.exe) with execution flags, "
+            "contains a base64-encoded command, or targets a UNC network path.  "
+            "Broad 'any new task' rules are a major false-positive source — Windows "
+            "Update, driver packages, and virtually every enterprise software installer "
+            "creates scheduled tasks.  This rule requires at least one attacker-specific "
+            "characteristic before firing."
         ),
         "rule_type": "pattern",
-        "severity": "medium",
+        "severity": "high",
         "conditions": [
             {"field": "raw.windows_event_id", "op": "eq", "value": "4698"},
             {
-                "op": "none_of",
+                "op": "any_of",
                 "conditions": [
-                    {"field": "raw.message", "op": "contains", "value": "SOCAnalystAgent"},
-                    {"field": "raw.message", "op": "contains", "value": "GoogleUpdate"},
-                    {"field": "raw.message", "op": "contains", "value": "MicrosoftEdgeUpdate"},
-                    {"field": "raw.message", "op": "contains", "value": "OneDrive"},
+                    # Task binary placed in user-writable staging directories
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"\\Temp\\|\\AppData\\Local\\Temp\\|\\Users\\Public\\|\\Downloads\\",
+                    },
+                    # LOLBin invoked with execution or obfuscation flags
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"(cmd\.exe|powershell\.exe|wscript\.exe|cscript\.exe|mshta\.exe)\s+(/c\s|/k\s|-enc\s|-Command\s)",
+                    },
+                    # Base64-encoded payload in task XML definition
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"-[Ee]nc[a-z]*\s+[A-Za-z0-9+/]{20,}",
+                    },
+                    # Task action points to a UNC (network) path — always suspicious
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"<Command>\s*\\\\[^\\]",
+                    },
                 ],
             },
         ],
@@ -565,15 +648,50 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 3600,
     },
     {
-        "name": "New Service Installed (Event 7045)",
+        "name": "New Service Installed from Suspicious Path or Binary (Event 7045)",
         "description": (
-            "A new Windows service was installed.  Services start automatically and "
-            "run with elevated privileges, making them ideal for persistence."
+            "A new Windows service was installed with a binary path in a user-writable "
+            "or non-standard location (Temp, AppData, Users\\Public, Downloads, UNC "
+            "share), or the service binary is a shell / script interpreter / LOLBin "
+            "(cmd.exe, PowerShell, wscript.exe, mshta.exe).  "
+            "Services installed from System32, Program Files, and vendor-signed paths "
+            "are intentionally excluded — they account for the overwhelming majority "
+            "of false positives from legitimate software and driver installations.  "
+            "DLL-based service hijacking is covered by the companion "
+            "'Persistence - Suspicious Service DLL Registration' rule."
         ),
         "rule_type": "pattern",
         "severity": "high",
         "conditions": [
             {"field": "raw.windows_event_id", "op": "eq", "value": "7045"},
+            {
+                "op": "any_of",
+                "conditions": [
+                    # Service binary in user-writable staging paths
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Service File Name:.*\\Temp\\|Service File Name:.*\\AppData\\",
+                    },
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Service File Name:.*\\Users\\Public\\|Service File Name:.*\\Downloads\\",
+                    },
+                    # Service running from a UNC / network path (always suspicious)
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Service File Name:\s+\\\\[^\\]",
+                    },
+                    # LOLBin or script interpreter used directly as service binary
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"Service File Name:.*(cmd\.exe|powershell\.exe|wscript\.exe|cscript\.exe|mshta\.exe)",
+                    },
+                ],
+            },
         ],
         "mitre_tactics": ["Persistence"],
         "mitre_techniques": ["T1543.003"],
@@ -711,15 +829,46 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 3600,
     },
     {
-        "name": "Kernel Driver Loaded - Sysmon Event 6",
+        "name": "Kernel Driver Loaded - Unsigned or Suspicious Driver (Sysmon Event 6)",
         "description": (
-            "A device driver was loaded (Sysmon Event 6).  Unsigned or unusual "
-            "drivers may indicate a rootkit, BYOVD exploit, or vulnerable driver abuse."
+            "A kernel driver was loaded (Sysmon Event 6) that is unsigned, has an "
+            "invalid / unavailable signature, or was loaded from outside the standard "
+            "Windows driver directories.  Unsigned drivers are a high-confidence "
+            "indicator of rootkits, BYOVD (Bring Your Own Vulnerable Driver) exploits, "
+            "or EDR-blinding malware.  The thousands of legitimate signed drivers "
+            "loaded at every system boot are excluded via the signature filter — the "
+            "original unconditional Event 6 rule was the single largest source of "
+            "alert noise in environments with Sysmon deployed."
         ),
         "rule_type": "pattern",
         "severity": "high",
         "conditions": [
             {"field": "raw.windows_event_id", "op": "eq", "value": "6"},
+            {
+                "op": "any_of",
+                "conditions": [
+                    # Sysmon explicitly reports the driver as unsigned
+                    {"field": "raw.message", "op": "contains", "value": "Signed: false"},
+                    # Signature status is not 'Valid' (Invalid, Unavailable, Error, Expired)
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"SignatureStatus:\s+(Invalid|Unavailable|Error|Expired)",
+                    },
+                    # Driver loaded from user-writable or staging directories
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"ImageLoaded:.*\\Temp\\|ImageLoaded:.*\\AppData\\|ImageLoaded:.*\\Users\\Public\\",
+                    },
+                    # Driver loaded from a UNC / network path (always anomalous)
+                    {
+                        "field": "raw.message",
+                        "op": "regex",
+                        "value": r"ImageLoaded:\s+\\\\[^\\]",
+                    },
+                ],
+            },
         ],
         "mitre_tactics": ["Persistence", "Defense Evasion"],
         "mitre_techniques": ["T1014", "T1068"],
@@ -729,10 +878,15 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     #  LATERAL MOVEMENT
     # ═══════════════════════════════════════════════════════════════════════
     {
-        "name": "Remote Interactive Logon (RDP / Type 10) Detected",
+        "name": "RDP Logon from External Network (Type 10)",
         "description": (
-            "A remote interactive desktop logon (type 10) succeeded.  Review source "
-            "IP to determine if the connection originated from an unexpected location."
+            "A successful RDP logon (type 10) originated from an IP address outside "
+            "RFC-1918 private ranges, indicating a publicly routed connection.  "
+            "Internal administrator RDP sessions — which constitute the vast majority "
+            "of RDP logon events in enterprise environments — are excluded by filtering "
+            "out all private / loopback address space.  Externally exposed RDP is a "
+            "top initial-access vector (T1133) and every external connection should "
+            "be reviewed against the expected jump-host or VPN egress list."
         ),
         "rule_type": "pattern",
         "severity": "medium",
@@ -740,10 +894,36 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
             {"field": "raw.windows_event_id", "op": "eq", "value": "4624"},
             {"field": "raw.LogonType", "op": "eq", "value": "10"},
             {"field": "network.src_ip", "op": "exists", "value": None},
+            # Exclude RFC-1918 + loopback — internal RDP is expected / low-signal
+            {
+                "op": "none_of",
+                "conditions": [
+                    {"field": "network.src_ip", "op": "startswith", "value": "10."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "192.168."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.16."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.17."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.18."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.19."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.20."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.21."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.22."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.23."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.24."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.25."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.26."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.27."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.28."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.29."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.30."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "172.31."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "127."},
+                    {"field": "network.src_ip", "op": "startswith", "value": "169.254."},
+                ],
+            },
         ],
-        "mitre_tactics": ["Lateral Movement"],
-        "mitre_techniques": ["T1021.001"],
-        "suppression_window_secs": 600,
+        "mitre_tactics": ["Lateral Movement", "Initial Access"],
+        "mitre_techniques": ["T1021.001", "T1133"],
+        "suppression_window_secs": 3600,
     },
     {
         "name": "Explicit Credential Use - Pass-the-Hash Indicator (Event 4648)",
@@ -770,18 +950,30 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 3600,
     },
     {
-        "name": "Network Logon to Administrative Share (Type 3)",
+        "name": "Lateral Movement - Rapid Network Logon Spread to Multiple Hosts (Type 3)",
         "description": (
-            "Network logon (type 3) with a source IP present.  PsExec, WMI, and "
-            "manual SMB lateral movement all produce network type-3 logons."
+            "A single user account authenticates via network logon (type 3) to four or "
+            "more distinct hosts within 5 minutes — the behavioral fingerprint of "
+            "automated lateral movement via PsExec, WMI remote execution, SMB spray, "
+            "or credential reuse tools.  "
+            "Single type-3 logons (domain file-share access, printer connections, "
+            "normal domain authentication) occur thousands of times per day in any "
+            "Active Directory environment and are intentionally excluded.  The "
+            "threshold targets only multi-host spread behavior, which is anomalous "
+            "regardless of the credential used."
         ),
-        "rule_type": "pattern",
-        "severity": "medium",
-        "conditions": [
-            {"field": "raw.windows_event_id", "op": "eq", "value": "4624"},
-            {"field": "raw.LogonType", "op": "eq", "value": "3"},
-            {"field": "network.src_ip", "op": "exists", "value": None},
-        ],
+        "rule_type": "threshold",
+        "severity": "high",
+        "conditions": {
+            "field": "hostname",
+            "group_by": "user.name",
+            "threshold": 4,
+            "window_secs": 300,
+            "filters": [
+                {"field": "raw.windows_event_id", "op": "eq", "value": "4624"},
+                {"field": "raw.LogonType", "op": "eq", "value": "3"},
+            ],
+        },
         "mitre_tactics": ["Lateral Movement"],
         "mitre_techniques": ["T1021.002"],
         "suppression_window_secs": 600,
@@ -944,21 +1136,56 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
         "suppression_window_secs": 600,
     },
     {
-        "name": "Archive / Compression Tool Execution Before Exfiltration",
+        "name": "Archive Tool - Password-Protected Staging of User Data",
         "description": (
-            "7-Zip, WinRAR, or native archive tools executed.  Attackers compress and "
-            "encrypt data before exfiltration to reduce transfer time and bypass DLP."
+            "An archiving tool (7-Zip, WinRAR, rar) created a password-protected "
+            "archive containing files from user data directories (Documents, Desktop, "
+            "Downloads), OR the tool itself was invoked from a temporary/staging path.  "
+            "The password flag is the key exfiltration signal — it indicates intentional "
+            "covert staging, not routine compression.  Plain archiving of user data "
+            "(backups, file transfers, normal business use) is intentionally excluded.  "
+            "Broader coverage without the password constraint is provided by the "
+            "companion 'Exfiltration - Archive Tool Compressing User Data' rule."
         ),
         "rule_type": "pattern",
-        "severity": "low",
+        "severity": "medium",
         "conditions": [
             {
                 "field": "process.name",
                 "op": "in",
-                "value": ["7z.exe", "winrar.exe", "rar.exe", "tar", "zip", "7za.exe"],
+                "value": ["7z.exe", "winrar.exe", "rar.exe", "7za.exe"],
+            },
+            {
+                "op": "any_of",
+                "conditions": [
+                    # Password-protected archive created from user data paths (exfil staging)
+                    {
+                        "op": "any_of_groups",
+                        "groups": [
+                            [
+                                {
+                                    "field": "process.command_line",
+                                    "op": "regex",
+                                    "value": r"-p[^\s]|\s-p\s",
+                                },
+                                {
+                                    "field": "process.command_line",
+                                    "op": "regex",
+                                    "value": r"\\Users\\|\\Documents\\|\\Desktop\\|\\Downloads\\",
+                                },
+                            ],
+                        ],
+                    },
+                    # Archive tool executed from a suspicious staging directory
+                    {
+                        "field": "process.executable",
+                        "op": "regex",
+                        "value": r"\\Temp\\|\\AppData\\Local\\Temp\\|\\Users\\Public\\",
+                    },
+                ],
             },
         ],
-        "mitre_tactics": ["Collection"],
+        "mitre_tactics": ["Collection", "Exfiltration"],
         "mitre_techniques": ["T1560.001"],
         "suppression_window_secs": 3600,
     },
@@ -2115,10 +2342,16 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     #  DISCOVERY & RECONNAISSANCE
     # ═══════════════════════════════════════════════════════════════════════
     {
-        "name": "Discovery - Active Directory Enumeration Tools",
+        "name": "Discovery - Active Directory Attack Tool Detected",
         "description": (
-            "Known Active Directory reconnaissance tool detected — "
-            "BloodHound, ADFind, PowerView, or similar tools map AD attack paths for lateral movement."
+            "Known Active Directory attack tool detected — BloodHound, SharpHound, "
+            "ADFind, or PowerView offensive cmdlets that map AD attack paths for "
+            "lateral movement and privilege escalation.  "
+            "Standard Windows RSAT cmdlets (Get-ADUser, Get-ADComputer, Get-ADGroup) "
+            "are explicitly excluded — they are built-in administrative tools used "
+            "daily by IT teams and carry no inherent attack signal.  Only cmdlets "
+            "with no legitimate administrative use (Invoke-ACLScanner, "
+            "Find-LocalAdminAccess, Invoke-UserHunter, Get-DomainTrust) are matched."
         ),
         "rule_type": "pattern",
         "severity": "high",
@@ -2129,6 +2362,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
+                            # Known attack tool binaries
                             {
                                 "field": "process.executable",
                                 "op": "contains",
@@ -2150,21 +2384,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 "op": "contains",
                                 "value": "SharpHound",
                             },
-                            {
-                                "field": "process.command_line",
-                                "op": "contains",
-                                "value": "Get-ADUser",
-                            },
-                            {
-                                "field": "process.command_line",
-                                "op": "contains",
-                                "value": "Get-ADComputer",
-                            },
-                            {
-                                "field": "process.command_line",
-                                "op": "contains",
-                                "value": "Get-ADGroup",
-                            },
+                            # PowerView / PowerSploit attack-specific cmdlets (no legitimate admin use)
                             {
                                 "field": "process.command_line",
                                 "op": "contains",
@@ -2174,6 +2394,26 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 "field": "process.command_line",
                                 "op": "contains",
                                 "value": "Find-LocalAdminAccess",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Invoke-UserHunter",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Get-DomainTrust",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Get-NetLocalGroupMember",
+                            },
+                            {
+                                "field": "process.command_line",
+                                "op": "contains",
+                                "value": "Invoke-ShareFinder",
                             },
                         ],
                     },
@@ -2654,8 +2894,13 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
     {
         "name": "C2 - PowerShell Direct TCP Socket Connection",
         "description": (
-            "PowerShell using System.Net.Sockets.TCPClient or Net.Sockets — "
-            "pure-PowerShell C2 channels connect directly via raw sockets to bypass proxy settings."
+            "PowerShell using raw socket primitives (System.Net.Sockets.TCPClient, "
+            "Net.Sockets, NetworkStream) to establish a direct TCP channel — the "
+            "standard technique for pure-PowerShell C2 implants that bypass HTTP "
+            "proxies by connecting directly to an IP address.  "
+            "StreamReader alone (a generic .NET I/O class used in thousands of "
+            "legitimate scripts) is excluded unless accompanied by a hard-coded IPv4 "
+            "address in the same command, which is the reliable C2-specific pattern."
         ),
         "rule_type": "pattern",
         "severity": "high",
@@ -2666,6 +2911,7 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                     {
                         "op": "any_of",
                         "conditions": [
+                            # High-fidelity: raw socket C2 primitives rarely appear in legitimate scripts
                             {
                                 "field": "process.command_line",
                                 "op": "contains",
@@ -2681,10 +2927,12 @@ _DEFAULT_RULES: list[dict[str, Any]] = [
                                 "op": "contains",
                                 "value": "NetworkStream",
                             },
+                            # StreamReader is a generic .NET class; require co-occurrence
+                            # with a hard-coded IP address to confirm C2 context
                             {
                                 "field": "process.command_line",
-                                "op": "contains",
-                                "value": "StreamReader",
+                                "op": "regex",
+                                "value": r"StreamReader.*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
                             },
                         ],
                     },
