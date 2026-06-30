@@ -5,16 +5,16 @@ NeuraShield is a full Security Operations Center (SOC) platform that pairs SIEM-
 ## Features
 
 - **AI Analysis Agent** — automated triage and contextual analysis of incoming security alerts
-- **Real-time Dashboard** — frontend interface for analysts to monitor, investigate, and act on alerts
+- **Real-time Dashboard** — interface for analysts to monitor, investigate, and act on alerts
 - **Alert Pipeline** — backend services for ingesting, processing, and storing security events
-- **Background Workers** — asynchronous job processing for analysis tasks that shouldn't block the API
+- **Background Workers** — asynchronous job processing for analysis tasks
 - **Dockerized Stack** — one-command local environment with Postgres and Redis included
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Backend API | FastAPI (Python) |
+| Backend | FastAPI (Python) |
 | Frontend | React + Vite |
 | Database | PostgreSQL |
 | Cache / Queue | Redis |
@@ -25,7 +25,7 @@ NeuraShield is a full Security Operations Center (SOC) platform that pairs SIEM-
 ```
 .
 ├── agent/            # AI analysis agent logic
-├── backend/           # FastAPI application, API + background workers
+├── backend/           # Backend application and background workers
 ├── frontend/           # React dashboard (Vite)
 ├── installer/          # Setup / installation scripts
 ├── load-tests/          # Load and performance testing
@@ -49,20 +49,14 @@ NeuraShield is a full Security Operations Center (SOC) platform that pairs SIEM-
    cd Neurashield-AI-SOC-Analyst-
    ```
 
-2. Copy the environment template and fill in your values
-   ```bash
-   cp .env.example backend/.env
-   ```
+2. Set up your local environment configuration (see `.env.example` for required variables).
 
 3. Start the full stack
    ```bash
    docker-compose up --build
    ```
 
-4. Access the services
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
-   - API health check: http://localhost:8000/api/v1/health
+4. Access the dashboard once the stack is running.
 
 ## Architecture
 
@@ -70,7 +64,7 @@ The stack runs five core services:
 
 - **db** — PostgreSQL for persistent storage
 - **redis** — caching and queue backend
-- **backend** — FastAPI app serving the REST API
+- **backend** — core application logic and request handling
 - **worker** — background worker for async analysis jobs
 - **frontend** — React dashboard served via Vite
 
