@@ -1,7 +1,7 @@
-"""019_tighten_detection_rules
+"""039_tighten_detection_rules
 
-Revision ID: 019
-Revises: 018
+Revision ID: 039
+Revises: 038
 Create Date: 2026-06-30
 
 Tighten 11 high-false-positive detection rules for all existing tenants.
@@ -75,8 +75,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "019"
-down_revision = "018"
+revision = "039"
+down_revision = "038"
 branch_labels = None
 depends_on = None
 
