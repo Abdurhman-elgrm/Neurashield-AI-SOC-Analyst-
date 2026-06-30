@@ -15,6 +15,7 @@ export function MFALoginPromptPage() {
 
   const mfaPending     = useAuthStore((s) => s.mfaPending);
   const setAuth        = useAuthStore((s) => s.setAuth);
+  const setUser        = useAuthStore((s) => s.setUser);
   const setMFAPending  = useAuthStore((s) => s.setMFAPending);
   const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
   const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
@@ -49,7 +50,8 @@ export function MFALoginPromptPage() {
       );
       setMFAPending(null);
       try {
-        const tenants = await fetchMyTenants();
+        const [me, tenants] = await Promise.all([authApi.me(), fetchMyTenants()]);
+        setUser(me);
         if (tenants.length > 0) {
           const tenant = tenants[0];
           const role: MemberRole = "owner";

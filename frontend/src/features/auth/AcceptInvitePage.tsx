@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Eye, EyeOff, AlertCircle, CheckCircle2, Circle, UserPlus, LogIn } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { invitationsApi } from '@/api/invitations'
+import { authApi } from '@/api/auth'
 import { cn, extractApiError } from '@/lib/utils'
 import { LogoFull } from '@/components/ui/Logo'
 
@@ -26,6 +27,7 @@ export function AcceptInvitePage() {
   const token       = params.get('token') ?? ''
 
   const setAuth         = useAuthStore(s => s.setAuth)
+  const setUser         = useAuthStore(s => s.setUser)
   const setActiveTenant = useAuthStore(s => s.setActiveTenant)
 
   const [mode,         setMode]         = useState<FlowMode>('choose')
@@ -69,6 +71,8 @@ export function AcceptInvitePage() {
         data.access_token,
       )
       setActiveTenant(data.tenant_id)
+      const me = await authApi.me()
+      setUser(me)
       navigate('/', { replace: true })
     } catch (err) {
       setError(extractApiError(err))
@@ -90,6 +94,8 @@ export function AcceptInvitePage() {
         data.access_token,
       )
       setActiveTenant(data.tenant_id)
+      const me = await authApi.me()
+      setUser(me)
       navigate('/', { replace: true })
     } catch (err) {
       setError(extractApiError(err))

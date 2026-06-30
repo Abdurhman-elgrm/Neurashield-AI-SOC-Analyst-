@@ -17,6 +17,7 @@ export function LoginPage() {
   const [searchParams] = useSearchParams();
 
   const setAuth        = useAuthStore((s) => s.setAuth);
+  const setUser        = useAuthStore((s) => s.setUser);
   const setAuthTenant  = useAuthStore((s) => s.setActiveTenant);
   const setStoreTenant = useTenantStore((s) => s.setActiveTenant);
   const setMFAPending  = useAuthStore((s) => s.setMFAPending);
@@ -47,13 +48,15 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       const tokens = await authApi.login({ email, password });
+      // Set token first so subsequent authenticated requests include the Authorization header
       setAuth(
         { id: "", email, full_name: "", is_active: true, created_at: "" },
         tokens.access_token,
       );
 
       try {
-        const tenants = await fetchMyTenants();
+        const [me, tenants] = await Promise.all([authApi.me(), fetchMyTenants()]);
+        setUser(me);
         if (tenants.length > 0) {
           const tenant = tenants[0];
           const role: MemberRole = "owner";
@@ -98,7 +101,8 @@ export function LoginPage() {
         tokens.access_token,
       );
       try {
-        const tenants = await fetchMyTenants();
+        const [me, tenants] = await Promise.all([authApi.me(), fetchMyTenants()]);
+        setUser(me);
         if (tenants.length > 0) {
           const tenant = tenants[0];
           setStoreTenant(tenant, "admin" as MemberRole);
