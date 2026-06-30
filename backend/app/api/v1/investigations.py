@@ -38,6 +38,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -837,6 +838,96 @@ async def assign_investigation(
             is_active=assignment.is_active,
         )
     )
+
+
+# ─── Containment actions (hostname-based, proxied through agent endpoints) ────
+
+
+class ContainmentActionRequest(BaseModel):
+    action: str  # "isolate" | "unisolate" | "block_ip"
+    hostname: str
+    reason: str | None = None
+
+
+@router.post("/{investigation_id}/containment", response_model=APIResponse[dict])
+async def run_investigation_containment(
+    investigation_id: str,
+    payload: ContainmentActionRequest,
+    member: Annotated[object, require_permission(Permission.INVESTIGATIONS_MANAGE)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> APIResponse[dict]:
+    """
+    Perform a containment action (isolate / unisolate / block_ip) on a host
+    linked to this investigation.  Looks up the registered agent by hostname,
+    then delegates to ContainmentService.
+    """
+    from fastapi import HTTPException
+
+    from app.models.agent import Agent
+    from app.models.response_action import ResponseAction
+    from app.models.tenant_member import TenantMember
+    from app.services.containment_service import ContainmentService
+
+    m: TenantMember = member  # type: ignore[assignment]
+
+    # Resolve hostname → agent
+    res = await db.execute(
+        select(Agent).where(
+            Agent.tenant_id == m.tenant_id,
+            Agent.hostname == payload.hostname,
+            Agent.deleted_at.is_(None),
+        ).limit(1)
+    )
+    agent = res.scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No registered agent found for hostname '{payload.hostname}'",
+        )
+
+    reason = payload.reason or f"Contained via investigation {investigation_id}"
+
+    if payload.action == "isolate":
+        agent = await ContainmentService.isolate(
+            db, m.tenant_id, agent.id, m.user_id, reason
+        )
+        await db.commit()
+        return APIResponse.ok(
+            {"status": "isolated", "hostname": payload.hostname, "agent_id": str(agent.id)}
+        )
+
+    if payload.action == "unisolate":
+        agent = await ContainmentService.release(
+            db, m.tenant_id, agent.id, m.user_id, reason
+        )
+        await db.commit()
+        return APIResponse.ok(
+            {"status": "released", "hostname": payload.hostname, "agent_id": str(agent.id)}
+        )
+
+    if payload.action == "block_ip":
+        # EDR-level IP block — queued as a response action; the agent picks it up on next check-in
+        ra = ResponseAction(
+            tenant_id=m.tenant_id,
+            agent_id=agent.id,
+            actor_id=m.user_id,
+            action_type="block_ip",
+            target_type="host",
+            target_name=payload.hostname,
+            status="pending",
+            action_metadata={"investigation_id": investigation_id, "reason": reason},
+        )
+        db.add(ra)
+        await db.commit()
+        return APIResponse.ok(
+            {
+                "status": "submitted",
+                "hostname": payload.hostname,
+                "message": "IP block queued — agent will apply on next check-in",
+            }
+        )
+
+    raise HTTPException(status_code=400, detail=f"Unknown action: {payload.action}")
 
 
 # ─── Threat hunt ──────────────────────────────────────────────────────────────

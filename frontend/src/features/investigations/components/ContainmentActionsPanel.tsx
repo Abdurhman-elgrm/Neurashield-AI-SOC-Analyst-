@@ -12,12 +12,19 @@ import * as Dialog from "@radix-ui/react-dialog";
 
 interface ContainmentPayload {
   investigation_id: string;
-  action: "isolate" | "unisolate" | "kill_process" | "block_ip";
-  target?: string;
+  action: "isolate" | "unisolate" | "block_ip";
+  hostname: string;
+  reason?: string;
 }
 
 async function runContainment(payload: ContainmentPayload) {
-  return apiClient.post("/containment/actions", payload).then((r) => r.data);
+  return apiClient
+    .post(`/investigations/${payload.investigation_id}/containment`, {
+      action: payload.action,
+      hostname: payload.hostname,
+      reason: payload.reason,
+    })
+    .then((r) => r.data);
 }
 
 // ─── ContainmentActionsPanel ──────────────────────────────────────────────────
@@ -30,7 +37,7 @@ interface Props {
 export function ContainmentActionsPanel({ investigationId, hostnames }: Props) {
   const hasRole  = useTenantStore((s) => s.hasRole);
   const [open,   setOpen]   = useState(false);
-  const [confirm, setConfirm] = useState<{ action: ContainmentPayload["action"]; target: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ action: ContainmentPayload["action"]; hostname: string } | null>(null);
 
   const mutation = useMutation({
     mutationFn: runContainment,
@@ -72,7 +79,7 @@ export function ContainmentActionsPanel({ investigationId, hostnames }: Props) {
                 {actions.map(({ action, label, icon: Icon, danger }) => (
                   <button
                     key={action}
-                    onClick={() => setConfirm({ action, target: host })}
+                    onClick={() => setConfirm({ action, hostname: host })}
                     disabled={mutation.isPending}
                     className={cn(
                       "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
@@ -103,14 +110,14 @@ export function ContainmentActionsPanel({ investigationId, hostnames }: Props) {
             <p className="text-sm font-semibold text-text-primary mb-2">Confirm containment action</p>
             <p className="text-xs text-text-muted mb-4">
               Apply <strong className="text-text-primary">{confirm?.action?.replace(/_/g, " ")}</strong> to{" "}
-              <strong className="text-text-primary font-mono">{confirm?.target}</strong>?
+              <strong className="text-text-primary font-mono">{confirm?.hostname}</strong>?
               This action may impact operations.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setConfirm(null)} className="flex-1 btn btn-ghost btn-sm">Cancel</button>
               <button
                 disabled={mutation.isPending}
-                onClick={() => confirm && mutation.mutate({ investigation_id: investigationId, action: confirm.action, target: confirm.target })}
+                onClick={() => confirm && mutation.mutate({ investigation_id: investigationId, action: confirm.action, hostname: confirm.hostname })}
                 className="flex-1 py-1.5 text-xs rounded-md bg-severity-critical text-white hover:bg-severity-critical/90 transition-colors"
               >
                 {mutation.isPending ? "Running…" : "Confirm"}

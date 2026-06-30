@@ -60,6 +60,10 @@ class AnalystWorkspaceService:
         tenant_id: UUID,
         params: InvestigationFilterParams,
     ) -> tuple[list[InvestigationListItem], str | None]:
+        from sqlalchemy import select as _select
+
+        from app.models.user import User
+
         rows, next_cursor = await CaseService.list_investigations(
             db,
             tenant_id,
@@ -75,7 +79,17 @@ class AnalystWorkspaceService:
             limit=params.limit,
             sort=params.sort,
         )
-        items = [_to_list_item(r) for r in rows]
+
+        # Batch-load analyst names for all assigned investigations in one query
+        assigned_ids = {r.assigned_to for r in rows if r.assigned_to is not None}
+        name_map: dict[UUID, str] = {}
+        if assigned_ids:
+            res = await db.execute(
+                _select(User.id, User.full_name).where(User.id.in_(assigned_ids))
+            )
+            name_map = {row.id: row.full_name for row in res}
+
+        items = [_to_list_item(r, name_map.get(r.assigned_to)) for r in rows]
         return items, next_cursor
 
     @staticmethod
@@ -85,6 +99,10 @@ class AnalystWorkspaceService:
         investigation_id: str,
         analyst_id: UUID,
     ) -> InvestigationDetail:
+        from sqlalchemy import select as _select
+
+        from app.models.user import User
+
         inv = await CaseService.get_investigation(db, tenant_id, investigation_id)
 
         note_count = await NoteService.count_for_investigation(db, tenant_id, investigation_id)
@@ -100,6 +118,13 @@ class AnalystWorkspaceService:
             action=AnalystAction.OPENED_INVESTIGATION,
         )
 
+        assigned_to_name: str | None = None
+        if inv.assigned_to is not None:
+            user_row = await db.execute(
+                _select(User.full_name).where(User.id == inv.assigned_to)
+            )
+            assigned_to_name = user_row.scalar_one_or_none()
+
         return InvestigationDetail(
             investigation_id=str(inv.investigation_group_id),
             tenant_id=str(inv.tenant_id),
@@ -111,6 +136,7 @@ class AnalystWorkspaceService:
             status=inv.status,
             verdict=inv.verdict,
             assigned_to=inv.assigned_to,
+            assigned_to_name=assigned_to_name,
             executive_summary=inv.executive_summary,
             technical_summary=inv.technical_summary,
             attack_progression=inv.attack_progression or [],
@@ -422,7 +448,7 @@ class AnalystWorkspaceService:
 # ─── Conversion helpers ───────────────────────────────────────────────────────
 
 
-def _to_list_item(inv: Investigation) -> InvestigationListItem:
+def _to_list_item(inv: Investigation, assigned_to_name: str | None = None) -> InvestigationListItem:
     return InvestigationListItem(
         investigation_id=str(inv.investigation_group_id),
         tenant_id=str(inv.tenant_id),
@@ -434,6 +460,7 @@ def _to_list_item(inv: Investigation) -> InvestigationListItem:
         status=inv.status,
         verdict=inv.verdict,
         assigned_to=inv.assigned_to,
+        assigned_to_name=assigned_to_name,
         executive_summary=inv.executive_summary,
         title=inv.title,
         source=inv.source,
