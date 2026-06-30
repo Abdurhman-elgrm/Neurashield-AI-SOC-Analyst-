@@ -296,15 +296,14 @@ async def get_dashboard_summary(
     prev_start = period_start - (now - period_start)  # equal-length previous period
 
     # ── Alerts ────────────────────────────────────────────────────────────────
-    # total/critical/high count ALL non-closed alerts so the KPI reflects the
-    # analyst's full current workload, not just alerts created in the period.
-    # delta is based on NEW alerts created in the period vs the previous period
-    # so the trend arrow still reflects recent activity.
+    # total = every non-deleted alert so it matches the Alerts page count.
+    # critical/high = open+acknowledged only (actionable workload).
+    # delta uses new alerts created in the period vs the previous period.
     alert_row = (
         await db.execute(
             text("""
         SELECT
-            COUNT(*) FILTER (WHERE status NOT IN ('closed','false_positive'))                              AS total,
+            COUNT(*)                                                                                        AS total,
             COUNT(*) FILTER (WHERE status = 'open')                                                        AS open,
             COUNT(*) FILTER (WHERE severity = 'critical' AND status NOT IN ('closed','false_positive'))    AS critical,
             COUNT(*) FILTER (WHERE severity = 'high'     AND status NOT IN ('closed','false_positive'))    AS high,
