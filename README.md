@@ -56,8 +56,6 @@ NeuraShield is a full Security Operations Center (SOC) platform that pairs SIEM-
    docker-compose up --build
    ```
 
-4. Access the dashboard once the stack is running.
-
 ## Architecture
 
 The stack runs five core services:
