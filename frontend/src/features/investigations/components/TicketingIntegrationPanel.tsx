@@ -64,6 +64,7 @@ export function TicketingIntegrationPanel({ inv }: Props) {
     queryKey: ["tickets", inv.investigation_id],
     queryFn: () => ticketingApi.getTicketsForInvestigation(inv.investigation_id),
     staleTime: 120_000,
+    retry: false,
   });
 
   const mutation = useMutation({
